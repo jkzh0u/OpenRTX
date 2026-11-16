@@ -14,7 +14,8 @@
  * The display settings come from hwconfig.h next to this file (the C62's).
  * With CPS_BUILTIN_LIST set, as for platform/drivers/CPS/cps_io_builtin.c,
  * it also draws memory mode for every channel of that list, and with
- * TETRA_ID_LIST the names of known identities.
+ * TETRA_ID_LIST the names of known identities and the locked screen with
+ * each of its talkgroup filters.
  *
  * Build and run with scripts/c62/ui_render.sh.
  *
@@ -37,6 +38,7 @@
 #include "core/graphics.h"
 #include "interfaces/display.h"
 #include "interfaces/cps_io.h"
+#include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
 
 /* Defined in ui.c, which is not built here */
@@ -265,6 +267,26 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     scene("tetra-6-call-encrypted", false);
 }
 
+
+/**
+ * The locked screen with each talkgroup filter of the list selected, as #
+ * steps through them.
+ */
+static void filterScenes(void)
+{
+    char name[64];
+
+    tetra.call = false;
+    for (size_t i = 0; i < tetraIds_filterCount(); i++) {
+        int n = snprintf(name, sizeof(name), "filter%02zu-", i);
+        for (const char *c = tetraIds_filterName(i); *c != '\0' && n < 60; c++)
+            name[n++] = (*c == ' ' || *c == '/') ? '_' : *c;
+        name[n] = '\0';
+        scene(name, false);
+        tetraIds_stepFilter(1);
+    }
+}
+
 #ifdef CPS_BUILTIN_LIST
 /**
  * Memory mode on every channel of the built-in list, as it shows right
@@ -347,6 +369,8 @@ int main(int argc, char *argv[])
     last_state.settings.showBatteryIcon = false;
 
     tetraScenes(mcc, mnc, (uint32_t)group, (uint32_t)talker);
+    if (tetraIds_filterCount() > 1)
+        filterScenes();
 #ifdef CPS_BUILTIN_LIST
     channelScenes();
 #endif
