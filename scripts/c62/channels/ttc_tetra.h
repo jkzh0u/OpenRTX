@@ -189,6 +189,17 @@ TETRA_ID(102410, "Lubricators Z 10", TF(MAINT))
 TETRA_ID(101006, "Track Maint", TF(MAINT))
 TETRA_ID(101007, "Track Maint", TF(MAINT))
 TETRA_ID(101001, "RTC Test/Work", TF(MAINT))
+/*
+ * Every train run: its radio is 100000 plus the run number, the first
+ * digit of which is the line. Runs listed below keep their own entries.
+ * Line 4 is assumed to follow the pattern: no run of it is listed.
+ */
+TETRA_ID_RANGE(100101, 100199, "Run %u", 100000, TF(SUBWAY) | TF(LINE1))
+TETRA_ID_RANGE(100201, 100299, "Run %u", 100000, TF(SUBWAY) | TF(LINE2))
+TETRA_ID_RANGE(100401, 100499, "Run %u", 100000, TF(SUBWAY) | TF(LINE4))
+TETRA_ID_RANGE(100501, 100599, "Run %u", 100000, TF(SUBWAY) | TF(LINE5))
+TETRA_ID_RANGE(100601, 100699, "Run %u", 100000, TF(SUBWAY) | TF(LINE6))
+
 /* Line 1 trains: point to point with Transit Control */
 TETRA_ID(100112, "Run 112", TF(SUBWAY) | TF(LINE1))
 TETRA_ID(100117, "Run 117", TF(SUBWAY) | TF(LINE1))

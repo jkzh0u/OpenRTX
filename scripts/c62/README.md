@@ -14,8 +14,9 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
 - can hold a **channel list** built into the firmware, with **talkgroup
   names** and **filters** chosen on the radio (section 6). The list for the
   Toronto Transit Commission network is included;
-- has a **recent calls** list, a **last heard** line, **talk time**, a
-  talkgroup **hold** and **alarm** alerts in T mode;
+- has a **recent calls** list with details, a **last heard** line, **talk
+  time**, a talkgroup **hold**, **alarm** alerts, a decoding quality meter
+  and colour in T mode, and plays one call at a time;
 - can stream the raw receiver audio over the programming cable (section 3);
 - builds with Docker (section 1), and its screens can be previewed on a
   computer (section 7).
@@ -56,8 +57,10 @@ In T mode, on the main screen:
 | **\*** | Previous talkgroup filter, or release a held talkgroup | Line 1: switch between the last call heard and the signal figures |
 | **0** | Recent calls | |
 
-In the recent calls list: **Up** / **Down** to scroll, **Enter** to hold the
-selected talkgroup, **ESC** or **0** to go back.
+In the recent calls list: **Up** / **Down** to scroll, **Enter** to see the
+selected call in detail (who talked last, how many times it was heard, when
+it was first heard), **ESC** or **0** to go back. In the detail, **Enter**
+holds that talkgroup and **ESC** goes back to the list.
 
 A long press first does the short press, then changes it: a long **#** steps
 the filter forward for a moment before holding. This is how the keypad
@@ -226,8 +229,21 @@ The main screen shows:
 
 Talkgroups and radios show by name when the channel list names them
 (section 6), the location as a named location area, else the channel of the
-list on this cell's main carrier, else `LA <n>`. The green LED is on while
-the radio is locked to a cell. A call stays on screen for 10 s after its
+list on this cell's main carrier, else `LA <n>`. Colours: talkgroups sky
+blue, locations green, speech bright green, idle and figures grey, warnings
+orange. For 5 s after the radio moves to another cell, line 2 shows the new
+location highlighted, e.g. `> Z7 StClair W`. The green LED is on while
+the radio is locked to a cell.
+
+One call at a time: when several calls are active on the cell, the radio
+plays and shows the first one, through the pauses between its
+transmissions, until it has been silent for 2 s. Then another call can take
+over. An alarm call takes over at once. Every call still goes to the recent
+calls. A call also wakes the screen and keeps it on until it ends.
+
+The meter at the bottom shows the signal strength (the white S-meter) and,
+in green above it, the decoding quality: full at 10% phase error or better,
+empty at 45%, where decoding fails. A call stays on screen for 10 s after its
 last activity unless its release is decoded. During a call to or from an
 alarm talkgroup the screen turns red, and three beeps sound once.
 
@@ -420,6 +436,18 @@ and defines these filters:
 
 `Red Alarm` and `911 Announce` come through every filter, and are alarms:
 their calls turn the screen red and sound three beeps.
+
+A range of identities can be named and filtered at once, for radios that
+follow a numbering plan. Entries of their own still come first:
+
+```c
+TETRA_ID_RANGE(100201, 100299, "Run %u", 100000, TF(SUBWAY) | TF(LINE2))
+```
+
+names 100253 `Run 253`: the format gets the SSI minus the base. The TTC
+list names every train run this way, from the pattern of the runs
+RadioReference lists (100000 plus the run number, whose first digit is the
+line). Line 4 runs are assumed to follow it.
 
 Location areas can be named too, once you know them (the cell screen shows
 `LA <n>` until then):
