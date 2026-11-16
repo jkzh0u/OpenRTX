@@ -9,6 +9,7 @@
 #include <hwconfig.h>
 #include <tetra/tetra.h>
 #include "interfaces/audio.h"
+#include "interfaces/cps_io.h"
 #include "interfaces/delays.h"
 #include "interfaces/platform.h"
 #include "interfaces/radio.h"
@@ -16,12 +17,16 @@
 #include "protocols/TETRA/TetraFilter.h"
 #include "protocols/TETRA/TetraFollow.h"
 #include "protocols/TETRA/TetraIds.h"
+#include "protocols/TETRA/TetraRoam.h"
 #include "protocols/TETRA/TetraSpeech.h"
 #include "protocols/TETRA/TetraStatus.h"
 #include "rtx/OpMode_TETRA.hpp"
 
 /* 30 ms per half buffer: room for libtetra's per-slot decoding */
 #define HALF_SAMPLES 1440
+
+/* Time on another carrier to read its signal strength, ms */
+#define ROAM_PROBE_MS 5
 
 /* Large state: static, there is only one TETRA mode */
 static int16_t baseband[2 * HALF_SAMPLES];
@@ -30,15 +35,17 @@ static struct tetraDemod demod;
 static struct tetra_tmo_rx tmo;
 static struct tetraFollow follower;
 static struct tetraFilter filter;
+static uint8_t filterSelection; // tetraIds_selection() applied to filter
+static struct tetraRoam roam;
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
 /**
- * Listen where the follower says: retune and select the timeslots.
+ * Listen where the follower says, on the serving cell or a followed call's
+ * carrier: retune and select the timeslots.
  */
 static void tune()
 {
-#ifdef CONFIG_TETRA_FOLLOW
     struct tetraFollowTarget t = tetraFollow_target(&follower);
 
     if (t.freq == 0 || rtxCfg == NULL)
@@ -54,7 +61,6 @@ static void tune()
         radio_updateConfiguration();
         tetraStatus_setFollow(t.away ? t.freq : 0);
     }
-#endif
 }
 
 /**
@@ -97,6 +103,95 @@ static bool filterEvent(const struct tetra_event *ev)
     }
 }
 
+#ifdef CONFIG_TETRA_ROAM
+/**
+ * The serving cell's neighbours, as the radio tunes them: their frequency
+ * plus the radio's tuning offset from the serving cell.
+ */
+static void onNeighbours(const struct tetra_network *nw)
+{
+    const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+    uint32_t freq[TETRA_ROAM_MAX_NEIGHBOURS];
+    unsigned n = 0;
+
+    if (cell == NULL || !cell->have_sysinfo)
+        return;
+
+    for (unsigned i = 0; i < nw->nneighbours && n < TETRA_ROAM_MAX_NEIGHBOURS;
+         i++) {
+        const struct tetra_neighbour *nb = &nw->neighbour[i];
+
+        /* Same network only */
+        if ((nb->mcc != 0xffff && nb->mcc != cell->mcc)
+            || (nb->mnc != 0xffff && nb->mnc != cell->mnc))
+            continue;
+        freq[n++] = tetraFollow_carrierFreq(roam.serving, cell->dl_freq_hz,
+                                            nb->dl_freq_hz);
+    }
+
+    tetraRoam_setNeighbours(&roam, freq, n);
+}
+
+/**
+ * One step of cell tracking: measure another carrier for a few
+ * milliseconds, or move to another cell and synchronise there.
+ */
+static void roamStep()
+{
+    /* While following a call, the follower owns the tuning */
+    if (tetraFollow_target(&follower).away || rtxCfg == NULL)
+        return;
+
+    struct tetraStatus ts;
+    tetra_getStatus(&ts);
+    bool busy = ts.call || follower.selected;
+
+    struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync, busy,
+                                            radio_getRssi());
+
+    switch (s.action) {
+        case TETRA_ROAM_PROBE: {
+            uint32_t back = rtxCfg->rxFrequency;
+            rtxCfg->rxFrequency = s.freq;
+            radio_updateConfiguration();
+            delayMs(ROAM_PROBE_MS);
+            int rssi = radio_getRssi();
+            rtxCfg->rxFrequency = back;
+            radio_updateConfiguration();
+            tetraRoam_probed(&roam, s.freq, rssi);
+            break;
+        }
+
+        case TETRA_ROAM_TUNE:
+            tetraFollow_setHome(&follower, s.freq);
+            tetra_tmo_resync(&tmo);
+            tetraStatus_setTuned(s.freq);
+            tune();
+            break;
+
+        default:
+            break;
+    }
+
+    tetraStatus_setSearching(tetraRoam_searching(&roam));
+}
+
+/**
+ * Start tracking from the configured frequency, with the TETRA channels of
+ * the channel list as the carriers to search.
+ */
+static void roamInit(uint32_t home)
+{
+    channel_t ch;
+
+    tetraRoam_init(&roam, home, getTick());
+    for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
+        if (ch.mode == OPMODE_TETRA)
+            tetraRoam_addScan(&roam, ch.rx_frequency);
+    }
+}
+#endif
+
 /**
  * libtetra event callback: through the talkgroup filter to the status, then
  * the call follower.
@@ -107,6 +202,11 @@ static void onEvent(void *user, const struct tetra_event *ev)
         return;
 
     tetraStatus_onEvent(user, ev);
+
+#ifdef CONFIG_TETRA_ROAM
+    if (ev->type == TETRA_EV_NETWORK)
+        onNeighbours(ev->u.network);
+#endif
 
 #ifdef CONFIG_TETRA_FOLLOW
     switch (ev->type) {
@@ -205,10 +305,15 @@ void OpMode_TETRA::reset()
 
     demodJumps = 0;
     tetraFilter_init(&filter);
+    filterSelection = tetraIds_selection();
     tetraFilter_select(&filter, tetraIds_selectedFilter());
     tetraFollow_init(&follower, homeFreq);
     resync(false);
     tetraStatus_reset();
+    tetraStatus_setTuned(homeFreq);
+#ifdef CONFIG_TETRA_ROAM
+    roamInit(homeFreq);
+#endif
 }
 
 /*
@@ -352,11 +457,11 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
      * A new talkgroup filter chosen on the keypad: stop showing, and
      * following, a call it excludes
      */
-    size_t selected = tetraIds_selectedFilter();
-    if (selected != filter.filter) {
+    if (tetraIds_selection() != filterSelection) {
         struct tetraStatus ts;
 
-        tetraFilter_select(&filter, selected);
+        filterSelection = tetraIds_selection();
+        tetraFilter_select(&filter, tetraIds_selectedFilter());
         tetra_getStatus(&ts);
         if (ts.call && !tetraFilter_passes(&filter, ts.callId))
             tetraStatus_endCall();
@@ -377,6 +482,10 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
 #endif
     /* Also undoes a configuration update that tuned back home meanwhile */
     tune();
+
+#ifdef CONFIG_TETRA_ROAM
+    roamStep();
+#endif
 
     tetraStatus_setDemod(tetraDemod_phaseError(&demod),
                          tetraDemod_carrierOffset(&demod));
