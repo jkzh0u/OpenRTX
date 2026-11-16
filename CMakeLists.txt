@@ -49,6 +49,11 @@ execute_process(COMMAND ${CMAKE_COMMAND} -E copy_directory
                 ${CMAKE_CURRENT_LIST_DIR}/platform/targets/${BOARD}
                 ${CMAKE_CURRENT_LIST_DIR}/build/board_root/boards/${ARCH}/${BOARD})
 
+# The build reads the copies: configure again when an original changes
+file(GLOB_RECURSE BOARD_FILES
+     ${CMAKE_CURRENT_LIST_DIR}/platform/targets/${BOARD}/*)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${BOARD_FILES})
+
 #
 # Set the BOARD_ROOT and OPENRTX_ROOT variables
 #
