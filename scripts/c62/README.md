@@ -57,14 +57,15 @@ In T mode, on the main screen:
 | **\*** | Previous talkgroup filter, or release a held talkgroup | Line 1: switch between the last call heard and the signal figures |
 | **0** | Recent calls | |
 
-In the recent calls list: **Up** / **Down** to scroll, **Enter** to see the
+The recent calls list shows how long ago each call was on the right,
+alarms in red and a lock before encrypted calls. **Up** / **Down** to
+scroll, **Enter** to see the
 selected call in detail (who talked last, how many times it was heard, when
 it was first heard), **ESC** or **0** to go back. In the detail, **Enter**
 holds that talkgroup and **ESC** goes back to the list.
 
-A long press first does the short press, then changes it: a long **#** steps
-the filter forward for a moment before holding. This is how the keypad
-reports long presses.
+A short press of **#** or **\*** acts when you let go of the key, so that
+holding it does only the long press.
 
 ## 1. Build with Docker
 
@@ -219,21 +220,30 @@ station, pi/4-DQPSK) and decodes it on the radio with
 nothing. Tune to the base station's downlink frequency as usual, or to any
 cell of the network: cell tracking finds the best one.
 
-The main screen shows:
+The main screen shows, in VFO and memory mode alike:
 
-| State | Line 1 | Line 2 | Rest |
+| State | Line 1 | Large | Small, grey |
 |---|---|---|---|
-| No signal | Last call heard, or demodulator figures | `T searching`, or `T scanning` while looking for another cell | Frequency |
-| Locked to a cell | Last SDS text (scrolling, 30 s), else last call heard, or demodulator figures | `T <location>` | Frequency received |
-| Call | Talking party | Called group or radio | Location, then `Voice 0:12` (this transmission) / `Idle` / `Encrypted` |
+| No signal | Last call heard, or demodulator figures | `T searching`, or `T scanning` while looking for another cell | The channel being tried, else the frequency |
+| Locked to a cell | Last SDS text (scrolling, 30 s), else last call heard, or demodulator figures | `T <location>` | Frequency received, after `Ch <n>` in memory mode; `enc` on the right if the cell encrypts |
+
+The station is drawn in the largest font that fits. During a call the
+screen shows instead, from the top:
+
+1. The called group or radio, large.
+2. The talking party, or `unknown` in grey.
+3. The location.
+4. A loudspeaker and the length of this transmission, e.g. `0:12`, or
+   `Idle`, or a lock and `Encrypted`.
 
 Talkgroups and radios show by name when the channel list names them
 (section 6), the location as a named location area, else the channel of the
 list on this cell's main carrier, else `LA <n>`. Colours: talkgroups sky
 blue, locations green, speech bright green, idle and figures grey, warnings
-orange. For 5 s after the radio moves to another cell, line 2 shows the new
-location highlighted, e.g. `> Z7 StClair W`. The green LED is on while
-the radio is locked to a cell.
+orange. For 5 s after the radio moves to another cell, an arrow points to
+the new location, highlighted, e.g. `→ Z7 StClair W`, and the grey line
+says where the radio came from, e.g. `from Z6 Downsview`. The green LED is
+on while the radio is locked to a cell.
 
 One call at a time: when several calls are active on the cell, the radio
 plays and shows the first one, through the pauses between its
@@ -241,9 +251,12 @@ transmissions, until it has been silent for 2 s. Then another call can take
 over. An alarm call takes over at once. Every call still goes to the recent
 calls. A call also wakes the screen and keeps it on until it ends.
 
-The meter at the bottom shows the signal strength (the white S-meter) and,
-in green above it, the decoding quality: full at 10% phase error or better,
-empty at 45%, where decoding fails. A call stays on screen for 10 s after its
+The meter at the bottom has three labelled bars: `VOL` the speaker volume
+(thin, grey), `SIG` the signal strength (S0 to S9+20) and `DEC` the
+decoding quality, full at 10% phase error or better and empty at 45%,
+where decoding fails. `SIG` and `DEC` are green when good, yellow when
+fair and red when poor: from S7 and S4 for the signal, up to 21% and 32%
+phase error for decoding. A call stays on screen for 10 s after its
 last activity unless its release is decoded. During a call to or from an
 alarm talkgroup the screen turns red, and three beeps sound once.
 
@@ -254,8 +267,9 @@ the quick reference at the top of this file.
 
 Speech starts 150 ms after the first traffic slot: TETRA leaves a gap of
 113 ms in every multiframe (frame 18), which the buffer must cover. A
-dash means the network has not sent that identity since the radio started
-listening, typically because the call was set up before.
+talking party shows as `unknown` (a called group as a dash) when the
+network has not sent that identity since the radio started listening,
+typically because the call was set up before.
 
 The demodulator figures on line 1, e.g. `e11% -234Hz o0 r1`:
 
@@ -294,8 +308,8 @@ carrier. With call following the radio goes with the call: when a speech
 call is given a channel on another carrier, it retunes there and decodes
 only the call's timeslots, then comes back to the main carrier when the
 call is released, stays silent for 10 s, turns out to be encrypted, or the
-radio loses the signal. Line 3 of the call screen then shows the carrier,
-e.g. `Ch 392.53750`, instead of the cell.
+radio loses the signal. Line 3 of the call screen then shows the carrier
+in small grey text after the location, e.g. `CN Tower 392.5375`.
 
 - libtetra tracks the channel allocations and asks to retune. The radio
   decides which calls to follow, in
@@ -329,8 +343,9 @@ does:
   least 6 dB stronger twice in a row. It does not measure during a call.
 - When the signal is lost for 2.5 s, it measures the neighbours and every
   TETRA channel of the channel list, then tries the strongest in turn,
-  2.5 s each, until one locks. Line 2 shows `T scanning` meanwhile.
-- The big frequency shows the cell received. The talkgroup filter and the
+  2.5 s each, until one locks. The screen shows `T scanning` meanwhile,
+  and below it the channel being tried.
+- The grey frequency shows the cell received. The talkgroup filter and the
   hold stay as they are.
 
 A move costs up to a second of silence while the radio synchronises to the
