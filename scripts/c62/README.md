@@ -54,6 +54,7 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | `C62_TETRA` | `ON` | TETRA receive mode "T" (section 5), with libtetra |
 | `C62_TETRA_SPEECH` | `ON` | Play clear TETRA speech, with OpenACELP (section 5) |
 | `C62_TETRA_FOLLOW` | `ON` | Follow TETRA calls to the other carriers of a cell (section 5) |
+| `C62_TETRA_ROAM` | `ON` | Move to the best TETRA cell as the radio moves, search when the signal is lost (section 5) |
 | `C62_CHANNELS` | empty | Channel list built into the firmware, for memory mode (section 6) |
 | `C62_REG43_SWEEP` | `OFF` | Cycle `REG_43` through 7 test values in M17 RX |
 | `C62_REG43_SWEEP_MS` | `1400` | Recorded time per sweep value (one burst covers all 7 values) |
@@ -160,12 +161,27 @@ The main screen shows:
 
 | State | Line 1 | Line 2 | Rest |
 |---|---|---|---|
-| No signal | Demodulator figures | `T searching` | Frequency |
-| Locked to a cell | Last SDS text (scrolling, 30 s) or demodulator figures | `T <MCC>-<MNC> LA <n>` | Frequency |
-| Call | Talking party SSI | Called group (`G`) or individual SSI | Cell, then `Voice` / `Idle` / `Encrypted` |
+| No signal | Last call heard, or demodulator figures | `T searching`, or `T scanning` while looking for another cell | Frequency |
+| Locked to a cell | Last SDS text (scrolling, 30 s), else last call heard, or demodulator figures | `T <location>` | Frequency received |
+| Call | Talking party | Called group or radio | Location, then `Voice 0:12` (this transmission) / `Idle` / `Encrypted` |
 
-The green LED is on while the radio is locked to a cell. A call stays on
-screen for 10 s after its last activity unless its release is decoded.
+Talkgroups and radios show by name when the channel list names them
+(section 6), the location as a named location area, else the channel of the
+list on this cell's main carrier, else `LA <n>`. The green LED is on while
+the radio is locked to a cell. A call stays on screen for 10 s after its
+last activity unless its release is decoded. During a call to or from an
+alarm talkgroup the screen turns red, and three beeps sound once.
+
+Keys in T mode, on the main screen:
+
+| Key | Short press | Long press |
+|---|---|---|
+| **#** | Next talkgroup filter (section 6), or release a held talkgroup | Hold the current call's talkgroup, or the last heard; again to release |
+| **\*** | Previous talkgroup filter, or release a held talkgroup | Line 1: switch between the last call heard and the demodulator figures |
+| **0** | Recent calls: **Up**/**Down** to scroll, **Enter** to hold one, **ESC** to go back | |
+
+A held talkgroup is a temporary filter of its own: the top bar shows
+`Hold <name>` in yellow, and only its calls get through.
 Speech starts 150 ms after the first traffic slot: TETRA leaves a gap of
 113 ms in every multiframe (frame 18), which the buffer must cover. A
 dash means the network has not sent that identity since the radio started
@@ -229,6 +245,28 @@ e.g. `Ch 392.53750`, instead of the cell.
   silence and may miss the start of the next transmission.
 - `-DC62_TETRA_FOLLOW=OFF` builds without it: the radio stays on the tuned
   carrier.
+
+### Cell tracking
+
+A TETRA network is many cells, each a base station with its own main
+carrier: the surface sites, and the subway zones fed by radiating cable
+along the tunnels. Each cell broadcasts the carriers of its neighbours. With
+cell tracking the radio moves between cells by itself, like a TETRA radio
+does:
+
+- While locked, if the cell gets weak (below -95 dBm), it measures each
+  neighbour every 3 s, retuning for about 5 ms, and moves to one that is at
+  least 6 dB stronger twice in a row. It does not measure during a call.
+- When the signal is lost for 2.5 s, it measures the neighbours and every
+  TETRA channel of the channel list, then tries the strongest in turn,
+  2.5 s each, until one locks. Line 2 shows `T scanning` meanwhile.
+- The big frequency shows the cell received. The talkgroup filter and the
+  hold stay as they are.
+
+A move costs up to a second of silence while the radio synchronises to the
+new cell. The thresholds are first guesses: they need tuning on real
+networks, with baseband dumps of moves that go wrong.
+`-DC62_TETRA_ROAM=OFF` builds without it.
 
 To check what the radio would do on a network without flashing, replay a
 baseband dump through the same demodulator, libtetra and follower with
@@ -320,7 +358,15 @@ and defines these filters:
 | Maintenance | Signals, wayside, track, structures, radio techs, janitors, PRESTO, fire prevention |
 | Security | Transit Enforcement, Special Constables |
 
-`Red Alarm` and `911 Announce` come through every filter.
+`Red Alarm` and `911 Announce` come through every filter, and are alarms:
+add `TF_ALARM` to a talkgroup's filters to make it one.
+
+Location areas can be named too, once you know them (the cell screen shows
+`LA <n>` until then):
+
+```c
+TETRA_LA(39, "Eglinton east")
+```
 
 ## 7. Preview the screen
 

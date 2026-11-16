@@ -117,9 +117,16 @@ TETRA_FILTER(SECURITY, "Security")
  * the numbers on the radio's screen; filters are TF() of each filter the
  * identity belongs to, TF_EVERY for all of them.
  */
-/* Systemwide: alarms come through every filter */
-TETRA_ID(60002, "Red Alarm", TF_EVERY)
-TETRA_ID(60101, "911 Announce", TF_EVERY)
+/*
+ * Location areas, shown as the radio's location, once known: the cell
+ * screen shows LA <n>. For example:
+ *
+ * TETRA_LA(39, "Eglinton east")
+ */
+
+/* Systemwide: alarms come through every filter, with an alert */
+TETRA_ID(60002, "Red Alarm", TF_EVERY | TF_ALARM)
+TETRA_ID(60101, "911 Announce", TF_EVERY | TF_ALARM)
 TETRA_ID(101011, "Transit Control", TF(RIDING) | TF(CONTROL))
 TETRA_ID(101117, "Janitor", TF(MAINT))
 TETRA_ID(102716, "Transit Enforce1", TF(SECURITY))
