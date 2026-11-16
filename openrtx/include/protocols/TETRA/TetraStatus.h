@@ -82,6 +82,11 @@ void tetraStatus_lostSync(bool overrun);
 void tetraStatus_setDemod(unsigned phaseErr, int carrierHz);
 
 /**
+ * Stop showing the current call, for example when a new filter excludes it.
+ */
+void tetraStatus_endCall(void);
+
+/**
  * Set the traffic carrier being followed.
  *
  * @param freq: carrier frequency in Hz, 0 when on the main carrier.

@@ -76,9 +76,9 @@ option(C62_TETRA_FOLLOW "TETRA call following" ON)
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
 # C62_CHANNELS: channel list built into the firmware, for memory mode (the
 #   C62 has no codeplug storage yet): a header of CPS_CHANNEL() entries,
-#   see platform/drivers/CPS/cps_io_builtin.c, and optionally TETRA_ID()
-#   entries naming talkgroups and radios and selecting those to listen to,
-#   see openrtx/include/protocols/TETRA/TetraIds.h. Relative to the OpenRTX
+#   see platform/drivers/CPS/cps_io_builtin.c, and optionally talkgroup
+#   filters and TETRA_ID() entries naming talkgroups and radios, see
+#   openrtx/include/protocols/TETRA/TetraIds.h. Relative to the OpenRTX
 #   directory, e.g. scripts/c62/channels/ttc_tetra.h. Empty: no channels.
 set(C62_CHANNELS "" CACHE STRING "Built-in channel list header")
 
@@ -118,6 +118,7 @@ if(C62_TETRA)
   target_link_libraries(app PRIVATE tetra)
   target_sources(app PRIVATE
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraDemod.c
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFilter.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFollow.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraIds.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraStatus.c

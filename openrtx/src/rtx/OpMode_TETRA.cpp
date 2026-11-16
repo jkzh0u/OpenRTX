@@ -13,6 +13,7 @@
 #include "interfaces/platform.h"
 #include "interfaces/radio.h"
 #include "protocols/TETRA/TetraDemod.h"
+#include "protocols/TETRA/TetraFilter.h"
 #include "protocols/TETRA/TetraFollow.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraSpeech.h"
@@ -28,6 +29,7 @@ static int8_t soft[HALF_SAMPLES * 3 / 4 + 8];
 static struct tetraDemod demod;
 static struct tetra_tmo_rx tmo;
 static struct tetraFollow follower;
+static struct tetraFilter filter;
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
@@ -55,14 +57,58 @@ static void tune()
 #endif
 }
 
-#ifdef CONFIG_TETRA_FOLLOW
 /**
- * libtetra event callback: the status, then the call follower.
+ * @return true while receiving a followed call's carrier, which carries
+ * only that call's timeslots.
+ */
+static bool following()
+{
+#ifdef CONFIG_TETRA_FOLLOW
+    return tetraFollow_target(&follower).away;
+#else
+    return false;
+#endif
+}
+
+/**
+ * Talkgroup filter: let an event through to the status, the speaker and
+ * the call follower?
+ */
+static bool filterEvent(const struct tetra_event *ev)
+{
+    switch (ev->type) {
+        case TETRA_EV_CALL: {
+            const struct tetra_call *c = &ev->u.call;
+            return tetraFilter_call(&filter, c->call_id, c->dst_ssi,
+                                    c->src_ssi,
+                                    c->what == TETRA_CALL_RELEASE);
+        }
+
+        case TETRA_EV_TRAFFIC:
+            return tetraFilter_traffic(&filter, ev->u.traffic.call_id,
+                                       ev->u.traffic.talker_ssi, following());
+
+        case TETRA_EV_SDS:
+            return tetraFilter_sds(&filter, ev->u.sds.src_ssi,
+                                   ev->u.sds.dst_ssi);
+
+        default:
+            return true;
+    }
+}
+
+/**
+ * libtetra event callback: through the talkgroup filter to the status, then
+ * the call follower.
  */
 static void onEvent(void *user, const struct tetra_event *ev)
 {
+    if (!filterEvent(ev))
+        return;
+
     tetraStatus_onEvent(user, ev);
 
+#ifdef CONFIG_TETRA_FOLLOW
     switch (ev->type) {
         case TETRA_EV_CALL: {
             const struct tetra_call *c = &ev->u.call;
@@ -98,8 +144,10 @@ static void onEvent(void *user, const struct tetra_event *ev)
         default:
             break;
     }
+#endif
 }
 
+#ifdef CONFIG_TETRA_FOLLOW
 /**
  * libtetra retune callback: a call moved to another carrier of the cell, or
  * back to the main carrier. The follower decides; the radio retunes before
@@ -111,6 +159,12 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     struct tetraFollowRetune fr;
 
     (void)user;
+
+    /* Calls the talkgroup filter holds back are not followed */
+    if (r->reason == TETRA_RETUNE_CALL
+        && !tetraFilter_passes(&filter, r->call_id))
+        return false;
+
     fr.main = r->reason == TETRA_RETUNE_MAIN;
     fr.callId = r->call_id;
     fr.carrier = r->carrier;
@@ -150,6 +204,8 @@ void OpMode_TETRA::reset()
 #endif
 
     demodJumps = 0;
+    tetraFilter_init(&filter);
+    tetraFilter_select(&filter, tetraIds_selectedFilter());
     tetraFollow_init(&follower, homeFreq);
     resync(false);
     tetraStatus_reset();
@@ -164,21 +220,12 @@ void OpMode_TETRA::resync(bool overrun)
 {
     struct tetra_rx_config cfg;
     memset(&cfg, 0, sizeof(cfg));
-#ifdef CONFIG_TETRA_FOLLOW
     cfg.cb = onEvent;
+#ifdef CONFIG_TETRA_FOLLOW
     cfg.retune = onRetune;
-#else
-    cfg.cb = tetraStatus_onEvent;
 #endif
-
-    /*
-     * Listen only to the identities selected in the built-in list, if any:
-     * libtetra then reports, plays and follows only their calls
-     */
-    size_t nListen;
-    cfg.groups = tetraIds_listen(&nListen);
-    cfg.ngroups = (uint8_t)nListen;
-    cfg.promiscuous = nListen == 0;
+    /* Every call: the talkgroup filter is applied to the events */
+    cfg.promiscuous = true;
     tetra_tmo_init(&tmo, &cfg);
     slots = TETRA_FOLLOW_ALL_SLOTS;
 
@@ -300,6 +347,24 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     }
 
     tetra_tmo_push_soft(&tmo, soft, n);
+
+    /*
+     * A new talkgroup filter chosen on the keypad: stop showing, and
+     * following, a call it excludes
+     */
+    size_t selected = tetraIds_selectedFilter();
+    if (selected != filter.filter) {
+        struct tetraStatus ts;
+
+        tetraFilter_select(&filter, selected);
+        tetra_getStatus(&ts);
+        if (ts.call && !tetraFilter_passes(&filter, ts.callId))
+            tetraStatus_endCall();
+#ifdef CONFIG_TETRA_FOLLOW
+        if (follower.selected && !tetraFilter_passes(&filter, follower.callId))
+            tetraFollow_drop(&follower);
+#endif
+    }
 
 #ifdef CONFIG_TETRA_FOLLOW
     /*

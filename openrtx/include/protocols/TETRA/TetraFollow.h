@@ -179,6 +179,14 @@ bool tetraFollow_retune(struct tetraFollow *f,
 bool tetraFollow_tick(struct tetraFollow *f, long long now);
 
 /**
+ * Drop the selected call, for example when a new filter excludes it. If it
+ * is being followed, the follower goes home at the next tick.
+ *
+ * @param f: follower.
+ */
+void tetraFollow_drop(struct tetraFollow *f);
+
+/**
  * Go home and drop the call, for example when the receiver is restarted.
  *
  * @param f: follower.

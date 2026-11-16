@@ -86,8 +86,7 @@ static void selectCall(struct tetraFollow *f, uint16_t callId, long long now)
     f->lastActivity = now;
 }
 
-/** Drop the selected call, and leave its carrier if away. */
-static void drop(struct tetraFollow *f)
+void tetraFollow_drop(struct tetraFollow *f)
 {
     f->selected = false;
     if (f->away)
@@ -113,7 +112,7 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
             return;
 
         if (c->event == TETRA_FOLLOW_RELEASE || !ok) {
-            drop(f);
+            tetraFollow_drop(f);
             return;
         }
 
@@ -159,7 +158,7 @@ void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool speech,
         return;
 
     if (!ok) {
-        drop(f);
+        tetraFollow_drop(f);
         return;
     }
 
@@ -206,7 +205,7 @@ bool tetraFollow_retune(struct tetraFollow *f,
 bool tetraFollow_tick(struct tetraFollow *f, long long now)
 {
     if (f->selected && now - f->lastActivity >= (long long)f->timeoutMs)
-        drop(f);
+        tetraFollow_drop(f);
 
     if (f->away && f->leave) {
         tetraFollow_home(f);

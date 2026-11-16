@@ -4,10 +4,20 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-/* Identity list for the TETRA identities test (tests/unit/tetra_ids.cpp) */
+/*
+ * Identity list for the TETRA identities and filter tests
+ * (tests/unit/tetra_ids.cpp, tests/unit/tetra_filter.cpp)
+ */
 
 CPS_CHANNEL("Ignored", 422662500, OPMODE_TETRA)
-TETRA_ID(101011, "Transit Control", true)
-TETRA_ID(100112, "Run 112", false)
-TETRA_ID(102727, "StreetcarControl", 1)
-TETRA_ID(60002, "Red Alarm", 0)
+
+TETRA_FILTER(SUBWAY, "Subway")
+TETRA_FILTER(LINE1, "Line 1")
+TETRA_FILTER(CONTROL, "Control")
+
+TETRA_ID(60002, "Red Alarm", TF_EVERY)
+TETRA_ID(101011, "Transit Control", TF(CONTROL))
+TETRA_ID(100010, "Line1 Line Calls", TF(SUBWAY) | TF(LINE1))
+TETRA_ID(100020, "Line2 Line Calls", TF(SUBWAY))
+TETRA_ID(100112, "Run 112", TF(SUBWAY) | TF(LINE1))
+TETRA_ID(120106, "PRESTO Techs", 0)
