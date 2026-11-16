@@ -86,6 +86,12 @@ static void selectCall(struct tetraFollow *f, uint16_t callId, long long now)
     f->lastActivity = now;
 }
 
+void tetraFollow_setHome(struct tetraFollow *f, uint32_t home)
+{
+    f->home = home;
+    tetraFollow_home(f);
+}
+
 void tetraFollow_drop(struct tetraFollow *f)
 {
     f->selected = false;

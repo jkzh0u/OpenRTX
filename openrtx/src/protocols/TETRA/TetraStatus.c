@@ -9,6 +9,7 @@
 #include <string.h>
 #include <tetra/tetra.h>
 #include "interfaces/delays.h"
+#include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraSpeech.h"
 #include "protocols/TETRA/TetraStatus.h"
 
@@ -79,6 +80,7 @@ static void onCall(const struct tetra_call *c)
         case TETRA_CALL_RELEASE:
             status.call = false;
             status.talker = 0;
+            status.callAlarm = false;
             return;
         case TETRA_CALL_TX_CEASED:
             status.talker = 0;
@@ -95,6 +97,7 @@ static void onCall(const struct tetra_call *c)
     if (!status.call || c->call_id != status.callId) {
         status.callDst = 0;
         status.callEncrypted = false;
+        status.callAlarm = false;
     }
     status.call = true;
     status.callId = c->call_id;
@@ -104,6 +107,16 @@ static void onCall(const struct tetra_call *c)
     }
     status.callEncrypted |= c->encrypted;
     lastCall = getTick();
+
+    tetraCalls_note(&status.recent, status.callDst, c->src_ssi,
+                    status.callGroup, false, c->encrypted, lastCall);
+
+    /* An alarm: sound the alert once per call */
+    if (!status.callAlarm
+        && (tetraIds_isAlarm(status.callDst) || tetraIds_isAlarm(c->src_ssi))) {
+        status.callAlarm = true;
+        tetraSpeech_alert();
+    }
 }
 
 void tetraStatus_onEvent(void *user, const struct tetra_event *ev)
@@ -143,13 +156,25 @@ void tetraStatus_onEvent(void *user, const struct tetra_event *ev)
 
         case TETRA_EV_TRAFFIC: {
             const struct tetra_traffic *t = &ev->u.traffic;
+            long long now = getTick();
+
+            /* A new transmission: after a pause, or another talker */
+            if (now - lastVoice >= VOICE_TIMEOUT_MS
+                || (t->talker_ssi != 0 && t->talker_ssi != status.talker))
+                status.txStart = now;
+
             if (t->talker_ssi != 0)
                 status.talker = t->talker_ssi;
             status.callEncrypted |= t->encrypted;
             if (!status.call)
                 status.callId = t->call_id;
             status.call = true;
-            lastCall = lastVoice = getTick();
+            lastCall = lastVoice = now;
+
+            tetraCalls_note(&status.recent, status.callDst, status.talker,
+                            status.callGroup,
+                            !t->encrypted && t->circuit_type == 0,
+                            t->encrypted, now);
             break;
         }
 
@@ -166,7 +191,10 @@ void tetraStatus_onEvent(void *user, const struct tetra_event *ev)
 void tetraStatus_reset(void)
 {
     pthread_mutex_lock(&statusMutex);
+    /* Recent calls stay across frequency changes */
+    struct tetraCalls recent = status.recent;
     memset(&status, 0, sizeof(status));
+    status.recent = recent;
     pthread_mutex_unlock(&statusMutex);
 }
 
@@ -193,6 +221,21 @@ void tetraStatus_endCall(void)
     pthread_mutex_lock(&statusMutex);
     status.call = false;
     status.talker = 0;
+    status.callAlarm = false;
+    pthread_mutex_unlock(&statusMutex);
+}
+
+void tetraStatus_setTuned(uint32_t freq)
+{
+    pthread_mutex_lock(&statusMutex);
+    status.tunedHz = freq;
+    pthread_mutex_unlock(&statusMutex);
+}
+
+void tetraStatus_setSearching(bool searching)
+{
+    pthread_mutex_lock(&statusMutex);
+    status.searching = searching;
     pthread_mutex_unlock(&statusMutex);
 }
 

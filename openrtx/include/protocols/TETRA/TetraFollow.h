@@ -179,6 +179,15 @@ bool tetraFollow_retune(struct tetraFollow *f,
 bool tetraFollow_tick(struct tetraFollow *f, long long now);
 
 /**
+ * Move home to another cell: the radio now receives a different main
+ * carrier. Drops the call and goes home.
+ *
+ * @param f: follower.
+ * @param home: frequency the radio is tuned to for the new main carrier, Hz.
+ */
+void tetraFollow_setHome(struct tetraFollow *f, uint32_t home);
+
+/**
  * Drop the selected call, for example when a new filter excludes it. If it
  * is being followed, the follower goes home at the next tick.
  *

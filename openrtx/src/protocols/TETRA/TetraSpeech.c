@@ -21,6 +21,8 @@
 #define QUEUE_FRAMES 16   /* 480 ms */
 #define PREBUFFER_FRAMES 5 /* 150 ms: frame 18 leaves a 113 ms gap */
 #define SILENCE_FRAMES 34 /* About one second of 30 ms frames */
+#define ALERT_FRAMES 30   /* Three beeps of 150 ms, 150 ms apart */
+#define ALERT_LEVEL 6000  /* Peak of the alert tone */
 #define THREAD_STACK 4096
 
 struct frame {
@@ -42,6 +44,33 @@ static pthread_t thread;
 static pthread_attr_t attr;
 static volatile bool running;
 static volatile bool stopRequest;
+static volatile uint8_t alertFrames; /* Alert frames left to play */
+static unsigned alertPhase;          /* Playback thread only */
+
+/* One period of 1 kHz at 8 kHz, scaled to +-1000 */
+static const int16_t alertWave[8] = { 0, 707, 1000, 707, 0, -707, -1000, -707 };
+
+/**
+ * Mix the next frame of the alert, if one is playing, into a frame.
+ *
+ * @return true if a frame of the alert was mixed.
+ */
+static bool mixAlert(stream_sample_t *out)
+{
+    uint8_t left = alertFrames;
+
+    if (left == 0)
+        return false;
+
+    /* On for 5 frames, off for 5 */
+    bool on = ((ALERT_FRAMES - left) / 5) % 2 == 0;
+    for (unsigned i = 0; on && i < OA_FRAME_SAMPLES; i++) {
+        int32_t v = out[i] + alertWave[alertPhase++ % 8] * ALERT_LEVEL / 1000;
+        out[i] = v > 32767 ? 32767 : v < -32768 ? -32768 : v;
+    }
+    alertFrames = left - 1;
+    return true;
+}
 
 static unsigned queued(void)
 {
@@ -104,6 +133,8 @@ static void playBurst(void)
             memset(out, 0, OA_FRAME_SAMPLES * sizeof(*out));
             silence++;
         }
+        if (mixAlert(out))
+            silence = 0;
         outputStream_sync(stream, true);
     }
 
@@ -115,7 +146,7 @@ static void *playback(void *arg)
 {
     (void)arg;
     while (!stopRequest) {
-        if (queued() >= PREBUFFER_FRAMES)
+        if (queued() >= PREBUFFER_FRAMES || alertFrames != 0)
             playBurst();
         else
             sleepFor(0, 10);
@@ -188,6 +219,11 @@ void tetraSpeech_traffic(const struct tetra_traffic *t)
     pthread_mutex_unlock(&queueMutex);
 }
 
+void tetraSpeech_alert(void)
+{
+    alertFrames = ALERT_FRAMES;
+}
+
 #else  /* CONFIG_TETRA_SPEECH */
 
 void tetraSpeech_start(void)
@@ -201,6 +237,10 @@ void tetraSpeech_stop(void)
 void tetraSpeech_traffic(const struct tetra_traffic *t)
 {
     (void)t;
+}
+
+void tetraSpeech_alert(void)
+{
 }
 
 #endif /* CONFIG_TETRA_SPEECH */

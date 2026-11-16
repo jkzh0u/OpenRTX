@@ -73,6 +73,10 @@ option(C62_TETRA_SPEECH "TETRA speech with OpenACELP" ON)
 #   (openrtx/include/protocols/TETRA/TetraFollow.h). OFF to stay on the
 #   tuned main carrier.
 option(C62_TETRA_FOLLOW "TETRA call following" ON)
+# C62_TETRA_ROAM: move to the best cell of the network as the radio moves
+#   (openrtx/include/protocols/TETRA/TetraRoam.h), and search the network's
+#   carriers when the signal is lost. OFF to stay on the tuned frequency.
+option(C62_TETRA_ROAM "TETRA cell tracking" ON)
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
 # C62_CHANNELS: channel list built into the firmware, for memory mode (the
 #   C62 has no codeplug storage yet): a header of CPS_CHANNEL() entries,
@@ -117,10 +121,12 @@ if(C62_TETRA)
   target_link_libraries(tetra PRIVATE $<BUILD_INTERFACE:zephyr_interface>)
   target_link_libraries(app PRIVATE tetra)
   target_sources(app PRIVATE
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraCalls.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraDemod.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFilter.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFollow.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraIds.c
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraRoam.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraStatus.c
     ${OPENRTX_ROOT}/openrtx/src/rtx/OpMode_TETRA.cpp)
   target_compile_definitions(app PRIVATE CONFIG_TETRA)
@@ -129,6 +135,9 @@ if(C62_TETRA)
   endif()
   if(C62_TETRA_FOLLOW)
     target_compile_definitions(app PRIVATE CONFIG_TETRA_FOLLOW)
+  endif()
+  if(C62_TETRA_ROAM)
+    target_compile_definitions(app PRIVATE CONFIG_TETRA_ROAM)
   endif()
 
   if(C62_TETRA_SPEECH)
@@ -172,7 +181,8 @@ else()
 endif()
 
 message(STATUS "C62: wide RX ${C62_WIDE_RX}, TETRA ${C62_TETRA} "
-               "(speech ${C62_TETRA_SPEECH}, follow ${C62_TETRA_FOLLOW}), REG_43 sweep ${C62_REG43_SWEEP}, "
+               "(speech ${C62_TETRA_SPEECH}, follow ${C62_TETRA_FOLLOW}, "
+               "roam ${C62_TETRA_ROAM}), REG_43 sweep ${C62_REG43_SWEEP}, "
                "baseband dump ${C62_BASEBAND_DUMP} "
                "(${C62_BASEBAND_DUMP_BAUD} baud, format "
                "${C62_BASEBAND_DUMP_FORMAT}, burst ${C62_BASEBAND_DUMP_BURST}), "

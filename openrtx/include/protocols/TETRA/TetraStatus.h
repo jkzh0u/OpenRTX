@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include "protocols/TETRA/TetraCalls.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -37,6 +38,13 @@ struct tetraStatus {
     uint32_t callDst;   /**< Called (group) SSI, 0 if unknown */
     uint32_t talker;    /**< Talking party SSI, 0 if unknown */
     uint32_t followHz;  /**< Followed traffic carrier, 0 on the main one */
+    bool callAlarm;     /**< The call is to or from an alarm talkgroup */
+    long long txStart;  /**< Tick the current transmission started */
+
+    uint32_t tunedHz;   /**< Main carrier received, Hz, 0 if not set */
+    bool searching;     /**< Looking for a cell on other frequencies */
+
+    struct tetraCalls recent; /**< Recent calls, newest first */
 
     uint32_t sdsSrc;    /**< Sender of the last SDS, 0 if none */
     char sds[64];       /**< Last SDS text or status, ASCII */
@@ -80,6 +88,19 @@ void tetraStatus_lostSync(bool overrun);
  * Update the demodulator figures.
  */
 void tetraStatus_setDemod(unsigned phaseErr, int carrierHz);
+
+/**
+ * Set the main carrier being received, after the radio moved to another
+ * cell.
+ *
+ * @param freq: frequency in Hz.
+ */
+void tetraStatus_setTuned(uint32_t freq);
+
+/**
+ * @param searching: true while looking for a cell on other frequencies.
+ */
+void tetraStatus_setSearching(bool searching);
 
 /**
  * Stop showing the current call, for example when a new filter excludes it.

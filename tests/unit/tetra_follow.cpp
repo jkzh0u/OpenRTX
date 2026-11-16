@@ -169,6 +169,19 @@ TEST_CASE("TETRA follower follows a call to another carrier",
     }
 }
 
+TEST_CASE("TETRA follower moves home with the cell", "[tetra][follow]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+    follow(f, 100, 0x2, 0);
+
+    tetraFollow_setHome(&f, OTHER + 25000);
+    tetraFollowTarget t = tetraFollow_target(&f);
+    REQUIRE_FALSE(t.away);
+    REQUIRE(t.freq == OTHER + 25000);
+    REQUIRE_FALSE(f.selected);
+}
+
 TEST_CASE("TETRA follower keeps the radio's tuning offset", "[tetra][follow]")
 {
     tetraFollow f;

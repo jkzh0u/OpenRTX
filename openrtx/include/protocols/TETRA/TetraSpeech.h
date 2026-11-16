@@ -41,6 +41,12 @@ void tetraSpeech_stop(void);
  */
 void tetraSpeech_traffic(const struct tetra_traffic *t);
 
+/**
+ * Sound an alert on the speaker: three short beeps, over any speech. Call
+ * from any thread.
+ */
+void tetraSpeech_alert(void);
+
 #ifdef __cplusplus
 }
 #endif
