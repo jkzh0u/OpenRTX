@@ -53,6 +53,7 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | `C62_BASEBAND_DUMP_FORMAT` | `1` | `1` = 16-bit samples, `2` = 12-bit packed (13.9 s per burst) |
 | `C62_TETRA` | `ON` | TETRA receive mode "T" (section 5), with libtetra |
 | `C62_TETRA_SPEECH` | `ON` | Play clear TETRA speech, with OpenACELP (section 5) |
+| `C62_TETRA_FOLLOW` | `ON` | Follow TETRA calls to the other carriers of a cell (section 5) |
 | `C62_REG43_SWEEP` | `OFF` | Cycle `REG_43` through 7 test values in M17 RX |
 | `C62_REG43_SWEEP_MS` | `1400` | Recorded time per sweep value (one burst covers all 7 values) |
 
@@ -197,3 +198,29 @@ without it.
 
 The baseband dump keeps working in T mode, to capture what the radio
 receives.
+
+### Call following
+
+A cell often has several carriers: the main one, which you tune to, carries
+the control channel, and calls get traffic channels that may be on another
+carrier. With call following the radio goes with the call: when a speech
+call is given a channel on another carrier, it retunes there and decodes
+only the call's timeslots, then comes back to the main carrier when the
+call is released, is sent back to the control channel, stays silent for
+5 s, or the radio loses the signal. Line 3 of the call screen then shows the
+carrier, e.g. `Ch 392.53750`, instead of the cell.
+
+- It follows one call at a time, the first clear speech call it sees,
+  including calls that stay on the main carrier. Encrypted and data calls
+  are not followed.
+- All carriers of a cell share the TDMA timing, so the radio keeps its slot
+  timing across the retune instead of synchronising again. A secondary
+  carrier may carry no synchronisation bursts at all.
+- The carrier frequencies come from the cell's broadcast (band, offset and
+  carrier number) and keep your tuning offset from the main carrier. The
+  radio does not follow if it is more than 12.5 kHz from the main carrier.
+- Channel allocations in another band or with a different offset (extended
+  carrier numbering) are not supported yet: libtetra does not keep those
+  fields.
+- `-DC62_TETRA_FOLLOW=OFF` builds without it: the radio stays on the tuned
+  carrier.

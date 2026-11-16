@@ -18,6 +18,11 @@
  *
  * Needs a 48 kHz RX audio input and a radio driver that sets up a wide,
  * flat receive path for OPMODE_TETRA.
+ *
+ * With CONFIG_TETRA_FOLLOW, follows calls to the traffic carriers of the
+ * cell (see TetraFollow.h): it retunes by changing the receive frequency in
+ * the rtx status, keeping the receiver's slot timing. The radio driver
+ * should retune quickly in that case, well within a timeslot (14.17 ms).
  */
 class OpMode_TETRA : public OpMode
 {
@@ -44,10 +49,14 @@ private:
     void resync(bool overrun);
     void startSampling();
     void stopSampling();
+    void applyFollow(rtxStatus_t *const status);
+    bool away();
 
     bool startRx;
     unsigned dataErrors; // Consecutive failed reads of the sample stream
     uint32_t demodJumps; // Demodulator slips and re-acquisitions seen
+    uint32_t homeFreq;   // Configured frequency (main carrier), Hz
+    uint8_t slots;       // Timeslots libtetra decodes
     pathId basebandPath;
     streamId basebandId;
 };

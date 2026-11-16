@@ -70,6 +70,10 @@ option(C62_TETRA_IF_DC_FILTER "BK4819 RX IF DC filter in TETRA mode" ON)
 # C62_TETRA_SPEECH: play clear TETRA speech with OpenACELP, which west
 #   fetches to modules/lib/openacelp.
 option(C62_TETRA_SPEECH "TETRA speech with OpenACELP" ON)
+# C62_TETRA_FOLLOW: follow calls to the traffic carriers of a trunked cell
+#   (openrtx/include/protocols/TETRA/TetraFollow.h). OFF to stay on the
+#   tuned main carrier.
+option(C62_TETRA_FOLLOW "TETRA call following" ON)
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
 
 if(C62_WIDE_RX)
@@ -104,11 +108,15 @@ if(C62_TETRA)
   target_link_libraries(app PRIVATE tetra)
   target_sources(app PRIVATE
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraDemod.c
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFollow.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraStatus.c
     ${OPENRTX_ROOT}/openrtx/src/rtx/OpMode_TETRA.cpp)
   target_compile_definitions(app PRIVATE CONFIG_TETRA)
   if(C62_TETRA_IF_DC_FILTER)
     target_compile_definitions(app PRIVATE C62_TETRA_IF_DC_FILTER)
+  endif()
+  if(C62_TETRA_FOLLOW)
+    target_compile_definitions(app PRIVATE CONFIG_TETRA_FOLLOW)
   endif()
 
   if(C62_TETRA_SPEECH)
@@ -132,7 +140,7 @@ if(C62_TETRA)
 endif()
 
 message(STATUS "C62: wide RX ${C62_WIDE_RX}, TETRA ${C62_TETRA} "
-               "(speech ${C62_TETRA_SPEECH}), REG_43 sweep ${C62_REG43_SWEEP}, "
+               "(speech ${C62_TETRA_SPEECH}, follow ${C62_TETRA_FOLLOW}), REG_43 sweep ${C62_REG43_SWEEP}, "
                "baseband dump ${C62_BASEBAND_DUMP} "
                "(${C62_BASEBAND_DUMP_BAUD} baud, format "
                "${C62_BASEBAND_DUMP_FORMAT}, burst ${C62_BASEBAND_DUMP_BURST})")
