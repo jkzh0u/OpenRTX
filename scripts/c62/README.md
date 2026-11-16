@@ -224,3 +224,17 @@ carrier, e.g. `Ch 392.53750`, instead of the cell.
   fields.
 - `-DC62_TETRA_FOLLOW=OFF` builds without it: the radio stays on the tuned
   carrier.
+
+To check what the radio would do on a network without flashing, replay a
+baseband dump through the same demodulator, libtetra and follower with
+`tests/platform/tetra_trace.c` (build instructions in the file):
+
+```bash
+./tetra_trace tetra_burst001.wav
+```
+
+It prints the cell, every call control event with its channel allocation
+and frequency, and each retune the radio would make (lines starting with
+`>>`). A recording holds a single carrier, so it shows the decisions, not
+what the radio would hear afterwards. Use `-n` for recordings not made with
+a C62.
