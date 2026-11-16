@@ -60,6 +60,7 @@ state_t last_state;
 void _ui_drawMainVFO(ui_state_t *ui_state);
 void _ui_drawMainMEM(ui_state_t *ui_state);
 void _ui_drawTetraRecent(ui_state_t *ui_state);
+void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 
 static struct tetraStatus tetra;
 static const long long now = 100000;
@@ -199,7 +200,7 @@ void display_renderRows(uint8_t startRow, uint8_t endRow, void *fb)
 
 /* ---- Scenes ---- */
 
-enum screen { SCREEN_VFO, SCREEN_MEM, SCREEN_RECENT };
+enum screen { SCREEN_VFO, SCREEN_MEM, SCREEN_RECENT, SCREEN_DETAIL };
 
 static void draw(const char *name, enum screen screen)
 {
@@ -211,6 +212,8 @@ static void draw(const char *name, enum screen screen)
         _ui_drawMainMEM(&ui);
     else if (screen == SCREEN_RECENT)
         _ui_drawTetraRecent(&ui);
+    else if (screen == SCREEN_DETAIL)
+        _ui_drawTetraRecentDetail(&ui);
     else
         _ui_drawMainVFO(&ui);
     gfx_render();
@@ -306,9 +309,17 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
                     now - 4 * 60000);
     tetraCalls_note(&tetra.recent, 60002, 0, true, true, false, now - 61000);
     tetraCalls_note(&tetra.recent, group, talker, true, true, false,
+                    now - 14 * 60000);
+    tetraCalls_note(&tetra.recent, group, 100253, true, true, false,
                     now - 95000);
     scene("tetra-7-last-heard", false);
     draw("tetra-8-recent", SCREEN_RECENT);
+    draw("tetra-8b-recent-detail", SCREEN_DETAIL);
+
+    /* Just moved to another cell */
+    tetra.cellChanged = now - 1000;
+    scene("tetra-12-moved", false);
+    tetra.cellChanged = 0;
 
     /* Holding the last talkgroup heard */
     tetraIds_hold(group);
