@@ -20,23 +20,58 @@
 
 /* An SDS text stays on the main screen this long */
 #define TETRA_SDS_SHOW_MS 30000
+/* After a move to another cell, its location is highlighted this long */
+#define TETRA_CELL_SHOW_MS 5000
+
+/* Colours of the TETRA screens */
+static const color_t tetraGroup = { 90, 200, 255, 255 };   /* Sky blue */
+static const color_t tetraPlace = { 110, 220, 110, 255 };  /* Green */
+static const color_t tetraVoice = { 60, 255, 120, 255 };   /* Bright green */
+static const color_t tetraMuted = { 150, 150, 150, 255 };  /* Grey */
+static const color_t tetraWarn = { 255, 150, 30, 255 };    /* Orange */
+static const color_t tetraText = { 255, 230, 140, 255 };   /* Light yellow */
+
+/* On the red alarm screen everything is white */
+static bool tetraAlarmScreen;
+
+static color_t _ui_tetraColor(color_t c)
+{
+    return tetraAlarmScreen ? color_white : c;
+}
 
 /**
- * Print an SSI: its name if it is in the built-in list, else the number, or
- * a dash if it is not known.
+ * Print an SSI: its name from the built-in list, else the number, or a
+ * dash if it is not known.
  */
 static void _ui_printSsi(point_t pos, fontSize_t font, const char *prefix,
-                         uint32_t ssi)
+                         uint32_t ssi, color_t color)
 {
-    const char *name = tetraIds_name(ssi);
+    char name[24];
 
-    if (name != NULL)
-        gfx_print(pos, font, TEXT_ALIGN_CENTER, color_white, "%s", name);
+    color = _ui_tetraColor(color);
+    if (tetraIds_nameOf(ssi, name, sizeof(name)))
+        gfx_print(pos, font, TEXT_ALIGN_CENTER, color, "%s", name);
     else if (ssi != 0)
-        gfx_print(pos, font, TEXT_ALIGN_CENTER, color_white, "%s%lu", prefix,
+        gfx_print(pos, font, TEXT_ALIGN_CENTER, color, "%s%lu", prefix,
                   (unsigned long)ssi);
     else
-        gfx_print(pos, font, TEXT_ALIGN_CENTER, color_white, "%s-", prefix);
+        gfx_print(pos, font, TEXT_ALIGN_CENTER, color, "%s-", prefix);
+}
+
+/**
+ * Print two pieces of text centred together on a line, each in its colour.
+ */
+static void _ui_print2(point_t pos, fontSize_t font, const char *a,
+                       color_t ca, const char *b, color_t cb)
+{
+    uint16_t wa = gfx_getTextWidth(font, a);
+    uint16_t wb = gfx_getTextWidth(font, b);
+    int x = ((int)CONFIG_SCREEN_WIDTH - wa - wb) / 2;
+
+    pos.x = (uint16_t)(x < 0 ? 0 : x);
+    gfx_print(pos, font, TEXT_ALIGN_LEFT, _ui_tetraColor(ca), "%s", a);
+    pos.x += wa;
+    gfx_print(pos, font, TEXT_ALIGN_LEFT, _ui_tetraColor(cb), "%s", b);
 }
 
 /**
@@ -125,11 +160,7 @@ static void _ui_tetraTopText(const char *prefix, const char *name,
  */
 static void _ui_tetraSsiName(char *buf, size_t len, uint32_t ssi, bool group)
 {
-    const char *name = tetraIds_name(ssi);
-
-    if (name != NULL)
-        snprintf(buf, len, "%s", name);
-    else
+    if (!tetraIds_nameOf(ssi, buf, len))
         snprintf(buf, len, "%s%lu", group ? "G " : "", (unsigned long)ssi);
 }
 
@@ -198,62 +229,77 @@ static void _ui_drawTetraInfo(void)
         // Talking party
         gfx_drawSymbol(l1, layout.line1_symbol_size,
                        TEXT_ALIGN_LEFT, color_white, SYMBOL_CALL_MADE);
-        _ui_printSsi(l1, layout.line2_font, "", ts.talker);
+        _ui_printSsi(l1, layout.line2_font, "", ts.talker, color_white);
 
         // Called group or individual
-        gfx_drawSymbol(l2, layout.line2_symbol_size,
-                       TEXT_ALIGN_LEFT, color_white, SYMBOL_CALL_RECEIVED);
+        gfx_drawSymbol(l2, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
+                       _ui_tetraColor(tetraGroup), SYMBOL_CALL_RECEIVED);
         _ui_printSsi(l2, layout.line2_font,
-                     ts.callGroup ? "G " : "", ts.callDst);
+                     ts.callGroup ? "G " : "", ts.callDst, tetraGroup);
 
         // Cell, or the traffic carrier the call was followed to
-        gfx_drawSymbol(l3, layout.line3_symbol_size,
-                       TEXT_ALIGN_LEFT, color_white,
-                       SYMBOL_TRANSMISSION_TOWER);
+        gfx_drawSymbol(l3, layout.line3_symbol_size, TEXT_ALIGN_LEFT,
+                       _ui_tetraColor(tetraPlace), SYMBOL_TRANSMISSION_TOWER);
         if (ts.followHz != 0)
             gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
-                      color_white, "Ch %lu.%05lu",
+                      _ui_tetraColor(tetraPlace), "Ch %lu.%05lu",
                       (unsigned long)(ts.followHz / 1000000),
                       (unsigned long)(ts.followHz % 1000000 / 10));
         else {
             char where[CPS_STR_SIZE];
             _ui_tetraLocation(&ts, where, sizeof(where));
             gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
-                      color_white, "%s", where);
+                      _ui_tetraColor(tetraPlace), "%s", where);
         }
 
         // Call state
         if (ts.callEncrypted) {
-            gfx_drawSymbol(l4, layout.line4_symbol_size,
-                           TEXT_ALIGN_LEFT, color_white, SYMBOL_LOCK);
+            gfx_drawSymbol(l4, layout.line4_symbol_size, TEXT_ALIGN_LEFT,
+                           _ui_tetraColor(tetraWarn), SYMBOL_LOCK);
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      color_white, "Encrypted");
+                      _ui_tetraColor(tetraWarn), "Encrypted");
         } else if (ts.voice) {
             // Length of the current transmission
             long long talk = (getTick() - ts.txStart) / 1000;
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      color_white, "Voice %lld:%02lld", talk / 60, talk % 60);
+                      _ui_tetraColor(tetraVoice), "Voice %lld:%02lld",
+                      talk / 60, talk % 60);
         } else {
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      color_white, "Idle");
+                      _ui_tetraColor(tetraMuted), "Idle");
         }
         return;
     }
 
     if (!ts.sync) {
-        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                  color_white, ts.searching ? "T scanning" : "T searching");
+        if (ts.searching)
+            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                      tetraWarn, "T scanning");
+        else
+            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                      tetraMuted, "T searching");
         return;
     }
 
+    // Just moved to another cell: say where, highlighted
+    bool moved = (ts.cellChanged != 0)
+              && (getTick() - ts.cellChanged < TETRA_CELL_SHOW_MS);
+    color_t place = moved ? tetraVoice : tetraPlace;
+
     gfx_drawSymbol(layout.line2_pos, layout.line2_symbol_size,
-                   TEXT_ALIGN_LEFT, color_white, SYMBOL_TRANSMISSION_TOWER);
+                   TEXT_ALIGN_LEFT, place, SYMBOL_TRANSMISSION_TOWER);
     if (ts.sysinfo) {
         char where[CPS_STR_SIZE];
         _ui_tetraLocation(&ts, where, sizeof(where));
-        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                  color_white, "T %s%s", where,
-                  ts.airEncryption ? " enc" : "");
+        if (moved)
+            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                      place, "> %s", where);
+        else
+            _ui_print2(layout.line2_pos, layout.line2_font, "T ", color_white,
+                       where, place);
+        if (ts.airEncryption)
+            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_RIGHT,
+                      tetraWarn, "enc");
     } else {
         gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
                   color_white, "T %u-%u CC %u", ts.mcc, ts.mnc,
@@ -291,7 +337,7 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
             ui_state->m17_meta_text_last_scroll_tick = now;
         }
         gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
-                  color_white, "%s", msg);
+                  tetraText, "%s", msg);
         return;
     }
 
@@ -311,14 +357,16 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
         _ui_tetraFit(text, sizeof(text), layout.line1_font,
                      CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad, "", name,
                      suffix);
-        gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
-                  color_white, "%s", text);
+        // The name in the talkgroup colour, the age in grey
+        text[strlen(text) - strlen(suffix)] = '\0';
+        _ui_print2(layout.line1_pos, layout.line1_font, text, tetraGroup,
+                   suffix, tetraMuted);
         return;
     }
 
     // Phase error, carrier offset, lost sample blocks, resyncs
     gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
-              color_white, "e%u%% %+dHz o%u r%u", ts.phaseErr, ts.carrierHz,
+              tetraMuted, "e%u%% %+dHz o%u r%u", ts.phaseErr, ts.carrierHz,
               ts.overruns, ts.resyncs);
 }
 
@@ -405,6 +453,86 @@ uint32_t _ui_tetraRecentSsi(uint8_t index)
 }
 
 /**
+ * @return true while a TETRA call is shown: the screen stays on.
+ */
+bool _ui_tetraCallActive(void)
+{
+    struct tetraStatus ts;
+
+    if (last_state.channel.mode != OPMODE_TETRA)
+        return false;
+    tetra_getStatus(&ts);
+    return _ui_tetraCallShown(&ts);
+}
+
+/**
+ * One recent call in detail: who was called, who talked last, how often
+ * and when it was heard.
+ */
+void _ui_drawTetraRecentDetail(ui_state_t *ui_state)
+{
+    struct tetraStatus ts;
+    char name[24], text[40], age[24];
+    long long now = getTick();
+
+    tetra_getStatus(&ts);
+    gfx_clearScreen();
+    if (ui_state->menu_selected >= ts.recent.count) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "Gone");
+        return;
+    }
+    const struct tetraCallEntry *e = &ts.recent.entry[ui_state->menu_selected];
+
+    // Top bar: what the call was
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, tetraMuted,
+              "%s", e->dst == 0 ? "Call" : e->group ? "Group call"
+                                                     : "Radio call");
+
+    // Called talkgroup or radio
+    gfx_drawSymbol(layout.line1_pos, layout.line1_symbol_size,
+                   TEXT_ALIGN_LEFT, tetraGroup, SYMBOL_CALL_RECEIVED);
+    if (e->dst != 0) {
+        _ui_tetraSsiName(name, sizeof(name), e->dst, e->group);
+        _ui_tetraFit(text, sizeof(text), layout.line1_font,
+                     CONFIG_SCREEN_WIDTH - 2 * layout.line1_symbol_size - 8,
+                     "", name, "");
+    } else {
+        snprintf(text, sizeof(text), "-");
+    }
+    gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
+              tetraGroup, "%s", text);
+
+    // Last talker
+    gfx_drawSymbol(layout.line2_pos, layout.line2_symbol_size,
+                   TEXT_ALIGN_LEFT, color_white, SYMBOL_CALL_MADE);
+    if (e->src != 0)
+        _ui_tetraSsiName(name, sizeof(name), e->src, false);
+    else
+        snprintf(name, sizeof(name), "-");
+    gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+              color_white, "%s", name);
+
+    // How often, and when
+    _ui_tetraAge(age, sizeof(age), now - e->time);
+    if (e->heard != 0)
+        gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
+                  tetraVoice, "Heard %ux, %s ago", e->heard, age);
+    else
+        gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
+                  e->encrypted ? tetraWarn : tetraMuted, "%s, %s ago",
+                  e->encrypted ? "Encrypted" : "No voice", age);
+    _ui_tetraAge(age, sizeof(age), now - e->first);
+    gfx_print(layout.line4_pos, layout.line4_font, TEXT_ALIGN_CENTER,
+              tetraMuted, "First %s ago", age);
+
+    // What the keys do here
+    point_t hint = { 0, CONFIG_SCREEN_HEIGHT - 3 };
+    gfx_print(hint, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, tetraText,
+              "Enter: hold   ESC: back");
+}
+
+/**
  * During a call to or from an alarm talkgroup, paint the screen red.
  */
 static void _ui_drawTetraAlarm(void)
@@ -412,10 +540,12 @@ static void _ui_drawTetraAlarm(void)
     static const color_t alarmRed = { 170, 0, 0, 255 };
     struct tetraStatus ts;
 
+    tetraAlarmScreen = false;
     if (last_state.channel.mode != OPMODE_TETRA)
         return;
     tetra_getStatus(&ts);
-    if (_ui_tetraCallShown(&ts) && ts.callAlarm) {
+    tetraAlarmScreen = _ui_tetraCallShown(&ts) && ts.callAlarm;
+    if (tetraAlarmScreen) {
         point_t origin = { 0, 0 };
         gfx_drawRect(origin, CONFIG_SCREEN_WIDTH, CONFIG_SCREEN_HEIGHT,
                      alarmRed, true);
@@ -814,14 +944,25 @@ void _ui_drawMainBottom()
         #endif
         #ifdef CONFIG_TETRA
         case OPMODE_TETRA:
+        {
+            // The level bar shows decoding quality: full at 10% phase
+            // error or better, empty at 45%, where decoding fails
+            struct tetraStatus ts;
+            tetra_getStatus(&ts);
+            uint8_t quality = 0;
+            if (ts.sync && ts.phaseErr < 45)
+                quality = (ts.phaseErr <= 10) ? 255
+                        : (uint8_t)((45 - ts.phaseErr) * 255 / 35);
             gfx_drawSmeterLevel(meter_pos,
                                 meter_width,
                                 meter_height,
                                 rssi,
-                                mic_level,
+                                quality,
                                 volume,
                                 true);
+            (void) mic_level;
             break;
+        }
         #endif
     }
 }

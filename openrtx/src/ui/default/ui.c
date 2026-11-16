@@ -682,6 +682,8 @@ extern void _ui_tetraToggleLine1(void);
 extern void _ui_drawTetraRecent(ui_state_t *ui_state);
 extern uint32_t _ui_tetraHoldCandidate(void);
 extern uint32_t _ui_tetraRecentSsi(uint8_t index);
+extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
+extern bool _ui_tetraCallActive(void);
 
 /*
  * What the last short press of # or * did, for a long press to undo it: a
@@ -1940,12 +1942,26 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else if(msg.keys & KEY_ENTER)
                 {
-                    tetraIds_hold(_ui_tetraRecentSsi(ui_state.menu_selected));
-                    state.ui_screen = ui_state.last_main_state;
+                    if(_ui_tetraRecentSsi(ui_state.menu_selected) != 0)
+                        state.ui_screen = TETRA_RECENT_DETAIL;
                 }
                 else if(msg.keys & (KEY_ESC | KEY_0))
                 {
                     state.ui_screen = ui_state.last_main_state;
+                }
+                break;
+            // One recent call in detail: Enter holds it
+            case TETRA_RECENT_DETAIL:
+                if(msg.long_press)
+                    break;
+                if(msg.keys & KEY_ENTER)
+                {
+                    tetraIds_hold(_ui_tetraRecentSsi(ui_state.menu_selected));
+                    state.ui_screen = ui_state.last_main_state;
+                }
+                else if(msg.keys & KEY_ESC)
+                {
+                    state.ui_screen = TETRA_RECENT;
                 }
                 break;
             #endif
@@ -2762,7 +2778,14 @@ void ui_updateFSM(bool *sync_rtx)
         }
 #endif //            CONFIG_GPS
 
-        if (txOngoing || rtx_rxSquelchOpen() || (state.volume != last_state.volume))
+        bool tetraCall = false;
+        #ifdef CONFIG_TETRA
+        // A TETRA call wakes the screen and keeps it on
+        tetraCall = _ui_tetraCallActive();
+        #endif
+
+        if (txOngoing || rtx_rxSquelchOpen() || tetraCall ||
+            (state.volume != last_state.volume))
         {
             _ui_exitStandby(now);
             return;
@@ -2830,6 +2853,9 @@ bool ui_updateGUI()
         // TETRA recent calls
         case TETRA_RECENT:
             _ui_drawTetraRecent(&ui_state);
+            break;
+        case TETRA_RECENT_DETAIL:
+            _ui_drawTetraRecentDetail(&ui_state);
             break;
 #endif
         // Flash backup and restore screen
