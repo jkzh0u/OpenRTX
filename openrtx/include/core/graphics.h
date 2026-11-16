@@ -375,6 +375,35 @@ void gfx_drawSmeter(point_t start, uint16_t width, uint16_t height, rssi_t rssi,
                     color_t color);
 
 /**
+ * Colours of the Smeter + level meter.
+ */
+typedef struct {
+    color_t volume;    /**< Speaker volume bar */
+    color_t level;     /**< Level bar */
+    color_t rssi;      /**< RSSI bar */
+    color_t marks;     /**< Marks and S-level numbers */
+    color_t majorMark; /**< S3, S6 and S9 numbers */
+    color_t overMark;  /**< +10 and +20 numbers */
+} smeterColors_t;
+
+/**
+ * Function to draw Smeter + level meter of arbitrary size, in given colours.
+ * Version without squelch bar for digital protocols
+ * Starting coordinates are relative to the top left point.
+ * @param start: Smeter start point, in pixel coordinates.
+ * @param width: Smeter width
+ * @param height: Smeter height
+ * @param rssi: rssi level in dBm
+ * @param level: level in range {0, 255}
+ * @param volume: speaker volume level in range {0, 255}
+ * @param drawVolume: whether the volume bar should be drawn
+ * @param colors: colours of the parts
+ */
+void gfx_drawSmeterLevelColors(point_t start, uint16_t width, uint16_t height,
+                               rssi_t rssi, uint8_t level, uint8_t volume,
+                               bool drawVolume, const smeterColors_t *colors);
+
+/**
  * Function to draw Smeter + level meter of arbitrary size.
  * Version without squelch bar for digital protocols
  * Starting coordinates are relative to the top left point.

@@ -864,10 +864,24 @@ void gfx_drawSmeterLevel(point_t start, uint16_t width, uint16_t height,
                          rssi_t rssi, uint8_t level, uint8_t volume,
                          bool drawVolume)
 {
-    color_t red = { 255, 0, 0, 255 };
-    color_t green = { 0, 255, 0, 255 };
-    color_t white = { 255, 255, 255, 255 };
-    color_t yellow = { 250, 180, 19, 255 };
+    static const smeterColors_t colors = {
+        .volume = { 255, 255, 255, 255 },
+        .level = { 0, 255, 0, 255 },
+        .rssi = { 255, 255, 255, 255 },
+        .marks = { 255, 255, 255, 255 },
+        .majorMark = { 250, 180, 19, 255 },
+        .overMark = { 255, 0, 0, 255 },
+    };
+
+    gfx_drawSmeterLevelColors(start, width, height, rssi, level, volume,
+                              drawVolume, &colors);
+}
+
+void gfx_drawSmeterLevelColors(point_t start, uint16_t width, uint16_t height,
+                               rssi_t rssi, uint8_t level, uint8_t volume,
+                               bool drawVolume, const smeterColors_t *colors)
+{
+    color_t white = colors->marks;
 
     fontSize_t font = FONT_SIZE_5PT;
     uint8_t font_height = gfx_getFontHeight(font);
@@ -879,7 +893,8 @@ void gfx_drawSmeterLevel(point_t start, uint16_t width, uint16_t height,
         // Speaker Volume Bar
         uint16_t volume_width = (width * volume) / 255;
         point_t volume_pos = start;
-        gfx_drawRect(volume_pos, volume_width, volume_height, white, true);
+        gfx_drawRect(volume_pos, volume_width, volume_height, colors->volume,
+                     true);
     }
 
     // Level meter marks
@@ -894,18 +909,18 @@ void gfx_drawSmeterLevel(point_t start, uint16_t width, uint16_t height,
     uint16_t level_height = bar_height * 3 / bar_height_divider;
     uint16_t level_width = (width * level) / 255;
     point_t level_pos = { start.x, (uint8_t)(start.y + 2 + volume_height) };
-    gfx_drawRect(level_pos, level_width, level_height, green, true);
+    gfx_drawRect(level_pos, level_width, level_height, colors->level, true);
 
     // RSSI bar
     uint16_t rssi_height = bar_height * 3 / bar_height_divider;
     uint16_t rssi_width = (rssiToSlevel(rssi) * (width - 1) / 11);
     point_t rssi_pos = { start.x, (uint8_t)(start.y + 5 + level_height
                                             + volume_height) };
-    gfx_drawRect(rssi_pos, rssi_width, rssi_height, white, true);
+    gfx_drawRect(rssi_pos, rssi_width, rssi_height, colors->rssi, true);
     // S-level marks and numbers
     for (int i = 0; i < 12; i++) {
-        color_t color = (i % 3 == 0) ? yellow : white;
-        color = (i > 9) ? red : color;
+        color_t color = (i % 3 == 0) ? colors->majorMark : white;
+        color = (i > 9) ? colors->overMark : color;
         point_t pixel_pos = start;
         pixel_pos.x += i * (width - 1) / 11;
         pixel_pos.y += height;
@@ -915,7 +930,8 @@ void gfx_drawSmeterLevel(point_t start, uint16_t width, uint16_t height,
             gfx_print(pixel_pos, font, TEXT_ALIGN_LEFT, color, "+%d", i);
         } else if (i == 11) {
             pixel_pos.x -= 10;
-            gfx_print(pixel_pos, font, TEXT_ALIGN_LEFT, red, "+20");
+            gfx_print(pixel_pos, font, TEXT_ALIGN_LEFT, colors->overMark,
+                      "+20");
         } else
             gfx_print(pixel_pos, font, TEXT_ALIGN_LEFT, color, "%d", i);
         if (i == 10) {
