@@ -278,15 +278,37 @@ CPS_CHANNEL("Name", 422662500, OPMODE_TETRA)
 with the name (12 characters show on screen), the frequency in Hz and
 `OPMODE_FM`, `OPMODE_M17` or `OPMODE_TETRA`. Channels are receive only.
 
+### Talkgroups
+
+The same file can name TETRA talkgroups and radios, and choose which to
+listen to:
+
+```c
+TETRA_ID(101011, "Transit Control", true)
+TETRA_ID(100112, "Run 112", false)
+```
+
+with the SSI (the decimal ID), a name of up to 16 characters and `true` or
+`false`. The call screen and short messages then show names instead of
+numbers. When at least one entry is `true`, the radio shows, plays and
+follows only calls to those identities; when all are `false` it takes
+every call. Rebuild after a change.
+
+`ttc_tetra.h` names the 137 TTC talkgroups and radios RadioReference lists,
+all `false`. Set `true` on the ones you want, e.g. `Transit Control` and
+`Line2 Line Calls`.
+
 ## 7. Preview the screen
 
 `scripts/c62/ui_render.sh` draws the main screen on your computer with the
 firmware's own UI code, at the C62's 160x128, and writes PNG files: TETRA
 searching, locked, SDS, a call, a followed call and an encrypted call.
-With `-c` it also draws memory mode for each channel of a list:
+With `-c` it also draws memory mode for each channel of a list and uses
+its talkgroup names; `-t` sets the group and talker of the example calls:
 
 ```bash
-scripts/c62/ui_render.sh -c scripts/c62/channels/ttc_tetra.h -n 302-2013 out
+scripts/c62/ui_render.sh -c scripts/c62/channels/ttc_tetra.h -n 302-2013 \
+    -t 101011-100112 out
 ```
 
 It needs a C compiler and zlib, nothing from the radio. Radio state and
