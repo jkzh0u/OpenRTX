@@ -608,8 +608,8 @@ static void _ui_drawTetraInfo(bool memory)
 }
 
 /**
- * TETRA line 1, when no call is shown: the last SDS (scrolling)
- * or the demodulator quality.
+ * TETRA line 1, when no call is shown: the last SDS, its sender named and
+ * its text scrolling, else the last call heard or the demodulator figures.
  */
 static void _ui_drawTetraLine1(ui_state_t *ui_state)
 {
@@ -621,23 +621,41 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
 
     long long now = getTick();
     if (ts.sdsSrc != 0 && now - ts.sdsTime < TETRA_SDS_SHOW_MS) {
-        char text[96];
-        char msg[14];
-        const char *sender = tetraIds_name(ts.sdsSrc);
-        if (sender != NULL)
-            snprintf(text, sizeof(text), "%s: %s   ", sender, ts.sds);
-        else
-            snprintf(text, sizeof(text), "%lu: %s   ",
-                     (unsigned long)ts.sdsSrc, ts.sds);
-        scrollTextPeek(text, msg, sizeof(msg),
+        // Sender named as in the calls, held on the left, in white
+        char sender[24], label[32];
+        uint16_t width = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad;
+        _ui_tetraSsiName(sender, sizeof(sender), ts.sdsSrc, false);
+        _ui_tetraFit(label, sizeof(label), layout.line1_font, width / 2, "",
+                     sender, ":");
+        uint16_t wl = _ui_tetraTextWidth(layout.line1_font, label)
+                    + _ui_tetraTextWidth(layout.line1_font, " ");
+        point_t pos = layout.line1_pos;
+        gfx_print(pos, layout.line1_font, TEXT_ALIGN_LEFT, color_white, "%s",
+                  label);
+
+        // The text scrolls in yellow in the rest of the line: as many
+        // letters as fit, about, then trimmed to fit
+        char text[72], msg[32];
+        uint16_t room = width - wl;
+        size_t window = room / _ui_tetraTextWidth(layout.line1_font, "0");
+        if (window > sizeof(msg) - 1)
+            window = sizeof(msg) - 1;
+        if (window < 1)
+            window = 1;
+        snprintf(text, sizeof(text), "%s   ", ts.sds);
+        scrollTextPeek(text, msg, window + 1,
                        ui_state->m17_meta_text_scroll_position);
         if (now - ui_state->m17_meta_text_last_scroll_tick >= 100) {
-            scrollTextAdvance(text, sizeof(msg),
+            scrollTextAdvance(text, window + 1,
                               &ui_state->m17_meta_text_scroll_position);
             ui_state->m17_meta_text_last_scroll_tick = now;
         }
-        gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
-                  tetraText, "%s", msg);
+        size_t n = strlen(msg);
+        while (n > 0 && _ui_tetraTextWidth(layout.line1_font, msg) > room)
+            msg[--n] = '\0';
+        pos.x += wl;
+        gfx_print(pos, layout.line1_font, TEXT_ALIGN_LEFT, tetraText, "%s",
+                  msg);
         return;
     }
 
