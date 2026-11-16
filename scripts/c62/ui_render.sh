@@ -8,10 +8,13 @@
 # for a set of example states, to preview UI changes without a radio. See
 # tests/platform/ui_render/ui_render.c.
 #
-# Usage: scripts/c62/ui_render.sh [-c channels.h] [-n MCC-MNC] [-s scale] [dir]
+# Usage: scripts/c62/ui_render.sh [-c channels.h] [-n MCC-MNC] [-t GSSI-ISSI]
+#                                 [-s scale] [dir]
 #
-#   -c  also draw memory mode for each channel of a C62_CHANNELS list
+#   -c  also draw memory mode for each channel of a C62_CHANNELS list, and
+#       show the names of its TETRA_ID() entries
 #   -n  network code shown for the example cell (default 235-78)
+#   -t  called group and talker of the example calls (default 9001-320026)
 #   -s  pixel scale of the PNG files (default 4)
 #   dir output directory (default ui_render)
 #
@@ -23,12 +26,13 @@ ROOT=$(cd "$(dirname "$0")/../.." && pwd)
 CHANNELS=
 TOOL_ARGS=
 
-while getopts "c:n:s:" opt; do
+while getopts "c:n:s:t:" opt; do
     case $opt in
         c) CHANNELS=$(cd "$(dirname "$OPTARG")" && pwd)/$(basename "$OPTARG") ;;
         n) TOOL_ARGS="$TOOL_ARGS -n $OPTARG" ;;
         s) TOOL_ARGS="$TOOL_ARGS -s $OPTARG" ;;
-        *) sed -n '9,18p' "$0"; exit 2 ;;
+        t) TOOL_ARGS="$TOOL_ARGS -t $OPTARG" ;;
+        *) sed -n '11,21p' "$0"; exit 2 ;;
     esac
 done
 shift $((OPTIND - 1))
@@ -57,9 +61,11 @@ set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
     "$ROOT/openrtx/src/core/utils.c" \
     "$ROOT/openrtx/src/ui/default/ui_main.c" \
     "$ROOT/openrtx/src/ui/default/ui_strings.c" \
+    "$ROOT/openrtx/src/protocols/TETRA/TetraIds.c" \
     "$ROOT/lib/QRCode/qrcode.c"
 if [ -n "$CHANNELS" ]; then
     set -- "$@" "-DCPS_BUILTIN_LIST=\"$CHANNELS\"" \
+        "-DTETRA_ID_LIST=\"$CHANNELS\"" \
         "$ROOT/platform/drivers/CPS/cps_io_builtin.c"
 fi
 cc "$@" -lz -lm

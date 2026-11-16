@@ -13,13 +13,15 @@
  *
  * The display settings come from hwconfig.h next to this file (the C62's).
  * With CPS_BUILTIN_LIST set, as for platform/drivers/CPS/cps_io_builtin.c,
- * it also draws memory mode for every channel of that list.
+ * it also draws memory mode for every channel of that list, and with
+ * TETRA_ID_LIST the names of known identities.
  *
  * Build and run with scripts/c62/ui_render.sh.
  *
- * Usage: ui_render [-n MCC-MNC] [-s scale] output_dir
+ * Usage: ui_render [-n MCC-MNC] [-t GSSI-ISSI] [-s scale] output_dir
  *
  *     -n  network code shown for the example cell (default 235-78)
+ *     -t  called group and talker of the example calls (default 9001-320026)
  *     -s  pixel scale of the PNG files (default 4)
  */
 
@@ -203,7 +205,8 @@ static void scene(const char *name, bool memoryMode)
     printf("%s\n", outPath);
 }
 
-static void tetraScenes(unsigned mcc, unsigned mnc)
+static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
+                        uint32_t talker)
 {
     last_state.channel.mode = OPMODE_TETRA;
     last_state.channel.rx_frequency = 392512500;
@@ -243,8 +246,8 @@ static void tetraScenes(unsigned mcc, unsigned mnc)
     tetra.call = true;
     tetra.callId = 8;
     tetra.callGroup = true;
-    tetra.callDst = 9001;
-    tetra.talker = 320026;
+    tetra.callDst = group;
+    tetra.talker = talker;
     tetra.voice = true;
     scene("tetra-4-call", false);
 
@@ -292,13 +295,21 @@ static void channelScenes(void)
 int main(int argc, char *argv[])
 {
     unsigned mcc = 235, mnc = 78;
+    unsigned long group = 9001, talker = 320026;
     int opt;
 
-    while ((opt = getopt(argc, argv, "n:s:")) != -1) {
+    while ((opt = getopt(argc, argv, "n:s:t:")) != -1) {
         switch (opt) {
             case 'n':
                 if (sscanf(optarg, "%u-%u", &mcc, &mnc) != 2) {
                     fprintf(stderr, "-n: expected MCC-MNC, e.g. 235-78\n");
+                    return 2;
+                }
+                break;
+            case 't':
+                if (sscanf(optarg, "%lu-%lu", &group, &talker) != 2) {
+                    fprintf(stderr,
+                            "-t: expected GSSI-ISSI, e.g. 9001-320026\n");
                     return 2;
                 }
                 break;
@@ -311,13 +322,16 @@ int main(int argc, char *argv[])
                 break;
             default:
                 fprintf(stderr,
-                        "usage: %s [-n MCC-MNC] [-s scale] output_dir\n",
+                        "usage: %s [-n MCC-MNC] [-t GSSI-ISSI] [-s scale] "
+                        "output_dir\n",
                         argv[0]);
                 return 2;
         }
     }
     if (optind != argc - 1) {
-        fprintf(stderr, "usage: %s [-n MCC-MNC] [-s scale] output_dir\n",
+        fprintf(stderr,
+                "usage: %s [-n MCC-MNC] [-t GSSI-ISSI] [-s scale] "
+                "output_dir\n",
                 argv[0]);
         return 2;
     }
@@ -332,7 +346,7 @@ int main(int argc, char *argv[])
     last_state.volume = 180;
     last_state.settings.showBatteryIcon = false;
 
-    tetraScenes(mcc, mnc);
+    tetraScenes(mcc, mnc, (uint32_t)group, (uint32_t)talker);
 #ifdef CPS_BUILTIN_LIST
     channelScenes();
 #endif
