@@ -92,6 +92,40 @@ static bool _ui_tetraSsiText(char *buf, size_t len, const char *prefix,
 }
 
 /**
+ * Draw a radio mast sending a signal, as a symbol of the line font, at the
+ * left of a line: a tower, a dot at its top and two arcs on either side.
+ */
+static void _ui_tetraDrawTower(point_t pos, color_t color)
+{
+    static const char *const tower[] = {
+        ".#.........#.",
+        "#..#.....#..#",
+        "#.#..###..#.#",
+        "#.#..###..#.#",
+        "#..#..#..#..#",
+        ".#....#....#.",
+        ".....#.#.....",
+        ".....#.#.....",
+        "....#####....",
+        "....#...#....",
+        "...#.....#...",
+        "...#.....#...",
+        "..#.......#..",
+    };
+    const size_t rows = sizeof(tower) / sizeof(tower[0]);
+
+    for (size_t y = 0; y < rows; y++) {
+        for (size_t x = 0; tower[y][x] != '\0'; x++) {
+            if (tower[y][x] != '#')
+                continue;
+            point_t px = { (uint16_t)(pos.x + x),
+                           (uint16_t)(pos.y - rows + 1 + y) };
+            gfx_setPixel(px, color);
+        }
+    }
+}
+
+/**
  * Draw a loudspeaker, as a symbol of the line font, at the left of a line.
  */
 static void _ui_tetraDrawSpeaker(point_t pos, fontSize_t font, color_t color)
@@ -429,8 +463,7 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
         return;
     }
 
-    gfx_drawSymbol(big, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
-                   tetraPlace, SYMBOL_TRANSMISSION_TOWER);
+    _ui_tetraDrawTower(big, tetraPlace);
 
     if (!ts->sysinfo) {
         snprintf(text, sizeof(text), "%u-%u CC %u", ts->mcc, ts->mnc,
@@ -519,8 +552,7 @@ static void _ui_drawTetraInfo(bool memory)
         // Cell, and the traffic carrier the call was followed to, small
         char where[CPS_STR_SIZE];
         _ui_tetraLocation(&ts, where, sizeof(where));
-        gfx_drawSymbol(l3, layout.line3_symbol_size, TEXT_ALIGN_LEFT,
-                       _ui_tetraColor(tetraPlace), SYMBOL_TRANSMISSION_TOWER);
+        _ui_tetraDrawTower(l3, _ui_tetraColor(tetraPlace));
         if (ts.followHz != 0) {
             char carrier[16];
             snprintf(carrier, sizeof(carrier), " %lu.%04lu",
