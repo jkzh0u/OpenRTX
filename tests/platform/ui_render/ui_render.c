@@ -53,10 +53,6 @@ state_t last_state;
 /* _ui_calculateLayout(), copied from ui.c by scripts/c62/ui_render.sh */
 #include "ui_layout.inc"
 
-/* _ui_drawMenuList(), copied from ui_menu.c, without voice prompts */
-#define announceMenuItemIfNeeded(...)
-#include "ui_menu_list.inc"
-
 void _ui_drawMainVFO(ui_state_t *ui_state);
 void _ui_drawMainMEM(ui_state_t *ui_state);
 void _ui_drawTetraRecent(ui_state_t *ui_state);
@@ -228,18 +224,27 @@ static void scene(const char *name, bool memoryMode)
 static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
                         uint32_t talker)
 {
-    uint32_t cellFreq = 392512500;
+    uint32_t cellFreq = 392512500, prevFreq = 392612500;
     channel_t ch;
 
     strcpy(last_state.channel.name, "TETRA 392");
     last_state.channel_index = 4;
 
-    /* With a channel list, its first TETRA channel is the example cell */
+    /*
+     * With a channel list, its first TETRA channel is the example cell, and
+     * the next one of another station the cell before it
+     */
+    bool found = false;
     for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
-        if (ch.mode == OPMODE_TETRA) {
+        if (ch.mode != OPMODE_TETRA)
+            continue;
+        if (!found) {
             cellFreq = ch.rx_frequency;
             strcpy(last_state.channel.name, ch.name);
             last_state.channel_index = i;
+            found = true;
+        } else if (strncmp(ch.name, last_state.channel.name, 4) != 0) {
+            prevFreq = ch.rx_frequency;
             break;
         }
     }
@@ -310,6 +315,8 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
                     now - 9 * 60000);
     tetraCalls_note(&tetra.recent, 100112, 0, false, true, false,
                     now - 4 * 60000);
+    tetraCalls_note(&tetra.recent, 102716, 0, true, false, true,
+                    now - 3 * 60000);
     tetraCalls_note(&tetra.recent, 60002, 0, true, true, false, now - 61000);
     tetraCalls_note(&tetra.recent, group, talker, true, true, false,
                     now - 14 * 60000);
@@ -321,8 +328,20 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
 
     /* Just moved to another cell */
     tetra.cellChanged = now - 1000;
+    tetra.prevLa = 2;
+    tetra.prevDlFreq = prevFreq;
     scene("tetra-12-moved", false);
     tetra.cellChanged = 0;
+
+    /* A weak signal, still decoding; then decoding badly */
+    last_state.rssi = -113;
+    tetra.phaseErr = 26;
+    scene("tetra-13-weak", false);
+    last_state.rssi = -103;
+    tetra.phaseErr = 38;
+    scene("tetra-14-poor-decoding", false);
+    last_state.rssi = -85;
+    tetra.phaseErr = 12;
 
     /* Holding the last talkgroup heard */
     tetraIds_hold(group);

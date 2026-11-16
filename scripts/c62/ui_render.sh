@@ -49,13 +49,6 @@ if [ ! -s "$BUILD/ui_layout.inc" ]; then
     echo "ui_calculateLayout not found in ui.c" >&2
     exit 1
 fi
-# Likewise the menu list drawing of ui_menu.c, for list screens
-awk '/^void _ui_drawMenuList\(/,/^}/' \
-    "$ROOT/openrtx/src/ui/default/ui_menu.c" > "$BUILD/ui_menu_list.inc"
-if [ ! -s "$BUILD/ui_menu_list.inc" ]; then
-    echo "_ui_drawMenuList not found in ui_menu.c" >&2
-    exit 1
-fi
 
 # newlib's sniprintf() is the firmware's; the host has snprintf()
 set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
