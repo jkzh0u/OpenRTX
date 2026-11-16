@@ -65,6 +65,9 @@
 #include "hwconfig.h"
 #include "core/voicePromptUtils.h"
 #include "core/beeps.h"
+#ifdef CONFIG_TETRA
+#include "protocols/TETRA/TetraIds.h"
+#endif
 
 /* UI main screen functions, their implementation is in "ui_main.c" */
 extern void _ui_drawMainBackground();
@@ -672,6 +675,29 @@ static void _ui_fsm_confirmVFOInput(bool *sync_rtx)
 
     vp_play();
 }
+
+#ifdef CONFIG_TETRA
+/**
+ * In TETRA mode, # and * select the next and the previous talkgroup filter
+ * of the built-in list, if it defines any.
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_tetraFilterKeys(kbd_msg_t msg)
+{
+    if((state.channel.mode != OPMODE_TETRA) || (tetraIds_filterCount() < 2))
+        return false;
+
+    if(msg.keys & KEY_HASH)
+        tetraIds_stepFilter(1);
+    else if(msg.keys & KEY_STAR)
+        tetraIds_stepFilter(-1);
+    else
+        return false;
+
+    return true;
+}
+#endif
 
 static void _ui_fsm_insertVFONumber(kbd_msg_t msg, bool *sync_rtx)
 {
@@ -1537,6 +1563,13 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else
                 {
+                    #ifdef CONFIG_TETRA
+                    if(_ui_tetraFilterKeys(msg))
+                    {
+                        // Talkgroup filter selected
+                    }
+                    else
+                    #endif
                     if(msg.keys & KEY_ENTER)
                     {
                         // Save current main state
@@ -1743,6 +1776,13 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else
                 {
+                    #ifdef CONFIG_TETRA
+                    if(_ui_tetraFilterKeys(msg))
+                    {
+                        // Talkgroup filter selected
+                    }
+                    else
+                    #endif
                     if(msg.keys & KEY_ENTER)
                     {
                         // Save current main state

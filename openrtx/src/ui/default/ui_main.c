@@ -209,6 +209,19 @@ void _ui_drawMainTop(ui_state_t * ui_state)
               color_white, "%02d:%02d:%02d", local_time.hour,
               local_time.minute, local_time.second);
 #endif
+#ifdef CONFIG_TETRA
+    // Talkgroup filter, if the built-in list defines any: yellow while it
+    // holds calls back
+    if ((last_state.channel.mode == OPMODE_TETRA)
+        && (tetraIds_filterCount() > 1)) {
+        // Small font, as the battery percentage, to leave room for it
+        size_t filter = tetraIds_selectedFilter();
+        point_t pos = { layout.top_pos.x, layout.top_pos.y - 2 };
+        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
+                  (filter != 0) ? yellow_fab413 : color_white, "TG %s",
+                  tetraIds_filterName(filter));
+    }
+#endif
     // If the radio has no built-in battery, print input voltage
 #ifdef CONFIG_BAT_NONE
     gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_RIGHT,
