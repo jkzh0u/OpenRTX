@@ -275,8 +275,8 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     scene("tetra-2-cell", false);
     scene("tetra-2b-cell-memory", true);
 
-    /* Last SDS text */
-    tetra.sdsSrc = 320026;
+    /* Last SDS text, from the example talker */
+    tetra.sdsSrc = talker;
     strcpy(tetra.sds, "Test message from dispatch");
     tetra.sdsTime = now - 1000;
     scene("tetra-3-sds", false);
