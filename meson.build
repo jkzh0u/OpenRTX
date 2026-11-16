@@ -1305,6 +1305,16 @@ tetra_filter_test = executable('tetra_filter_test',
                                    'c_args' : linux_c_args +
                                        ['-DTETRA_ID_LIST="' + tetra_ids_list + '"']})
 
+tetra_calls_test = executable('tetra_calls_test',
+                              sources : ['openrtx/src/protocols/TETRA/TetraCalls.c',
+                                         'tests/unit/tetra_calls.cpp'],
+                              kwargs  : unit_test_opts)
+
+tetra_roam_test = executable('tetra_roam_test',
+                             sources : ['openrtx/src/protocols/TETRA/TetraRoam.c',
+                                        'tests/unit/tetra_roam.cpp'],
+                             kwargs  : unit_test_opts)
+
 # Baseband replay (tests/platform/M17Replay.hpp): a command line tool and a
 # unit test replaying a committed recording through the same class. The test
 # gets the asset directory as an absolute path so it does not depend on the
@@ -1343,4 +1353,6 @@ test('TETRA Follow Test',    tetra_follow_test)
 test('CPS Builtin Test',     cps_builtin_test)
 test('TETRA IDs Test',       tetra_ids_test)
 test('TETRA Filter Test',    tetra_filter_test)
+test('TETRA Calls Test',     tetra_calls_test)
+test('TETRA Roam Test',      tetra_roam_test)
 test('M17 Baseband Replay Test', m17_replay_test, timeout : 120) # ~40 s in CI with coverage
