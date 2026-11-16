@@ -76,22 +76,48 @@ static uint16_t _ui_tetraTextWidth(fontSize_t font, const char *text)
 }
 
 /**
- * Print an SSI: its name from the built-in list, else the number, or a
- * dash if it is not known.
+ * An SSI as text: its name from the built-in list, else the number after
+ * a prefix.
+ *
+ * @return false if the SSI is not known (0).
  */
-static void _ui_printSsi(point_t pos, fontSize_t font, const char *prefix,
-                         uint32_t ssi, color_t color)
+static bool _ui_tetraSsiText(char *buf, size_t len, const char *prefix,
+                             uint32_t ssi)
 {
-    char name[24];
+    if (ssi == 0)
+        return false;
+    if (!tetraIds_nameOf(ssi, buf, len))
+        snprintf(buf, len, "%s%lu", prefix, (unsigned long)ssi);
+    return true;
+}
 
-    color = _ui_tetraColor(color);
-    if (tetraIds_nameOf(ssi, name, sizeof(name)))
-        gfx_print(pos, font, TEXT_ALIGN_CENTER, color, "%s", name);
-    else if (ssi != 0)
-        gfx_print(pos, font, TEXT_ALIGN_CENTER, color, "%s%lu", prefix,
-                  (unsigned long)ssi);
-    else
-        gfx_print(pos, font, TEXT_ALIGN_CENTER, color, "%s-", prefix);
+/**
+ * Draw a loudspeaker, as a symbol of the line font, at the left of a line.
+ */
+static void _ui_tetraDrawSpeaker(point_t pos, fontSize_t font, color_t color)
+{
+    int16_t cy = pos.y - gfx_getFontHeight(font) / 2;
+    int16_t x = pos.x;
+
+    point_t body = { (uint16_t)x, (uint16_t)(cy - 2) };
+    gfx_drawRect(body, 3, 5, color, true);
+    for (int i = 0; i < 4; i++) {
+        point_t a = { (uint16_t)(x + 3 + i), (uint16_t)(cy - 2 - i) };
+        point_t b = { (uint16_t)(x + 3 + i), (uint16_t)(cy + 2 + i) };
+        gfx_drawLine(a, b, color);
+    }
+    // Two sound waves
+    for (int w = 0; w < 2; w++) {
+        int16_t wx = x + 9 + 3 * w;
+        int16_t r = 2 + 2 * w;
+        point_t a = { (uint16_t)wx, (uint16_t)(cy - r) };
+        point_t b = { (uint16_t)wx, (uint16_t)(cy + r) };
+        gfx_drawLine(a, b, color);
+        point_t ta = { (uint16_t)(wx - 1), (uint16_t)(cy - r - 1) };
+        point_t ba = { (uint16_t)(wx - 1), (uint16_t)(cy + r + 1) };
+        gfx_setPixel(ta, color);
+        gfx_setPixel(ba, color);
+    }
 }
 
 /**
@@ -302,10 +328,11 @@ static uint16_t _ui_tetraDrawArrow(point_t pos, uint8_t height, color_t color)
 
 /**
  * Print a large line of text, centred: a prefix (or a right arrow if it is
- * NULL), then the text, each in its colour, in the largest font that fits
- * between the line symbols on either side.
+ * NULL), then the text, each in its colour, in the largest font up to the
+ * given one that fits between the line symbols on either side.
  */
-static void _ui_tetraBigLine(point_t pos, const char *prefix, color_t cp,
+static void _ui_tetraBigLine(point_t pos, fontSize_t largest,
+                             const char *prefix, color_t cp,
                              const char *text, color_t ct)
 {
     static const fontSize_t fonts[] = { FONT_SIZE_16PT, FONT_SIZE_12PT,
@@ -318,6 +345,8 @@ static void _ui_tetraBigLine(point_t pos, const char *prefix, color_t cp,
     uint8_t height = 0;
 
     for (size_t i = 0; i < sizeof(fonts) / sizeof(fonts[0]); i++) {
+        if (fonts[i] > largest)
+            continue;
         font = fonts[i];
         height = gfx_getFontHeight(font);
         wp = (prefix != NULL) ? _ui_tetraTextWidth(font, prefix)
@@ -369,7 +398,7 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
 
     if (!ts->sync) {
         // The channel being tried, by name if it is in the list
-        _ui_tetraBigLine(big, "T ", color_white,
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", color_white,
                          ts->searching ? "scanning" : "searching",
                          ts->searching ? tetraWarn : tetraMuted);
         if (_ui_tetraChannelName(freq, where, sizeof(where)))
@@ -388,7 +417,7 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
     if (!ts->sysinfo) {
         snprintf(text, sizeof(text), "%u-%u CC %u", ts->mcc, ts->mnc,
                  ts->colourCode);
-        _ui_tetraBigLine(big, "T ", color_white, text, color_white);
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", color_white, text, color_white);
         gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
                   "%s%s", channel, freqStr);
         return;
@@ -401,7 +430,7 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
 
     _ui_tetraLocation(ts, where, sizeof(where));
     if (moved) {
-        _ui_tetraBigLine(big, NULL, tetraVoice, where, tetraVoice);
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, NULL, tetraVoice, where, tetraVoice);
         char prev[CPS_STR_SIZE];
         _ui_tetraCellName(ts->prevLa, ts->prevDlFreq, prev, sizeof(prev));
         if (ts->prevDlFreq != 0)
@@ -410,7 +439,7 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
         else
             snprintf(text, sizeof(text), "%s%s", channel, freqStr);
     } else {
-        _ui_tetraBigLine(big, "T ", color_white, where, tetraPlace);
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", color_white, where, tetraPlace);
         snprintf(text, sizeof(text), "%s%s", channel, freqStr);
     }
     gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
@@ -434,40 +463,68 @@ static void _ui_drawTetraInfo(bool memory)
 
     if (_ui_tetraCallShown(&ts)) {
         /*
-         * Four lines of call information: the last one would touch the
-         * meter below with letters such as y and p, so move them up a bit
+         * Four lines of call information: the called group large, then
+         * who talks, where and for how long, kept clear of the meter
          */
         point_t l1 = layout.line1_pos, l2 = layout.line2_pos;
         point_t l3 = layout.line3_pos, l4 = layout.line4_pos;
 #if CONFIG_SCREEN_HEIGHT > 127
-        l1.y -= 3;
-        l2.y -= 3;
-        l3.y -= 3;
+        l1.y += 3;
+        l2.y += 1;
+        l3.y -= 1;
         l4.y -= 3;
 #endif
-
-        // Talking party
-        gfx_drawSymbol(l1, layout.line1_symbol_size,
-                       TEXT_ALIGN_LEFT, color_white, SYMBOL_CALL_MADE);
-        _ui_printSsi(l1, layout.line2_font, "", ts.talker, color_white);
+        char text[32];
 
         // Called group or individual
-        gfx_drawSymbol(l2, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
+        point_t sym = l1;
+        sym.y -= (gfx_getFontHeight(FONT_SIZE_12PT)
+                  - gfx_getFontHeight(layout.line1_font)) / 2;
+        gfx_drawSymbol(sym, layout.line1_symbol_size, TEXT_ALIGN_LEFT,
                        _ui_tetraColor(tetraGroup), SYMBOL_CALL_RECEIVED);
-        _ui_printSsi(l2, layout.line2_font,
-                     ts.callGroup ? "G " : "", ts.callDst, tetraGroup);
+        if (!_ui_tetraSsiText(text, sizeof(text), ts.callGroup ? "G " : "",
+                              ts.callDst))
+            snprintf(text, sizeof(text), "%s-", ts.callGroup ? "G " : "");
+        _ui_tetraBigLine(l1, FONT_SIZE_12PT, "", tetraGroup, text,
+                         tetraGroup);
 
-        // Cell, or the traffic carrier the call was followed to
+        // Talking party
+        gfx_drawSymbol(l2, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
+                       _ui_tetraColor(color_white), SYMBOL_CALL_MADE);
+        if (_ui_tetraSsiText(text, sizeof(text), "", ts.talker))
+            gfx_print(l2, layout.line2_font, TEXT_ALIGN_CENTER,
+                      _ui_tetraColor(color_white), "%s", text);
+        else
+            gfx_print(l2, layout.line2_font, TEXT_ALIGN_CENTER,
+                      _ui_tetraColor(tetraMuted), "unknown");
+
+        // Cell, and the traffic carrier the call was followed to, small
+        char where[CPS_STR_SIZE];
+        _ui_tetraLocation(&ts, where, sizeof(where));
         gfx_drawSymbol(l3, layout.line3_symbol_size, TEXT_ALIGN_LEFT,
                        _ui_tetraColor(tetraPlace), SYMBOL_TRANSMISSION_TOWER);
-        if (ts.followHz != 0)
-            gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
-                      _ui_tetraColor(tetraPlace), "Ch %lu.%05lu",
-                      (unsigned long)(ts.followHz / 1000000),
-                      (unsigned long)(ts.followHz % 1000000 / 10));
-        else {
-            char where[CPS_STR_SIZE];
-            _ui_tetraLocation(&ts, where, sizeof(where));
+        if (ts.followHz != 0) {
+            char carrier[16];
+            snprintf(carrier, sizeof(carrier), " %lu.%04lu",
+                     (unsigned long)(ts.followHz / 1000000),
+                     (unsigned long)(ts.followHz % 1000000 / 100));
+            // Centred if it can be, else from the right of the symbol
+            uint16_t left = layout.horizontal_pad
+                          + gfx_getFontHeight(layout.line3_font) + 4;
+            uint16_t wc = _ui_tetraTextWidth(FONT_SIZE_6PT, carrier);
+            _ui_tetraFit(text, sizeof(text), layout.line3_font,
+                         CONFIG_SCREEN_WIDTH - left - layout.horizontal_pad
+                             - wc,
+                         "", where, "");
+            uint16_t wt = _ui_tetraTextWidth(layout.line3_font, text);
+            int x = ((int)CONFIG_SCREEN_WIDTH - wt - wc) / 2;
+            point_t pos = { (uint16_t)(x < left ? left : x), l3.y };
+            gfx_print(pos, layout.line3_font, TEXT_ALIGN_LEFT,
+                      _ui_tetraColor(tetraPlace), "%s", text);
+            pos.x += wt;
+            gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT,
+                      _ui_tetraColor(tetraMuted), "%s", carrier);
+        } else {
             gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
                       _ui_tetraColor(tetraPlace), "%s", where);
         }
@@ -481,8 +538,10 @@ static void _ui_drawTetraInfo(bool memory)
         } else if (ts.voice) {
             // Length of the current transmission
             long long talk = (getTick() - ts.txStart) / 1000;
+            _ui_tetraDrawSpeaker(l4, layout.line4_font,
+                                 _ui_tetraColor(tetraVoice));
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      _ui_tetraColor(tetraVoice), "Voice %lld:%02lld",
+                      _ui_tetraColor(tetraVoice), "%lld:%02lld",
                       talk / 60, talk % 60);
         } else {
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
