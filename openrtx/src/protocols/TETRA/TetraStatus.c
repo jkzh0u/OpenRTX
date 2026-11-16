@@ -188,6 +188,13 @@ void tetraStatus_setDemod(unsigned phaseErr, int carrierHz)
     pthread_mutex_unlock(&statusMutex);
 }
 
+void tetraStatus_setFollow(uint32_t freq)
+{
+    pthread_mutex_lock(&statusMutex);
+    status.followHz = freq;
+    pthread_mutex_unlock(&statusMutex);
+}
+
 bool tetraStatus_sync(void)
 {
     pthread_mutex_lock(&statusMutex);

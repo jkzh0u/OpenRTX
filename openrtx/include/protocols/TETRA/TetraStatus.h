@@ -36,6 +36,7 @@ struct tetraStatus {
     uint16_t callId;    /**< Call identifier */
     uint32_t callDst;   /**< Called (group) SSI, 0 if unknown */
     uint32_t talker;    /**< Talking party SSI, 0 if unknown */
+    uint32_t followHz;  /**< Followed traffic carrier, 0 on the main one */
 
     uint32_t sdsSrc;    /**< Sender of the last SDS, 0 if none */
     char sds[64];       /**< Last SDS text or status, ASCII */
@@ -79,6 +80,13 @@ void tetraStatus_lostSync(bool overrun);
  * Update the demodulator figures.
  */
 void tetraStatus_setDemod(unsigned phaseErr, int carrierHz);
+
+/**
+ * Set the traffic carrier being followed.
+ *
+ * @param freq: carrier frequency in Hz, 0 when on the main carrier.
+ */
+void tetraStatus_setFollow(uint32_t freq);
 
 /**
  * @return true while locked to a TMO downlink.
