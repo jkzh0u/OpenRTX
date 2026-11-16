@@ -310,6 +310,7 @@ and defines these filters:
 
 | Filter | Talkgroups |
 |---|---|
+| Riding | What to hear on a train: the line calls of every line, Transit Control and subway incidents. One press of # from `TG All` |
 | Subway | Rail operations on every line: line calls, PA, towers, yards, stations, train runs, subway incidents |
 | Line 1, 2, 4, 5, 6 | That line's calls, PA, tower, yards and trains |
 | Control | Transit Control, Events, Incidents 1 to 3 |
