@@ -14,6 +14,7 @@
 #include "interfaces/radio.h"
 #include "protocols/TETRA/TetraDemod.h"
 #include "protocols/TETRA/TetraFollow.h"
+#include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraSpeech.h"
 #include "protocols/TETRA/TetraStatus.h"
 #include "rtx/OpMode_TETRA.hpp"
@@ -169,7 +170,15 @@ void OpMode_TETRA::resync(bool overrun)
 #else
     cfg.cb = tetraStatus_onEvent;
 #endif
-    cfg.promiscuous = true;
+
+    /*
+     * Listen only to the identities selected in the built-in list, if any:
+     * libtetra then reports, plays and follows only their calls
+     */
+    size_t nListen;
+    cfg.groups = tetraIds_listen(&nListen);
+    cfg.ngroups = (uint8_t)nListen;
+    cfg.promiscuous = nListen == 0;
     tetra_tmo_init(&tmo, &cfg);
     slots = TETRA_FOLLOW_ALL_SLOTS;
 
