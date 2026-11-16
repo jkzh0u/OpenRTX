@@ -274,3 +274,17 @@ CPS_CHANNEL("Name", 422662500, OPMODE_TETRA)
 
 with the name (12 characters show on screen), the frequency in Hz and
 `OPMODE_FM`, `OPMODE_M17` or `OPMODE_TETRA`. Channels are receive only.
+
+## 7. Preview the screen
+
+`scripts/c62/ui_render.sh` draws the main screen on your computer with the
+firmware's own UI code, at the C62's 160x128, and writes PNG files: TETRA
+searching, locked, SDS, a call, a followed call and an encrypted call.
+With `-c` it also draws memory mode for each channel of a list:
+
+```bash
+scripts/c62/ui_render.sh -c scripts/c62/channels/ttc_tetra.h -n 302-2013 out
+```
+
+It needs a C compiler and zlib, nothing from the radio. Radio state and
+TETRA status are example values, set in `tests/platform/ui_render/ui_render.c`.
