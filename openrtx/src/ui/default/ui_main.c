@@ -551,6 +551,66 @@ void _ui_drawTetraRecentDetail(ui_state_t *ui_state)
 }
 
 /**
+ * One labelled bar of the TETRA meter: the label on the left, then a track
+ * filled to value / max.
+ */
+static void _ui_drawTetraBar(point_t pos, uint16_t width, uint16_t height,
+                             uint16_t labelWidth, const char *label,
+                             unsigned value, unsigned max, color_t color)
+{
+    static const color_t track = { 45, 45, 45, 255 };
+    static const color_t alarmTrack = { 120, 0, 0, 255 };
+    point_t text = { pos.x, (uint16_t)(pos.y + height) };
+    point_t bar = { (uint16_t)(pos.x + labelWidth), pos.y };
+    uint16_t barWidth = width - labelWidth;
+
+    gfx_print(text, FONT_SIZE_5PT, TEXT_ALIGN_LEFT,
+              _ui_tetraColor(tetraMuted), "%s", label);
+    gfx_drawRect(bar, barWidth, height, tetraAlarmScreen ? alarmTrack : track,
+                 true);
+    if (value > max)
+        value = max;
+    if (value != 0)
+        gfx_drawRect(bar, (uint16_t)(barWidth * value / max), height,
+                     _ui_tetraColor(color), true);
+}
+
+/**
+ * The TETRA meter: speaker volume, signal strength and decoding quality,
+ * each on a labelled bar. Signal and decoding are a traffic light: green
+ * when good, yellow when fair, red when poor.
+ */
+static void _ui_drawTetraMeter(point_t pos, uint16_t width, uint16_t height,
+                               rssi_t rssi, uint8_t volume)
+{
+    struct tetraStatus ts;
+    tetra_getStatus(&ts);
+
+    // Decoding quality: full at 10% phase error or better, empty at 45%,
+    // where decoding fails
+    unsigned quality = 0;
+    if (ts.sync && ts.phaseErr < 45)
+        quality = (ts.phaseErr <= 10) ? 255
+                                       : (45 - ts.phaseErr) * 255 / 35;
+    unsigned slevel = rssiToSlevel(rssi);
+
+    // A thin volume bar, then the two readings, evenly spaced
+    const uint16_t gap = 3;
+    uint16_t vol = height / 8;
+    uint16_t bar = (height - vol - 2 * gap) / 2;
+    uint16_t label = gfx_getTextWidth(FONT_SIZE_5PT, "VOL") + 4;
+
+    _ui_drawTetraBar(pos, width, vol, label, "VOL", volume, 255,
+                     tetraMuted);
+    pos.y += vol + gap;
+    _ui_drawTetraBar(pos, width, bar, label, "SIG", slevel, 11,
+                     _ui_tetraTraffic(slevel, 7, 4));
+    pos.y += bar + gap;
+    _ui_drawTetraBar(pos, width, bar, label, "DEC", quality, 255,
+                     _ui_tetraTraffic(quality, 170, 90));
+}
+
+/**
  * During a call to or from an alarm talkgroup, paint the screen red.
  */
 static void _ui_drawTetraAlarm(void)
@@ -962,36 +1022,10 @@ void _ui_drawMainBottom()
         #endif
         #ifdef CONFIG_TETRA
         case OPMODE_TETRA:
-        {
-            // The level bar shows decoding quality: full at 10% phase
-            // error or better, empty at 45%, where decoding fails
-            struct tetraStatus ts;
-            tetra_getStatus(&ts);
-            uint8_t quality = 0;
-            if (ts.sync && ts.phaseErr < 45)
-                quality = (ts.phaseErr <= 10) ? 255
-                        : (uint8_t)((45 - ts.phaseErr) * 255 / 35);
-            // Traffic light: each bar green when good, yellow when fair,
-            // red when poor
-            smeterColors_t colors = {
-                .volume = tetraMuted,
-                .level = _ui_tetraTraffic(quality, 170, 90),
-                .rssi = _ui_tetraTraffic(rssiToSlevel(rssi), 7, 4),
-                .marks = color_white,
-                .majorMark = yellow_fab413,
-                .overMark = { 255, 0, 0, 255 },
-            };
-            gfx_drawSmeterLevelColors(meter_pos,
-                                      meter_width,
-                                      meter_height,
-                                      rssi,
-                                      quality,
-                                      volume,
-                                      true,
-                                      &colors);
+            _ui_drawTetraMeter(meter_pos, meter_width, meter_height, rssi,
+                               volume);
             (void) mic_level;
             break;
-        }
         #endif
     }
 }
