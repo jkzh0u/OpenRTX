@@ -280,23 +280,46 @@ with the name (12 characters show on screen), the frequency in Hz and
 
 ### Talkgroups
 
-The same file can name TETRA talkgroups and radios, and choose which to
-listen to:
+The same file can name TETRA talkgroups and radios, and sort them into
+filters you choose on the radio:
 
 ```c
-TETRA_ID(101011, "Transit Control", true)
-TETRA_ID(100112, "Run 112", false)
+TETRA_FILTER(SUBWAY, "Subway")
+TETRA_FILTER(LINE1, "Line 1")
+
+TETRA_ID(100010, "Line1 Line Calls", TF(SUBWAY) | TF(LINE1))
+TETRA_ID(101011, "Transit Control", TF(CONTROL))
+TETRA_ID(60002, "Red Alarm", TF_EVERY)
 ```
 
-with the SSI (the decimal ID), a name of up to 16 characters and `true` or
-`false`. The call screen and short messages then show names instead of
-numbers. When at least one entry is `true`, the radio shows, plays and
-follows only calls to those identities; when all are `false` it takes
-every call. Rebuild after a change.
+`TETRA_FILTER` defines a filter, in the order the radio steps through
+them. `TETRA_ID` gives an SSI (the decimal ID), a name of up to 16
+characters and the filters it belongs to: `TF()` of each, `TF_EVERY` for
+all of them, `0` for none. The call screen and short messages show the
+names instead of numbers.
 
-`ttc_tetra.h` names the 137 TTC talkgroups and radios RadioReference lists,
-all `false`. Set `true` on the ones you want, e.g. `Transit Control` and
-`Line2 Line Calls`.
+In T mode, **#** selects the next filter and **\*** the previous one. The
+top bar shows it: `TG All` in white lets every call through, any other
+filter is shown in yellow. A call gets through when its talkgroup, or for
+a call between two radios either radio, is in the filter. Its voice, call
+screen and call following go with it. The radio starts at `TG All` after
+power on.
+
+`ttc_tetra.h` names the 137 TTC talkgroups and radios RadioReference lists
+and defines these filters:
+
+| Filter | Talkgroups |
+|---|---|
+| Subway | Rail operations on every line: line calls, PA, towers, yards, stations, train runs, subway incidents |
+| Line 1, 2, 4, 5, 6 | That line's calls, PA, tower, yards and trains |
+| Control | Transit Control, Events, Incidents 1 to 3 |
+| Surface | All of the surface section |
+| Streetcar | Streetcar control and supervisors, Surface Ch. 5, the carhouses |
+| Bus | Bus operations, the garages, Wheel-Trans, Control to Bus PA |
+| Maintenance | Signals, wayside, track, structures, radio techs, janitors, PRESTO, fire prevention |
+| Security | Transit Enforcement, Special Constables |
+
+`Red Alarm` and `911 Announce` come through every filter.
 
 ## 7. Preview the screen
 
