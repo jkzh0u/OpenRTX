@@ -15,18 +15,24 @@
 #include "core/utils.h"
 #include "ui/utils.h"
 #ifdef CONFIG_TETRA
+#include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
 
 /* An SDS text stays on the main screen this long */
 #define TETRA_SDS_SHOW_MS 30000
 
 /**
- * Print an SSI, or a dash if it is not known.
+ * Print an SSI: its name if it is in the built-in list, else the number, or
+ * a dash if it is not known.
  */
 static void _ui_printSsi(point_t pos, fontSize_t font, const char *prefix,
                          uint32_t ssi)
 {
-    if (ssi != 0)
+    const char *name = tetraIds_name(ssi);
+
+    if (name != NULL)
+        gfx_print(pos, font, TEXT_ALIGN_CENTER, color_white, "%s", name);
+    else if (ssi != 0)
         gfx_print(pos, font, TEXT_ALIGN_CENTER, color_white, "%s%lu", prefix,
                   (unsigned long)ssi);
     else
@@ -126,8 +132,12 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
     if (ts.sdsSrc != 0 && now - ts.sdsTime < TETRA_SDS_SHOW_MS) {
         char text[96];
         char msg[14];
-        snprintf(text, sizeof(text), "%lu: %s   ", (unsigned long)ts.sdsSrc,
-                 ts.sds);
+        const char *sender = tetraIds_name(ts.sdsSrc);
+        if (sender != NULL)
+            snprintf(text, sizeof(text), "%s: %s   ", sender, ts.sds);
+        else
+            snprintf(text, sizeof(text), "%lu: %s   ",
+                     (unsigned long)ts.sdsSrc, ts.sds);
         scrollTextPeek(text, msg, sizeof(msg),
                        ui_state->m17_meta_text_scroll_position);
         if (now - ui_state->m17_meta_text_last_scroll_tick >= 100) {
