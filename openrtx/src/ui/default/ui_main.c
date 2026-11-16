@@ -58,6 +58,24 @@ static color_t _ui_tetraColor(color_t c)
 }
 
 /**
+ * Width of a text in pixels. gfx_getTextWidth() stops counting at the
+ * screen width, so a text a little too wide would seem to fit: measure it
+ * a few letters at a time.
+ */
+static uint16_t _ui_tetraTextWidth(fontSize_t font, const char *text)
+{
+    char part[5];
+    uint16_t width = 0;
+    size_t len = strlen(text);
+
+    for (size_t i = 0; i < len; i += sizeof(part) - 1) {
+        snprintf(part, sizeof(part), "%s", text + i);
+        width += gfx_getTextWidth(font, part);
+    }
+    return width;
+}
+
+/**
  * Print an SSI: its name from the built-in list, else the number, or a
  * dash if it is not known.
  */
@@ -82,8 +100,8 @@ static void _ui_printSsi(point_t pos, fontSize_t font, const char *prefix,
 static void _ui_print2(point_t pos, fontSize_t font, const char *a,
                        color_t ca, const char *b, color_t cb)
 {
-    uint16_t wa = gfx_getTextWidth(font, a);
-    uint16_t wb = gfx_getTextWidth(font, b);
+    uint16_t wa = _ui_tetraTextWidth(font, a);
+    uint16_t wb = _ui_tetraTextWidth(font, b);
     int x = ((int)CONFIG_SCREEN_WIDTH - wa - wb) / 2;
 
     pos.x = (uint16_t)(x < 0 ? 0 : x);
@@ -138,7 +156,7 @@ static void _ui_tetraFit(char *out, size_t len, fontSize_t font,
 
     for (;;) {
         snprintf(out, len, "%s%.*s%s", prefix, n, name, suffix);
-        if (n == 0 || gfx_getTextWidth(font, out) <= width)
+        if (n == 0 || _ui_tetraTextWidth(font, out) <= width)
             return;
         n--;
         while (n > 0 && name[n - 1] == ' ')
@@ -183,29 +201,24 @@ static void _ui_tetraSsiName(char *buf, size_t len, uint32_t ssi, bool group)
 }
 
 /**
- * Where the radio is: the name of the location area from the built-in
- * list, else the channel of the list on this cell's main carrier if there
- * is only one (without a trailing carrier number), else the location area.
+ * Name of a cell: the name of its location area from the built-in list,
+ * else the channel of the list on its main carrier if there is only one
+ * (without a trailing carrier number), else the location area.
  */
-static void _ui_tetraLocation(const struct tetraStatus *ts, char *buf,
+static void _ui_tetraCellName(uint16_t laNum, uint32_t dlFreq, char *buf,
                               size_t len)
 {
-    const char *la = ts->sysinfo ? tetraIds_laName(ts->la) : NULL;
+    const char *la = tetraIds_laName(laNum);
 
     if (la != NULL) {
         snprintf(buf, len, "%s", la);
         return;
     }
 
-    if (!ts->sysinfo) {
-        snprintf(buf, len, "%u-%u", ts->mcc, ts->mnc);
-        return;
-    }
-
     channel_t ch;
     unsigned matches = 0;
     for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
-        if (ch.mode != OPMODE_TETRA || ch.rx_frequency != ts->dlFreq)
+        if (ch.mode != OPMODE_TETRA || ch.rx_frequency != dlFreq)
             continue;
         if (matches++ == 0)
             snprintf(buf, len, "%s", ch.name);
@@ -218,14 +231,203 @@ static void _ui_tetraLocation(const struct tetraStatus *ts, char *buf,
         return;
     }
 
-    snprintf(buf, len, "LA %u", ts->la);
+    snprintf(buf, len, "LA %u", laNum);
 }
 
 /**
- * TETRA cell or call information, from line 1 to line 4 during a call,
- * on line 2 otherwise.
+ * Where the radio is: the name of the current cell, or the network before
+ * the cell is known.
  */
-static void _ui_drawTetraInfo(void)
+static void _ui_tetraLocation(const struct tetraStatus *ts, char *buf,
+                              size_t len)
+{
+    if (ts->sysinfo)
+        _ui_tetraCellName(ts->la, ts->dlFreq, buf, len);
+    else
+        snprintf(buf, len, "%u-%u", ts->mcc, ts->mnc);
+}
+
+/**
+ * Name of the channel on a frequency: the selected channel, else the first
+ * of the list.
+ *
+ * @return false if there is none.
+ */
+static bool _ui_tetraChannelName(uint32_t freq, char *buf, size_t len)
+{
+    channel_t ch;
+
+    // Channels can share a frequency: the selected one first
+    if (last_state.channel.rx_frequency == freq
+        && last_state.channel.name[0] != '\0') {
+        snprintf(buf, len, "%s", last_state.channel.name);
+        return true;
+    }
+
+    for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
+        if (ch.rx_frequency == freq) {
+            snprintf(buf, len, "%s", ch.name);
+            return true;
+        }
+    }
+    return false;
+}
+
+/**
+ * Draw a right arrow, like a letter of a font of the given height, from
+ * the left end of its baseline.
+ *
+ * @return its width.
+ */
+static uint16_t _ui_tetraDrawArrow(point_t pos, uint8_t height, color_t color)
+{
+    uint16_t size = height * 2 / 3;
+    uint16_t half = size / 2;
+    int16_t mid = pos.y - (height * 2 / 5);
+
+    for (int t = -1; t <= 1; t++) {
+        point_t a = { pos.x, (uint16_t)(mid + t) };
+        point_t b = { (uint16_t)(pos.x + size), (uint16_t)(mid + t) };
+        gfx_drawLine(a, b, color);
+        point_t tip = { (uint16_t)(pos.x + size + t), (uint16_t)mid };
+        point_t up = { (uint16_t)(pos.x + size - half + t),
+                       (uint16_t)(mid - half) };
+        point_t down = { (uint16_t)(pos.x + size - half + t),
+                         (uint16_t)(mid + half) };
+        gfx_drawLine(up, tip, color);
+        gfx_drawLine(down, tip, color);
+    }
+    return size + 2;
+}
+
+/**
+ * Print a large line of text, centred: a prefix (or a right arrow if it is
+ * NULL), then the text, each in its colour, in the largest font that fits
+ * between the line symbols on either side.
+ */
+static void _ui_tetraBigLine(point_t pos, const char *prefix, color_t cp,
+                             const char *text, color_t ct)
+{
+    static const fontSize_t fonts[] = { FONT_SIZE_16PT, FONT_SIZE_12PT,
+                                        FONT_SIZE_10PT, FONT_SIZE_8PT };
+    uint16_t room = CONFIG_SCREEN_WIDTH - 2 * (layout.horizontal_pad
+                                               + gfx_getFontHeight(layout.line2_font)
+                                               + 2);
+    fontSize_t font = FONT_SIZE_8PT;
+    uint16_t wp = 0, wt = 0;
+    uint8_t height = 0;
+
+    for (size_t i = 0; i < sizeof(fonts) / sizeof(fonts[0]); i++) {
+        font = fonts[i];
+        height = gfx_getFontHeight(font);
+        wp = (prefix != NULL) ? _ui_tetraTextWidth(font, prefix)
+                              : height * 2 / 3 + 2
+                                    + _ui_tetraTextWidth(font, " ");
+        wt = _ui_tetraTextWidth(font, text);
+        if (wp + wt <= room)
+            break;
+    }
+
+    int x = ((int)CONFIG_SCREEN_WIDTH - wp - wt) / 2;
+    pos.x = (uint16_t)(x < 0 ? 0 : x);
+    if (prefix != NULL)
+        gfx_print(pos, font, TEXT_ALIGN_LEFT, _ui_tetraColor(cp), "%s",
+                  prefix);
+    else
+        _ui_tetraDrawArrow(pos, height, _ui_tetraColor(cp));
+    pos.x += wp;
+    gfx_print(pos, font, TEXT_ALIGN_LEFT, _ui_tetraColor(ct), "%s", text);
+}
+
+/**
+ * TETRA main screen when no call is shown: the station large, with the
+ * frequency, channel, previous station or channel being tried below it in
+ * small grey text.
+ *
+ * @param memory: memory mode, where the channel number is shown.
+ */
+static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
+{
+    point_t big = layout.line3_pos;
+    point_t small = layout.line4_pos;
+    char where[CPS_STR_SIZE], text[48], freqStr[16], channel[12] = "";
+    uint32_t freq = (ts->tunedHz != 0) ? ts->tunedHz
+                                       : last_state.channel.rx_frequency;
+
+#if CONFIG_SCREEN_HEIGHT > 127
+    big.y -= 6;
+    small.y -= 3;
+#endif
+
+    snprintf(freqStr, sizeof(freqStr), "%lu.%05lu",
+             (unsigned long)(freq / 1000000),
+             (unsigned long)(freq % 1000000 / 10));
+    if (memory)
+        snprintf(channel, sizeof(channel), "Ch %u  ",
+                 last_state.channel_index + 1);
+    uint16_t width = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad;
+
+    if (!ts->sync) {
+        // The channel being tried, by name if it is in the list
+        _ui_tetraBigLine(big, "T ", color_white,
+                         ts->searching ? "scanning" : "searching",
+                         ts->searching ? tetraWarn : tetraMuted);
+        if (_ui_tetraChannelName(freq, where, sizeof(where)))
+            _ui_tetraFit(text, sizeof(text), layout.line4_font, width, "",
+                         where, "");
+        else
+            snprintf(text, sizeof(text), "%s%s", channel, freqStr);
+        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
+                  "%s", text);
+        return;
+    }
+
+    gfx_drawSymbol(big, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
+                   tetraPlace, SYMBOL_TRANSMISSION_TOWER);
+
+    if (!ts->sysinfo) {
+        snprintf(text, sizeof(text), "%u-%u CC %u", ts->mcc, ts->mnc,
+                 ts->colourCode);
+        _ui_tetraBigLine(big, "T ", color_white, text, color_white);
+        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
+                  "%s%s", channel, freqStr);
+        return;
+    }
+
+    // Just moved to another cell: an arrow to it, highlighted, and where
+    // from
+    bool moved = (ts->cellChanged != 0)
+              && (getTick() - ts->cellChanged < TETRA_CELL_SHOW_MS);
+
+    _ui_tetraLocation(ts, where, sizeof(where));
+    if (moved) {
+        _ui_tetraBigLine(big, NULL, tetraVoice, where, tetraVoice);
+        char prev[CPS_STR_SIZE];
+        _ui_tetraCellName(ts->prevLa, ts->prevDlFreq, prev, sizeof(prev));
+        if (ts->prevDlFreq != 0)
+            _ui_tetraFit(text, sizeof(text), layout.line4_font, width,
+                         "from ", prev, "");
+        else
+            snprintf(text, sizeof(text), "%s%s", channel, freqStr);
+    } else {
+        _ui_tetraBigLine(big, "T ", color_white, where, tetraPlace);
+        snprintf(text, sizeof(text), "%s%s", channel, freqStr);
+    }
+    gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
+              "%s", text);
+
+    if (ts->airEncryption)
+        gfx_print(small, layout.line4_font, TEXT_ALIGN_RIGHT, tetraWarn,
+                  "enc");
+}
+
+/**
+ * TETRA cell or call information: from line 1 to line 4 during a call,
+ * else the station large and the frequency below it.
+ *
+ * @param memory: memory mode, where the channel number is shown.
+ */
+static void _ui_drawTetraInfo(bool memory)
 {
     struct tetraStatus ts;
     tetra_getStatus(&ts);
@@ -289,44 +491,11 @@ static void _ui_drawTetraInfo(void)
         return;
     }
 
-    if (!ts.sync) {
-        if (ts.searching)
-            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                      tetraWarn, "T scanning");
-        else
-            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                      tetraMuted, "T searching");
-        return;
-    }
-
-    // Just moved to another cell: say where, highlighted
-    bool moved = (ts.cellChanged != 0)
-              && (getTick() - ts.cellChanged < TETRA_CELL_SHOW_MS);
-    color_t place = moved ? tetraVoice : tetraPlace;
-
-    gfx_drawSymbol(layout.line2_pos, layout.line2_symbol_size,
-                   TEXT_ALIGN_LEFT, place, SYMBOL_TRANSMISSION_TOWER);
-    if (ts.sysinfo) {
-        char where[CPS_STR_SIZE];
-        _ui_tetraLocation(&ts, where, sizeof(where));
-        if (moved)
-            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                      place, "> %s", where);
-        else
-            _ui_print2(layout.line2_pos, layout.line2_font, "T ", color_white,
-                       where, place);
-        if (ts.airEncryption)
-            gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_RIGHT,
-                      tetraWarn, "enc");
-    } else {
-        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                  color_white, "T %u-%u CC %u", ts.mcc, ts.mnc,
-                  ts.colourCode);
-    }
+    _ui_drawTetraIdle(&ts, memory);
 }
 
 /**
- * TETRA line 1 in VFO mode, when no call is shown: the last SDS (scrolling)
+ * TETRA line 1, when no call is shown: the last SDS (scrolling)
  * or the demodulator quality.
  */
 static void _ui_drawTetraLine1(ui_state_t *ui_state)
@@ -386,6 +555,16 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
     gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
               tetraMuted, "e%u%% %+dHz o%u r%u", ts.phaseErr, ts.carrierHz,
               ts.overruns, ts.resyncs);
+}
+
+/**
+ * TETRA main screen, in VFO or memory mode: the call, else line 1 and the
+ * station.
+ */
+static void _ui_drawTetraMain(ui_state_t *ui_state, bool memory)
+{
+    _ui_drawTetraInfo(memory);
+    _ui_drawTetraLine1(ui_state);
 }
 
 /* In ui_menu.c */
@@ -633,6 +812,7 @@ static void _ui_drawTetraAlarm(void)
 
 /**
  * Check whether the current mode shows a call instead of the frequency.
+ * TETRA draws its own main screen.
  */
 static bool _ui_callShown(void)
 {
@@ -640,13 +820,6 @@ static bool _ui_callShown(void)
     rtxStatus_t status = rtx_getCurrentStatus();
     if ((status.opMode == OPMODE_M17) && status.lsfOk)
         return true;
-#endif
-#ifdef CONFIG_TETRA
-    if (last_state.channel.mode == OPMODE_TETRA) {
-        struct tetraStatus ts;
-        tetra_getStatus(&ts);
-        return _ui_tetraCallShown(&ts);
-    }
 #endif
     return false;
 }
@@ -871,8 +1044,7 @@ void _ui_drawModeInfo(ui_state_t* ui_state)
 
         #ifdef CONFIG_TETRA
         case OPMODE_TETRA:
-            (void) ui_state;
-            _ui_drawTetraInfo();
+            // Drawn by _ui_drawTetraMain()
             break;
         #endif
     }
@@ -882,16 +1054,6 @@ void _ui_drawFrequency()
 {
     freq_t freq = platform_getPttStatus() ? last_state.channel.tx_frequency
                                           : last_state.channel.rx_frequency;
-#ifdef CONFIG_TETRA
-    // The cell the radio moved to, rather than the one it was set to
-    if (last_state.channel.mode == OPMODE_TETRA) {
-        struct tetraStatus ts;
-        tetra_getStatus(&ts);
-        if (ts.tunedHz != 0)
-            freq = ts.tunedHz;
-    }
-#endif
-
     char freq_str[16] = {0};
     sniprintf(freq_str, sizeof(freq_str), "%03lu.%05lu",
               (freq / 1000000lu), (freq % 1000000lu) / 10);
@@ -1037,16 +1199,19 @@ void _ui_drawMainVFO(ui_state_t* ui_state)
     _ui_drawTetraAlarm();
     #endif
     _ui_drawMainTop(ui_state);
-    _ui_drawModeInfo(ui_state);
-
-    // Show VFO frequency unless the mode shows a call (M17 LSF, TETRA call)
-    if(_ui_callShown() == false)
-        _ui_drawFrequency();
-
     #ifdef CONFIG_TETRA
     if(last_state.channel.mode == OPMODE_TETRA)
-        _ui_drawTetraLine1(ui_state);
+    {
+        _ui_drawTetraMain(ui_state, false);
+        _ui_drawMainBottom();
+        return;
+    }
     #endif
+    _ui_drawModeInfo(ui_state);
+
+    // Show VFO frequency unless the mode shows a call (M17 LSF)
+    if(_ui_callShown() == false)
+        _ui_drawFrequency();
 
     _ui_drawMainBottom();
 }
@@ -1066,9 +1231,17 @@ void _ui_drawMainMEM(ui_state_t* ui_state)
     _ui_drawTetraAlarm();
     #endif
     _ui_drawMainTop(ui_state);
+    #ifdef CONFIG_TETRA
+    if(last_state.channel.mode == OPMODE_TETRA)
+    {
+        _ui_drawTetraMain(ui_state, true);
+        _ui_drawMainBottom();
+        return;
+    }
+    #endif
     _ui_drawModeInfo(ui_state);
 
-    // Show channel data unless the mode shows a call (M17 LSF, TETRA call)
+    // Show channel data unless the mode shows a call (M17 LSF)
     if(_ui_callShown() == false)
     {
         _ui_drawBankChannel();
