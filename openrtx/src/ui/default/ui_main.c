@@ -62,12 +62,18 @@ static void _ui_drawTetraInfo(void)
         _ui_printSsi(layout.line2_pos, layout.line2_font,
                      ts.callGroup ? "G " : "", ts.callDst);
 
-        // Cell
+        // Cell, or the traffic carrier the call was followed to
         gfx_drawSymbol(layout.line3_pos, layout.line3_symbol_size,
                        TEXT_ALIGN_LEFT, color_white,
                        SYMBOL_TRANSMISSION_TOWER);
-        gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
-                  color_white, "%u-%u LA %u", ts.mcc, ts.mnc, ts.la);
+        if (ts.followHz != 0)
+            gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
+                      color_white, "Ch %lu.%05lu",
+                      (unsigned long)(ts.followHz / 1000000),
+                      (unsigned long)(ts.followHz % 1000000 / 10));
+        else
+            gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
+                      color_white, "%u-%u LA %u", ts.mcc, ts.mnc, ts.la);
 
         // Call state
         if (ts.callEncrypted) {
