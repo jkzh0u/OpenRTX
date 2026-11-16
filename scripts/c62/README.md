@@ -4,7 +4,64 @@
  - SPDX-License-Identifier: GPL-3.0-or-later
 -->
 
-# Retevis C62: build, flash, capture RX baseband
+# Retevis C62: OpenRTX with a TETRA receiver
+
+OpenRTX for the Retevis C62, with a TETRA receiver. This build:
+
+- receives **FM** and **M17**, and **TETRA** downlinks ("T" mode): it decodes
+  calls, plays clear speech, shows short messages, follows calls to other
+  carriers and moves between cells of the network by itself (section 5);
+- can hold a **channel list** built into the firmware, with **talkgroup
+  names** and **filters** chosen on the radio (section 6). The list for the
+  Toronto Transit Commission network is included;
+- has a **recent calls** list, a **last heard** line, **talk time**, a
+  talkgroup **hold** and **alarm** alerts in T mode;
+- can stream the raw receiver audio over the programming cable (section 3);
+- builds with Docker (section 1), and its screens can be previewed on a
+  computer (section 7).
+
+It is receive only in T mode, and cannot store settings yet: it starts in
+VFO mode on 430.000 MHz, M17, filter `TG All`, after every power on.
+
+## Quick reference: buttons
+
+On the main screen, in any mode:
+
+| Button | Does |
+|---|---|
+| **Menu** (Enter) | Open the menu. The **Channels** entry lists the built-in channels |
+| **ESC** | Switch between VFO mode (a frequency) and memory mode (the channel list) |
+| **Up** / **Down** | VFO: step the frequency. Memory: next / previous channel |
+| **1** to **9** | VFO: type a frequency, then **Enter** (in T mode **0** opens the recent calls instead) |
+| Side key + number | Shortcut, see below |
+
+Shortcuts: hold the **side key** and press a number. Long-press the side key
+on its own to latch shortcut mode, so the numbers work without holding it;
+press it again to unlatch.
+
+| Side key + | Does |
+|---|---|
+| **5** | Change mode: FM, M17, T (TETRA) |
+| **1** / **2** / **3** | FM: CTCSS off, encode, decode or both / tone down / tone up |
+| **4** | FM: bandwidth 12.5 or 25 kHz |
+| **6** | Transmit power |
+| **7** / **8** | Brightness down / up |
+| **9** | Lock or unlock the keypad |
+
+In T mode, on the main screen:
+
+| Button | Short press | Long press |
+|---|---|---|
+| **#** | Next talkgroup filter, or release a held talkgroup | Hold the current call's talkgroup, or the last one heard. Again to release |
+| **\*** | Previous talkgroup filter, or release a held talkgroup | Line 1: switch between the last call heard and the signal figures |
+| **0** | Recent calls | |
+
+In the recent calls list: **Up** / **Down** to scroll, **Enter** to hold the
+selected talkgroup, **ESC** or **0** to go back.
+
+A long press first does the short press, then changes it: a long **#** steps
+the filter forward for a moment before holding. This is how the keypad
+reports long presses.
 
 ## 1. Build with Docker
 
@@ -151,11 +208,13 @@ holds 1.4 s each of `7808 7828 7e28 7e2c 7e38 7e20 fe28`. Split them with
 
 ## 5. TETRA mode
 
-Press **5** on the main screen to cycle the modes: FM, M17, T. In **T**
-mode the radio receives a TETRA TMO downlink (a base station, pi/4-DQPSK)
-and decodes it on the radio with
+Hold the **side key** and press **5** to change the mode: FM, M17, T. Or
+pick a TETRA channel of the channel list (section 6), which starts T mode
+by itself. In **T** mode the radio receives a TETRA TMO downlink (a base
+station, pi/4-DQPSK) and decodes it on the radio with
 [libtetra](https://github.com/sp5wwp/libtetra). It is receive only: PTT does
-nothing. Tune to the base station's downlink frequency as usual.
+nothing. Tune to the base station's downlink frequency as usual, or to any
+cell of the network: cell tracking finds the best one.
 
 The main screen shows:
 
@@ -172,16 +231,11 @@ the radio is locked to a cell. A call stays on screen for 10 s after its
 last activity unless its release is decoded. During a call to or from an
 alarm talkgroup the screen turns red, and three beeps sound once.
 
-Keys in T mode, on the main screen:
+The top bar shows the talkgroup filter, `TG All` in white or another filter
+in yellow (section 6), or `Hold <name>` in yellow while a talkgroup is held:
+a temporary filter that lets only its calls through. The buttons are in
+the quick reference at the top of this file.
 
-| Key | Short press | Long press |
-|---|---|---|
-| **#** | Next talkgroup filter (section 6), or release a held talkgroup | Hold the current call's talkgroup, or the last heard; again to release |
-| **\*** | Previous talkgroup filter, or release a held talkgroup | Line 1: switch between the last call heard and the demodulator figures |
-| **0** | Recent calls: **Up**/**Down** to scroll, **Enter** to hold one, **ESC** to go back | |
-
-A held talkgroup is a temporary filter of its own: the top bar shows
-`Hold <name>` in yellow, and only its calls get through.
 Speech starts 150 ms after the first traffic slot: TETRA leaves a gap of
 113 ms in every multiframe (frame 18), which the buffer must cover. A
 dash means the network has not sent that identity since the radio started
@@ -295,17 +349,21 @@ docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD":/work openrtx-c62 \
 
 CMake remembers the option, so later builds keep the list. In VFO mode
 press **ESC** for memory mode, then **Up** and **Down** to step through the
-channels, and **ESC** again to return to VFO mode. Each channel sets its
-own mode, so a TETRA channel starts T mode directly.
+channels, and **ESC** again to return to VFO mode. The **Channels** entry
+of the menu lists them too. Each channel sets its own mode, so a TETRA
+channel starts T mode directly.
 
 `scripts/c62/channels/ttc_tetra.h` holds the Toronto Transit Commission
 TETRA network: the three carriers RadioReference lists as control channels
 at each of its 10 surface sites, named after the site, then the control
 channels of the 13 underground subway zones (`Z1 Kipling` to `Z13 VMC`).
 Usually one carrier per surface site carries the control channel and
-synchronisation: that is the one where the radio locks and shows
-`T 302-2013 LA <n>`. The zones reuse four frequencies, so underground the
-one you receive depends on where you are.
+synchronisation: that is the one where the radio locks, and line 2 then
+names the site, e.g. `T CN Tower`. The zones reuse four frequencies, so
+underground the one you receive depends on where you are. Any of them is a
+good start: cell tracking (section 5) moves the radio to the best cell and
+follows it from zone to zone, and searches all these channels when the
+signal is lost.
 
 To make a list of your own, copy that file and keep one entry per line:
 
@@ -327,13 +385,14 @@ TETRA_FILTER(LINE1, "Line 1")
 
 TETRA_ID(100010, "Line1 Line Calls", TF(SUBWAY) | TF(LINE1))
 TETRA_ID(101011, "Transit Control", TF(CONTROL))
-TETRA_ID(60002, "Red Alarm", TF_EVERY)
+TETRA_ID(60002, "Red Alarm", TF_EVERY | TF_ALARM)
 ```
 
 `TETRA_FILTER` defines a filter, in the order the radio steps through
 them. `TETRA_ID` gives an SSI (the decimal ID), a name of up to 16
 characters and the filters it belongs to: `TF()` of each, `TF_EVERY` for
-all of them, `0` for none. The call screen and short messages show the
+all of them, `0` for none, plus `TF_ALARM` for an alarm talkgroup. The
+call screen, last heard line, recent calls and short messages show the
 names instead of numbers.
 
 In T mode, **#** selects the next filter and **\*** the previous one. The
@@ -341,7 +400,8 @@ top bar shows it: `TG All` in white lets every call through, any other
 filter is shown in yellow. A call gets through when its talkgroup, or for
 a call between two radios either radio, is in the filter. Its voice, call
 screen and call following go with it. The radio starts at `TG All` after
-power on.
+power on. A long **#** holds one talkgroup instead, see the quick
+reference.
 
 `ttc_tetra.h` names the 137 TTC talkgroups and radios RadioReference lists
 and defines these filters:
@@ -359,7 +419,7 @@ and defines these filters:
 | Security | Transit Enforcement, Special Constables |
 
 `Red Alarm` and `911 Announce` come through every filter, and are alarms:
-add `TF_ALARM` to a talkgroup's filters to make it one.
+their calls turn the screen red and sound three beeps.
 
 Location areas can be named too, once you know them (the cell screen shows
 `LA <n>` until then):
