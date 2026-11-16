@@ -231,10 +231,15 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     uint32_t cellFreq = 392512500;
     channel_t ch;
 
+    strcpy(last_state.channel.name, "TETRA 392");
+    last_state.channel_index = 4;
+
     /* With a channel list, its first TETRA channel is the example cell */
     for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
         if (ch.mode == OPMODE_TETRA) {
             cellFreq = ch.rx_frequency;
+            strcpy(last_state.channel.name, ch.name);
+            last_state.channel_index = i;
             break;
         }
     }
@@ -242,8 +247,6 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     last_state.channel.mode = OPMODE_TETRA;
     last_state.channel.rx_frequency = cellFreq;
     last_state.channel.tx_frequency = cellFreq;
-    strcpy(last_state.channel.name, "TETRA 392");
-    last_state.channel_index = 4;
 
     /* No signal: noise gives about 58% phase error */
     memset(&tetra, 0, sizeof(tetra));
