@@ -53,6 +53,15 @@ static const rtxStatus_t
 
 static enum opstatus radioStatus; // Current operating status
 static enum opmode radioMode;     // Current operating mode
+static bool rxVhf;                // RX on the VHF LNA, else UHF
+
+/**
+ * @return true if the frequency is received through the VHF LNA.
+ */
+static bool vhfLna(uint32_t freq)
+{
+    return freq < 174000000;
+}
 
 /*
  * BK4819 REG_43 for M17 RX, written whole (see the V3 register list):
@@ -273,7 +282,8 @@ void radio_enableRx()
     //Before enable RX path delay to allow hardware to settle
     delayMs(5);
 
-    if (config->rxFrequency < 174000000) {
+    rxVhf = vhfLna(config->rxFrequency);
+    if (rxVhf) {
         gpioDev_set(&c62_bk4819_gpio, GPIO_VHF_RX_LNA);
     } else {
         gpioDev_set(&c62_bk4819_gpio, GPIO_UHF_RX_LNA);
@@ -355,6 +365,18 @@ void radio_disableRtx()
 
 void radio_updateConfiguration()
 {
+    /*
+     * TETRA receive: the frequency is the only setting that matters (fixed
+     * flat audio path, no tones), and call following retunes it within a
+     * timeslot (14.17 ms). On the same LNA, set the synthesizer alone,
+     * without the LNA switching and settling delay of radio_enableRx().
+     */
+    if (radioStatus == RX && radioMode == OPMODE_TETRA
+        && vhfLna(config->rxFrequency) == rxVhf) {
+        bk4819_set_freq(&c62_bk4819, config->rxFrequency);
+        return;
+    }
+
     /*
      * Update VCO frequency and tuning parameters if current operating status
      * is different from OFF.
