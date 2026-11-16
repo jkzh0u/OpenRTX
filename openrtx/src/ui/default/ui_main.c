@@ -26,7 +26,9 @@
 /* Colours of the TETRA screens */
 static const color_t tetraGroup = { 90, 200, 255, 255 };   /* Sky blue */
 static const color_t tetraPlace = { 110, 220, 110, 255 };  /* Green */
+static const color_t tetraStation = { 255, 255, 255, 255 }; /* White */
 static const color_t tetraVoice = { 60, 255, 120, 255 };   /* Bright green */
+static const color_t tetraTalk = { 255, 191, 0, 255 };     /* Amber */
 static const color_t tetraMuted = { 150, 150, 150, 255 };  /* Grey */
 static const color_t tetraWarn = { 255, 150, 30, 255 };    /* Orange */
 static const color_t tetraText = { 255, 230, 140, 255 };   /* Light yellow */
@@ -450,7 +452,7 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
 
     if (!ts->sync) {
         // The channel being tried, by name if it is in the list
-        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", color_white,
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", tetraMuted,
                          ts->searching ? "scanning" : "searching",
                          ts->searching ? tetraWarn : tetraMuted);
         if (_ui_tetraChannelName(freq, where, sizeof(where)))
@@ -468,7 +470,8 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
     if (!ts->sysinfo) {
         snprintf(text, sizeof(text), "%u-%u CC %u", ts->mcc, ts->mnc,
                  ts->colourCode);
-        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", color_white, text, color_white);
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", tetraMuted, text,
+                         tetraStation);
         gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
                   "%s%s", channel, freqStr);
         return;
@@ -490,7 +493,8 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
         else
             snprintf(text, sizeof(text), "%s%s", channel, freqStr);
     } else {
-        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", color_white, where, tetraPlace);
+        _ui_tetraBigLine(big, FONT_SIZE_16PT, "T ", tetraMuted, where,
+                         tetraStation);
         snprintf(text, sizeof(text), "%s%s", channel, freqStr);
     }
     gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
@@ -570,13 +574,13 @@ static void _ui_drawTetraInfo(bool memory)
             int x = ((int)CONFIG_SCREEN_WIDTH - wt - wc) / 2;
             point_t pos = { (uint16_t)(x < left ? left : x), l3.y };
             gfx_print(pos, layout.line3_font, TEXT_ALIGN_LEFT,
-                      _ui_tetraColor(tetraPlace), "%s", text);
+                      _ui_tetraColor(tetraStation), "%s", text);
             pos.x += wt;
             gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT,
                       _ui_tetraColor(tetraMuted), "%s", carrier);
         } else {
             gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
-                      _ui_tetraColor(tetraPlace), "%s", where);
+                      _ui_tetraColor(tetraStation), "%s", where);
         }
 
         // Call state
@@ -589,9 +593,9 @@ static void _ui_drawTetraInfo(bool memory)
             // Length of the current transmission
             long long talk = (getTick() - ts.txStart) / 1000;
             _ui_tetraDrawSpeaker(l4, layout.line4_font,
-                                 _ui_tetraColor(tetraVoice));
+                                 _ui_tetraColor(tetraTalk));
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      _ui_tetraColor(tetraVoice), "%lld:%02lld",
+                      _ui_tetraColor(tetraTalk), "%lld:%02lld",
                       talk / 60, talk % 60);
         } else {
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
