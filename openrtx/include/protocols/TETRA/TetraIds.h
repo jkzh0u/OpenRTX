@@ -32,7 +32,12 @@ extern "C" {
  *
  * with the SSI, a name and the filters it belongs to: TF() of each, 0 for
  * none, TF_EVERY for all of them. Filter 0, "All", is always there and
- * lets everything through. Up to 31 filters.
+ * lets everything through. Up to 30 filters. Adding TF_ALARM marks an
+ * alarm talkgroup: its calls sound an alert and turn the screen red.
+ *
+ *     TETRA_LA(39, "Line 5 east")
+ *
+ * names a location area, shown as the radio's location.
  *
  * The header may also hold CPS_CHANNEL() entries for
  * platform/drivers/CPS/cps_io_builtin.c, which are ignored here: one file
@@ -40,7 +45,7 @@ extern "C" {
  */
 
 /** Most filters a list can define, besides "All" */
-#define TETRA_IDS_MAX_FILTERS 31
+#define TETRA_IDS_MAX_FILTERS 30
 
 /**
  * @param ssi: talkgroup or radio identity.
@@ -68,16 +73,53 @@ const char *tetraIds_filterName(size_t filter);
 bool tetraIds_inFilter(uint32_t ssi, size_t filter);
 
 /**
- * Select the next or previous filter, wrapping around. Called from the UI.
+ * @param ssi: talkgroup or radio identity.
+ * @return true if it is an alarm talkgroup (TF_ALARM).
+ */
+bool tetraIds_isAlarm(uint32_t ssi);
+
+/**
+ * @param la: location area.
+ * @return its name, or NULL if it is not in the list.
+ */
+const char *tetraIds_laName(uint16_t la);
+
+/**
+ * Select the next or previous filter, wrapping around. Releases a held
+ * talkgroup first. Called from the UI.
  *
  * @param step: +1 for the next filter, -1 for the previous one.
  */
 void tetraIds_stepFilter(int step);
 
 /**
- * @return the selected filter, "All" (0) at start.
+ * Listen only to one identity, until released: a temporary filter.
+ *
+ * @param ssi: talkgroup or radio to hold.
+ */
+void tetraIds_hold(uint32_t ssi);
+
+/**
+ * Go back to the filter selected before the hold.
+ */
+void tetraIds_release(void);
+
+/**
+ * @return the held identity, 0 if none.
+ */
+uint32_t tetraIds_held(void);
+
+/**
+ * @return the selected filter: "All" (0) at start, tetraIds_filterCount()
+ * while holding a talkgroup.
  */
 size_t tetraIds_selectedFilter(void);
+
+/**
+ * @return a number that changes with every new selection or hold, for the
+ * receiver to notice it.
+ */
+uint8_t tetraIds_selection(void);
 
 #ifdef __cplusplus
 }

@@ -6,7 +6,10 @@
 
 #include "protocols/TETRA/TetraIds.h"
 
-/* The list is read three times: filter numbers, filter names, identities */
+/*
+ * The list is read four times: filter numbers, filter names, identities and
+ * location areas
+ */
 #define CPS_CHANNEL(...)
 
 enum {
@@ -14,7 +17,9 @@ enum {
 #ifdef TETRA_ID_LIST
 #define TETRA_FILTER(id, name) TF_##id,
 #define TETRA_ID(...)
+#define TETRA_LA(...)
 #include TETRA_ID_LIST
+#undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
 #endif
@@ -23,16 +28,25 @@ enum {
 
 _Static_assert(TF_COUNT_ - 1 <= TETRA_IDS_MAX_FILTERS, "Too many filters");
 
-/* For the list: filter masks, bit n for filter n */
+/*
+ * For the list: filter masks, bit n for filter n. Bit 0, "All", is not
+ * needed as a filter and marks alarms.
+ */
 #define TF(id) (1ul << TF_##id)
-#define TF_EVERY (~1ul)
+#define TF_ALARM 1ul
+#define TF_EVERY (0x7ffffffeul)
+
+/* The filter number of a held talkgroup */
+#define HOLD TF_COUNT_
 
 static const char *const filterNames[] = {
     "All",
 #ifdef TETRA_ID_LIST
 #define TETRA_FILTER(id, name) (name),
 #define TETRA_ID(...)
+#define TETRA_LA(...)
 #include TETRA_ID_LIST
+#undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
 #endif
@@ -49,19 +63,46 @@ static const struct tetraId ids[] = {
 #ifdef TETRA_ID_LIST
 #define TETRA_FILTER(...)
 #define TETRA_ID(ssi, name, filters) { (ssi), (name), (uint32_t)(filters) },
+#define TETRA_LA(...)
 #include TETRA_ID_LIST
+#undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
 #endif
     { 0, NULL, 0 },
 };
 
+struct tetraLa {
+    uint16_t la;
+    const char *name;
+};
+
+static const struct tetraLa las[] = {
+#ifdef TETRA_ID_LIST
+#define TETRA_FILTER(...)
+#define TETRA_ID(...)
+#define TETRA_LA(la, name) { (la), (name) },
+#include TETRA_ID_LIST
+#undef TETRA_LA
+#undef TETRA_ID
+#undef TETRA_FILTER
+#endif
+    { 0, NULL },
+};
+
 #undef CPS_CHANNEL
 
 #define NUM_IDS (sizeof(ids) / sizeof(ids[0]) - 1)
+#define NUM_LAS (sizeof(las) / sizeof(las[0]) - 1)
 
-/* Written by the UI, read by the receiver: one byte, no lock needed */
+/*
+ * Written by the UI, read by the receiver. The selection number changes
+ * last, after the values it announces.
+ */
 static volatile uint8_t selected;
+static volatile uint8_t beforeHold;
+static volatile uint32_t heldSsi;
+static volatile uint8_t selection;
 
 static const struct tetraId *find(uint32_t ssi)
 {
@@ -90,6 +131,8 @@ size_t tetraIds_filterCount(void)
 
 const char *tetraIds_filterName(size_t filter)
 {
+    if (filter == HOLD)
+        return "Hold";
     return filter < TF_COUNT_ ? filterNames[filter] : NULL;
 }
 
@@ -97,7 +140,9 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter)
 {
     if (filter == 0)
         return true;
-    if (filter >= TF_COUNT_)
+    if (filter == HOLD)
+        return ssi != 0 && ssi == heldSsi;
+    if (filter > TF_COUNT_)
         return false;
 
     const struct tetraId *id = find(ssi);
@@ -105,16 +150,66 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter)
     return id != NULL && (id->filters & (1ul << filter)) != 0;
 }
 
+bool tetraIds_isAlarm(uint32_t ssi)
+{
+    const struct tetraId *id = find(ssi);
+
+    return id != NULL && (id->filters & TF_ALARM) != 0;
+}
+
+const char *tetraIds_laName(uint16_t la)
+{
+    for (size_t i = 0; i < NUM_LAS; i++) {
+        if (las[i].la == la)
+            return las[i].name;
+    }
+
+    return NULL;
+}
+
 void tetraIds_stepFilter(int step)
 {
-    int next = ((int)selected + step) % (int)TF_COUNT_;
+    int from = (selected == HOLD) ? beforeHold : selected;
+    int next = (from + step) % (int)TF_COUNT_;
 
     if (next < 0)
         next += TF_COUNT_;
+    heldSsi = 0;
     selected = (uint8_t)next;
+    selection++;
+}
+
+void tetraIds_hold(uint32_t ssi)
+{
+    if (ssi == 0)
+        return;
+    if (selected != HOLD)
+        beforeHold = selected;
+    heldSsi = ssi;
+    selected = HOLD;
+    selection++;
+}
+
+void tetraIds_release(void)
+{
+    if (selected != HOLD)
+        return;
+    heldSsi = 0;
+    selected = beforeHold;
+    selection++;
+}
+
+uint32_t tetraIds_held(void)
+{
+    return heldSsi;
 }
 
 size_t tetraIds_selectedFilter(void)
 {
     return selected;
+}
+
+uint8_t tetraIds_selection(void)
+{
+    return selection;
 }
