@@ -102,9 +102,13 @@ if(C62_TETRA)
                         "'west update --group-filter +csk6', or build with "
                         "-DC62_TETRA=OFF")
   endif()
+  # Downlink receiver only: no uplink recognition or decoding, which would
+  # cost CPU time while searching for a cell
+  set(TETRA_UPLINK_DETECT OFF)
+  set(TETRA_UPLINK_DECODE OFF)
   add_subdirectory(${C62_LIBTETRA} ${CMAKE_BINARY_DIR}/libtetra)
   # Build it with the Zephyr compiler flags (CPU, FPU, ABI)
-  target_link_libraries(tetra PRIVATE zephyr_interface)
+  target_link_libraries(tetra PRIVATE $<BUILD_INTERFACE:zephyr_interface>)
   target_link_libraries(app PRIVATE tetra)
   target_sources(app PRIVATE
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraDemod.c
