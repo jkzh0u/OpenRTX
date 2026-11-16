@@ -239,9 +239,10 @@ screen shows instead, from the top:
 Talkgroups and radios show by name when the channel list names them
 (section 6), the location as a named location area, else the channel of the
 list on this cell's main carrier, else `LA <n>`. Colours: talkgroups sky
-blue, locations green, speech bright green, idle and figures grey, warnings
-orange. For 5 s after the radio moves to another cell, an arrow points to
-the new location, highlighted, e.g. `→ Z7 StClair W`, and the grey line
+blue, locations white beside a green radio mast, the talk time amber, idle
+and figures grey, warnings orange. For 5 s after the radio moves to another
+cell, an arrow points to the new location in bright green, e.g.
+`→ Z7 StClair W`, and the grey line
 says where the radio came from, e.g. `from Z6 Downsview`. The green LED is
 on while the radio is locked to a cell.
 
