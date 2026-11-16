@@ -1279,6 +1279,15 @@ tetra_follow_test = executable('tetra_follow_test',
                                           'tests/unit/tetra_follow.cpp'],
                                kwargs  : unit_test_opts)
 
+# Built-in codeplug, with a test channel list
+cps_builtin_list = meson.current_source_dir() / 'tests/unit/cps_builtin_list.h'
+cps_builtin_test = executable('cps_builtin_test',
+                              sources : ['platform/drivers/CPS/cps_io_builtin.c',
+                                         'tests/unit/cps_builtin.cpp'],
+                              kwargs  : unit_test_opts + {
+                                  'c_args' : linux_c_args +
+                                      ['-DCPS_BUILTIN_LIST="' + cps_builtin_list + '"']})
+
 # Baseband replay (tests/platform/M17Replay.hpp): a command line tool and a
 # unit test replaying a committed recording through the same class. The test
 # gets the asset directory as an absolute path so it does not depend on the
@@ -1314,4 +1323,5 @@ test('M17 Packet Frame Test', m17_packet_test)
 test('DSP Oversampling Test', dsp_oversampling_test)
 test('GFX Text Test',        gfx_text_test)
 test('TETRA Follow Test',    tetra_follow_test)
+test('CPS Builtin Test',     cps_builtin_test)
 test('M17 Baseband Replay Test', m17_replay_test, timeout : 120) # ~40 s in CI with coverage
