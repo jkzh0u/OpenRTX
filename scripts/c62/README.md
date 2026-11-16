@@ -225,7 +225,7 @@ The main screen shows, in VFO and memory mode alike:
 | State | Line 1 | Large | Small, grey |
 |---|---|---|---|
 | No signal | Last call heard, or demodulator figures | `T searching`, or `T scanning` while looking for another cell | The channel being tried, else the frequency |
-| Locked to a cell | Last SDS text (scrolling, 30 s), else last call heard, or demodulator figures | `T <location>` | Frequency received, after `Ch <n>` in memory mode; `enc` on the right if the cell encrypts |
+| Locked to a cell | Last SDS for 30 s: its sender by name in white, then its text scrolling in yellow; else last call heard, or demodulator figures | `T <location>` | Frequency received, after `Ch <n>` in memory mode; `enc` on the right if the cell encrypts |
 
 The station is drawn in the largest font that fits. During a call the
 screen shows instead, from the top:
