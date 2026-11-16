@@ -12,7 +12,8 @@
  *     CPS_CHANNEL("Name", frequency_hz, OPMODE_xxx)
  *
  * Channels are receive only, 25 kHz, with the same frequency for TX and RX.
- * There are no contacts and no banks, and every write fails.
+ * There are no contacts and no banks, and every write fails. TETRA_ID()
+ * entries in the same header are for TetraIds.c and are ignored here.
  */
 
 #include <string.h>
@@ -32,7 +33,9 @@ struct builtinChannel {
 /* The sentinel keeps the array valid when the list is empty */
 static const struct builtinChannel channels[] = {
 #define CPS_CHANNEL(name, freq, mode) { (name), (freq), (mode) },
+#define TETRA_ID(...)
 #include CPS_BUILTIN_LIST
+#undef TETRA_ID
 #undef CPS_CHANNEL
     { NULL, 0, OPMODE_NONE },
 };
