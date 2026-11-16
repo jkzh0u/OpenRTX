@@ -27,11 +27,35 @@ TEST_CASE("TETRA recent calls, newest first", "[tetra][calls]")
     REQUIRE(c.entry[0].dst == 100010);
     REQUIRE(c.entry[0].src == 100112);
     REQUIRE(c.entry[0].time == 3000);
+    REQUIRE(c.entry[0].first == 1000);
     tetraCalls_note(&c, 100010, 0, true, false, true, 4000);
     REQUIRE(c.entry[0].src == 100112);
     REQUIRE(c.entry[0].voice);
     REQUIRE(c.entry[0].encrypted);
     REQUIRE(c.entry[1].dst == 101011);
+}
+
+TEST_CASE("TETRA recent calls count transmissions", "[tetra][calls]")
+{
+    tetraCalls c;
+    tetraCalls_init(&c);
+
+    // Set-up without speech: none heard yet
+    tetraCalls_note(&c, 100010, 0, true, false, false, 0);
+    REQUIRE(c.entry[0].heard == 0);
+
+    // A transmission: speech every 60 ms for a second
+    for (long long t = 100; t < 1100; t += 60)
+        tetraCalls_note(&c, 100010, 100112, true, true, false, t);
+    REQUIRE(c.entry[0].heard == 1);
+
+    // A short gap is the same transmission, a pause a new one
+    tetraCalls_note(&c, 100010, 100112, true, true, false, 1500);
+    REQUIRE(c.entry[0].heard == 1);
+    tetraCalls_note(&c, 100010, 100253, true, true, false,
+                    1500 + TETRA_CALLS_PAUSE_MS);
+    REQUIRE(c.entry[0].heard == 2);
+    REQUIRE(c.entry[0].src == 100253);
 }
 
 TEST_CASE("TETRA recent calls keep the newest ones", "[tetra][calls]")

@@ -37,7 +37,12 @@ extern "C" {
  *
  *     TETRA_LA(39, "Line 5 east")
  *
- * names a location area, shown as the radio's location.
+ * names a location area, shown as the radio's location, and
+ *
+ *     TETRA_ID_RANGE(100201, 100299, "Run %u", 100000, TF(LINE2))
+ *
+ * names every identity of a range not listed on its own, from a printf
+ * format given the SSI minus a base, with the filters of the range.
  *
  * The header may also hold CPS_CHANNEL() entries for
  * platform/drivers/CPS/cps_io_builtin.c, which are ignored here: one file
@@ -49,9 +54,19 @@ extern "C" {
 
 /**
  * @param ssi: talkgroup or radio identity.
- * @return its name, or NULL if it is not in the list.
+ * @return its name from its own entry, or NULL if it has none.
  */
 const char *tetraIds_name(uint32_t ssi);
+
+/**
+ * Name of an identity from its entry or its range.
+ *
+ * @param ssi: talkgroup or radio identity.
+ * @param buf: destination.
+ * @param len: size of buf.
+ * @return true if it has a name.
+ */
+bool tetraIds_nameOf(uint32_t ssi, char *buf, size_t len);
 
 /**
  * @return the number of filters, including "All" (filter 0).

@@ -34,6 +34,7 @@ void tetraCalls_note(struct tetraCalls *c, uint32_t dst, uint32_t src,
         memset(&e, 0, sizeof(e));
         e.dst = dst;
         e.group = group;
+        e.first = now;
         if (c->count < TETRA_CALLS_MAX)
             c->count++;
         i = c->count - 1;
@@ -41,6 +42,10 @@ void tetraCalls_note(struct tetraCalls *c, uint32_t dst, uint32_t src,
 
     if (src != 0)
         e.src = src;
+    if (voice && (e.heard == 0 || now - e.lastVoice >= TETRA_CALLS_PAUSE_MS))
+        e.heard++;
+    if (voice)
+        e.lastVoice = now;
     e.voice |= voice;
     e.encrypted |= encrypted;
     e.time = now;

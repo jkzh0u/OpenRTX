@@ -8,6 +8,14 @@
 #include <cstring>
 #include "protocols/TETRA/TetraIds.h"
 
+/* The selection is global: start each test that uses it from "All" */
+static void selectAll()
+{
+    tetraIds_release();
+    while (tetraIds_selectedFilter() != 0)
+        tetraIds_stepFilter(1);
+}
+
 TEST_CASE("TETRA identities have names", "[tetra][ids]")
 {
     REQUIRE(std::strcmp(tetraIds_name(101011), "Transit Control") == 0);
@@ -51,6 +59,30 @@ TEST_CASE("TETRA identity filters", "[tetra][ids]")
     REQUIRE_FALSE(tetraIds_inFilter(60002, 5));
 }
 
+TEST_CASE("TETRA identity ranges", "[tetra][ids]")
+{
+    char buf[24];
+
+    // Named by its range, with its filters
+    REQUIRE(tetraIds_name(100253) == nullptr);
+    REQUIRE(tetraIds_nameOf(100253, buf, sizeof(buf)));
+    REQUIRE(std::strcmp(buf, "Run 253") == 0);
+    REQUIRE(tetraIds_inFilter(100253, 1));
+    REQUIRE_FALSE(tetraIds_inFilter(100253, 2));
+    REQUIRE(tetraIds_inFilter(100150, 2));
+
+    // Its own entry first
+    REQUIRE(tetraIds_nameOf(100112, buf, sizeof(buf)));
+    REQUIRE(std::strcmp(buf, "Run 112") == 0);
+    REQUIRE(tetraIds_nameOf(101011, buf, sizeof(buf)));
+    REQUIRE(std::strcmp(buf, "Transit Control") == 0);
+
+    // Outside: no name
+    REQUIRE_FALSE(tetraIds_nameOf(100300, buf, sizeof(buf)));
+    REQUIRE_FALSE(tetraIds_nameOf(0, buf, sizeof(buf)));
+    REQUIRE_FALSE(tetraIds_inFilter(100300, 1));
+}
+
 TEST_CASE("TETRA alarms and location areas", "[tetra][ids]")
 {
     REQUIRE(tetraIds_isAlarm(60002));
@@ -68,6 +100,7 @@ TEST_CASE("TETRA alarms and location areas", "[tetra][ids]")
 
 TEST_CASE("TETRA identity filter selection wraps", "[tetra][ids]")
 {
+    selectAll();
     REQUIRE(tetraIds_selectedFilter() == 0);
     tetraIds_stepFilter(1);
     REQUIRE(tetraIds_selectedFilter() == 1);
@@ -81,6 +114,8 @@ TEST_CASE("TETRA identity filter selection wraps", "[tetra][ids]")
 TEST_CASE("TETRA talkgroup hold", "[tetra][ids]")
 {
     const size_t HOLD = tetraIds_filterCount();
+
+    selectAll();
 
     tetraIds_stepFilter(1); // Subway
     uint8_t sel = tetraIds_selection();

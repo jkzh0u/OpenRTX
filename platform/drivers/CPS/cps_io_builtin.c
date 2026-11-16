@@ -12,9 +12,8 @@
  *     CPS_CHANNEL("Name", frequency_hz, OPMODE_xxx)
  *
  * Channels are receive only, 25 kHz, with the same frequency for TX and RX.
- * There are no contacts and no banks, and every write fails. TETRA_FILTER(),
- * TETRA_ID() and TETRA_LA() entries in the same header are for TetraIds.c
- * and are ignored here.
+ * There are no contacts and no banks, and every write fails. The TETRA_
+ * entries in the same header are for TetraIds.c and are ignored here.
  */
 
 #include <string.h>
@@ -37,7 +36,9 @@ static const struct builtinChannel channels[] = {
 #define TETRA_FILTER(...)
 #define TETRA_ID(...)
 #define TETRA_LA(...)
+#define TETRA_ID_RANGE(...)
 #include CPS_BUILTIN_LIST
+#undef TETRA_ID_RANGE
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER

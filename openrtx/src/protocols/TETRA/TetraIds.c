@@ -4,11 +4,12 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+#include <stdio.h>
 #include "protocols/TETRA/TetraIds.h"
 
 /*
- * The list is read four times: filter numbers, filter names, identities and
- * location areas
+ * The list is read five times: filter numbers, filter names, identities,
+ * location areas and identity ranges
  */
 #define CPS_CHANNEL(...)
 
@@ -18,7 +19,9 @@ enum {
 #define TETRA_FILTER(id, name) TF_##id,
 #define TETRA_ID(...)
 #define TETRA_LA(...)
+#define TETRA_ID_RANGE(...)
 #include TETRA_ID_LIST
+#undef TETRA_ID_RANGE
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
@@ -45,7 +48,9 @@ static const char *const filterNames[] = {
 #define TETRA_FILTER(id, name) (name),
 #define TETRA_ID(...)
 #define TETRA_LA(...)
+#define TETRA_ID_RANGE(...)
 #include TETRA_ID_LIST
+#undef TETRA_ID_RANGE
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
@@ -64,7 +69,9 @@ static const struct tetraId ids[] = {
 #define TETRA_FILTER(...)
 #define TETRA_ID(ssi, name, filters) { (ssi), (name), (uint32_t)(filters) },
 #define TETRA_LA(...)
+#define TETRA_ID_RANGE(...)
 #include TETRA_ID_LIST
+#undef TETRA_ID_RANGE
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
@@ -82,7 +89,9 @@ static const struct tetraLa las[] = {
 #define TETRA_FILTER(...)
 #define TETRA_ID(...)
 #define TETRA_LA(la, name) { (la), (name) },
+#define TETRA_ID_RANGE(...)
 #include TETRA_ID_LIST
+#undef TETRA_ID_RANGE
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
@@ -90,10 +99,35 @@ static const struct tetraLa las[] = {
     { 0, NULL },
 };
 
+struct tetraIdRange {
+    uint32_t first;
+    uint32_t last;
+    const char *format; /**< printf format of the SSI minus base */
+    uint32_t base;
+    uint32_t filters;
+};
+
+static const struct tetraIdRange ranges[] = {
+#ifdef TETRA_ID_LIST
+#define TETRA_FILTER(...)
+#define TETRA_ID(...)
+#define TETRA_LA(...)
+#define TETRA_ID_RANGE(first, last, format, base, filters) \
+    { (first), (last), (format), (base), (uint32_t)(filters) },
+#include TETRA_ID_LIST
+#undef TETRA_ID_RANGE
+#undef TETRA_LA
+#undef TETRA_ID
+#undef TETRA_FILTER
+#endif
+    { 0, 0, NULL, 0, 0 },
+};
+
 #undef CPS_CHANNEL
 
 #define NUM_IDS (sizeof(ids) / sizeof(ids[0]) - 1)
 #define NUM_LAS (sizeof(las) / sizeof(las[0]) - 1)
+#define NUM_RANGES (sizeof(ranges) / sizeof(ranges[0]) - 1)
 
 /*
  * Written by the UI, read by the receiver. The selection number changes
@@ -124,6 +158,49 @@ const char *tetraIds_name(uint32_t ssi)
     return id != NULL ? id->name : NULL;
 }
 
+static const struct tetraIdRange *findRange(uint32_t ssi)
+{
+    if (ssi == 0)
+        return NULL;
+
+    for (size_t i = 0; i < NUM_RANGES; i++) {
+        if (ssi >= ranges[i].first && ssi <= ranges[i].last)
+            return &ranges[i];
+    }
+
+    return NULL;
+}
+
+bool tetraIds_nameOf(uint32_t ssi, char *buf, size_t len)
+{
+    const struct tetraId *id = find(ssi);
+
+    if (id != NULL) {
+        snprintf(buf, len, "%s", id->name);
+        return true;
+    }
+
+    const struct tetraIdRange *r = findRange(ssi);
+    if (r != NULL) {
+        snprintf(buf, len, r->format, (unsigned)(ssi - r->base));
+        return true;
+    }
+
+    return false;
+}
+
+/** Filters an identity belongs to, from its entry or its range */
+static uint32_t filtersOf(uint32_t ssi)
+{
+    const struct tetraId *id = find(ssi);
+
+    if (id != NULL)
+        return id->filters;
+
+    const struct tetraIdRange *r = findRange(ssi);
+    return r != NULL ? r->filters : 0;
+}
+
 size_t tetraIds_filterCount(void)
 {
     return TF_COUNT_;
@@ -145,16 +222,12 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter)
     if (filter > TF_COUNT_)
         return false;
 
-    const struct tetraId *id = find(ssi);
-
-    return id != NULL && (id->filters & (1ul << filter)) != 0;
+    return (filtersOf(ssi) & (1ul << filter)) != 0;
 }
 
 bool tetraIds_isAlarm(uint32_t ssi)
 {
-    const struct tetraId *id = find(ssi);
-
-    return id != NULL && (id->filters & TF_ALARM) != 0;
+    return (filtersOf(ssi) & TF_ALARM) != 0;
 }
 
 const char *tetraIds_laName(uint16_t la)
