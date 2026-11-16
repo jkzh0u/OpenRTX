@@ -57,42 +57,55 @@ static void _ui_drawTetraInfo(void)
     tetra_getStatus(&ts);
 
     if (_ui_tetraCallShown(&ts)) {
+        /*
+         * Four lines of call information: the last one would touch the
+         * meter below with letters such as y and p, so move them up a bit
+         */
+        point_t l1 = layout.line1_pos, l2 = layout.line2_pos;
+        point_t l3 = layout.line3_pos, l4 = layout.line4_pos;
+#if CONFIG_SCREEN_HEIGHT > 127
+        l1.y -= 3;
+        l2.y -= 3;
+        l3.y -= 3;
+        l4.y -= 3;
+#endif
+
         // Talking party
-        gfx_drawSymbol(layout.line1_pos, layout.line1_symbol_size,
+        gfx_drawSymbol(l1, layout.line1_symbol_size,
                        TEXT_ALIGN_LEFT, color_white, SYMBOL_CALL_MADE);
-        _ui_printSsi(layout.line1_pos, layout.line2_font, "", ts.talker);
+        _ui_printSsi(l1, layout.line2_font, "", ts.talker);
 
         // Called group or individual
-        gfx_drawSymbol(layout.line2_pos, layout.line2_symbol_size,
+        gfx_drawSymbol(l2, layout.line2_symbol_size,
                        TEXT_ALIGN_LEFT, color_white, SYMBOL_CALL_RECEIVED);
-        _ui_printSsi(layout.line2_pos, layout.line2_font,
+        _ui_printSsi(l2, layout.line2_font,
                      ts.callGroup ? "G " : "", ts.callDst);
 
         // Cell, or the traffic carrier the call was followed to
-        gfx_drawSymbol(layout.line3_pos, layout.line3_symbol_size,
+        gfx_drawSymbol(l3, layout.line3_symbol_size,
                        TEXT_ALIGN_LEFT, color_white,
                        SYMBOL_TRANSMISSION_TOWER);
         if (ts.followHz != 0)
-            gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
+            gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
                       color_white, "Ch %lu.%05lu",
                       (unsigned long)(ts.followHz / 1000000),
                       (unsigned long)(ts.followHz % 1000000 / 10));
         else
-            gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
+            gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
                       color_white, "%u-%u LA %u", ts.mcc, ts.mnc, ts.la);
 
         // Call state
         if (ts.callEncrypted) {
-            gfx_drawSymbol(layout.line4_pos, layout.line4_symbol_size,
+            gfx_drawSymbol(l4, layout.line4_symbol_size,
                            TEXT_ALIGN_LEFT, color_white, SYMBOL_LOCK);
-            gfx_print(layout.line4_pos, layout.line4_font, TEXT_ALIGN_CENTER,
+            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
                       color_white, "Encrypted");
         } else if (ts.callId != 0) {
-            gfx_print(layout.line4_pos, layout.line4_font, TEXT_ALIGN_CENTER,
+            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
                       color_white, "%s, call %u",
                       ts.voice ? "Voice" : "Idle", ts.callId);
         } else {
-            gfx_print(layout.line4_pos, layout.line4_font, TEXT_ALIGN_CENTER,
+            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
                       color_white, "%s", ts.voice ? "Voice" : "Idle");
         }
         return;
