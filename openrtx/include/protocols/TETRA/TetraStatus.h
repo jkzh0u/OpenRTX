@@ -42,6 +42,7 @@ struct tetraStatus {
     long long txStart;  /**< Tick the current transmission started */
 
     uint32_t tunedHz;   /**< Main carrier received, Hz, 0 if not set */
+    long long cellChanged; /**< Tick the radio last moved to another cell */
     bool searching;     /**< Looking for a cell on other frequencies */
 
     struct tetraCalls recent; /**< Recent calls, newest first */

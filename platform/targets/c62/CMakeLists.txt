@@ -124,6 +124,7 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraCalls.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraDemod.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFilter.c
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFocus.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFollow.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraIds.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraRoam.c
