@@ -686,25 +686,27 @@ extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 extern bool _ui_tetraCallActive(void);
 
 /*
- * What the last short press of # or * did, for a long press to undo it: a
- * long press comes after the short press of the same key.
+ * # or * pressed: its short action waits for the key to be released, so
+ * that holding it for the long action does not do the short one first.
  */
-static enum { TETRA_KEY_NONE, TETRA_KEY_STEP, TETRA_KEY_RELEASE } tetraLastKey;
-static int tetraLastStep;
-static uint32_t tetraLastHeld;
+static keyboard_t tetraPendingKey;
 
-static void _ui_tetraUndoShortKey(void)
+/**
+ * Short press of # or *: next / previous talkgroup filter, or release a
+ * held talkgroup.
+ */
+static void _ui_tetraShortKey(keyboard_t key)
 {
-    if (tetraLastKey == TETRA_KEY_STEP)
-        tetraIds_stepFilter(-tetraLastStep);
-    else if (tetraLastKey == TETRA_KEY_RELEASE)
-        tetraIds_hold(tetraLastHeld);
-    tetraLastKey = TETRA_KEY_NONE;
+    if(tetraIds_held() != 0)
+        tetraIds_release();
+    else if(tetraIds_filterCount() > 1)
+        tetraIds_stepFilter((key == KEY_HASH) ? 1 : -1);
 }
 
 /**
  * TETRA keys on the main screens:
- * - # / *: next / previous talkgroup filter, or release a held talkgroup;
+ * - # / *, on release: next / previous talkgroup filter, or release a held
+ *   talkgroup;
  * - long #: hold the current or last heard talkgroup, or release it;
  * - long *: switch line 1 between the last call heard and the signal;
  * - 0: recent calls.
@@ -714,13 +716,25 @@ static void _ui_tetraUndoShortKey(void)
 static bool _ui_tetraKeys(kbd_msg_t msg)
 {
     if(state.channel.mode != OPMODE_TETRA)
+    {
+        tetraPendingKey = 0;
         return false;
+    }
+
+    // # or * released before its long press: do the short action
+    if((tetraPendingKey != 0) && ((msg.keys & tetraPendingKey) == 0))
+    {
+        _ui_tetraShortKey(tetraPendingKey);
+        tetraPendingKey = 0;
+        if(msg.keys == 0)
+            return true;
+    }
 
     if(msg.long_press)
     {
         if(msg.keys & KEY_HASH)
         {
-            _ui_tetraUndoShortKey();
+            tetraPendingKey = 0;
             if(tetraIds_held() != 0)
                 tetraIds_release();
             else
@@ -729,7 +743,7 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
         }
         if(msg.keys & KEY_STAR)
         {
-            _ui_tetraUndoShortKey();
+            tetraPendingKey = 0;
             _ui_tetraToggleLine1();
             return true;
         }
@@ -738,23 +752,7 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
 
     if(msg.keys & (KEY_HASH | KEY_STAR))
     {
-        int step = (msg.keys & KEY_HASH) ? 1 : -1;
-        if(tetraIds_held() != 0)
-        {
-            tetraLastHeld = tetraIds_held();
-            tetraIds_release();
-            tetraLastKey = TETRA_KEY_RELEASE;
-        }
-        else if(tetraIds_filterCount() > 1)
-        {
-            tetraIds_stepFilter(step);
-            tetraLastStep = step;
-            tetraLastKey = TETRA_KEY_STEP;
-        }
-        else
-        {
-            tetraLastKey = TETRA_KEY_NONE;
-        }
+        tetraPendingKey = (msg.keys & KEY_HASH) ? KEY_HASH : KEY_STAR;
         return true;
     }
 
