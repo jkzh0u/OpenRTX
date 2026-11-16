@@ -206,22 +206,26 @@ the control channel, and calls get traffic channels that may be on another
 carrier. With call following the radio goes with the call: when a speech
 call is given a channel on another carrier, it retunes there and decodes
 only the call's timeslots, then comes back to the main carrier when the
-call is released, is sent back to the control channel, stays silent for
-5 s, or the radio loses the signal. Line 3 of the call screen then shows the
-carrier, e.g. `Ch 392.53750`, instead of the cell.
+call is released, stays silent for 10 s, turns out to be encrypted, or the
+radio loses the signal. Line 3 of the call screen then shows the carrier,
+e.g. `Ch 392.53750`, instead of the cell.
 
+- libtetra tracks the channel allocations and asks to retune. The radio
+  decides which calls to follow, in
+  `openrtx/include/protocols/TETRA/TetraFollow.h`.
 - It follows one call at a time, the first clear speech call it sees,
   including calls that stay on the main carrier. Encrypted and data calls
   are not followed.
 - All carriers of a cell share the TDMA timing, so the radio keeps its slot
   timing across the retune instead of synchronising again. A secondary
   carrier may carry no synchronisation bursts at all.
-- The carrier frequencies come from the cell's broadcast (band, offset and
-  carrier number) and keep your tuning offset from the main carrier. The
-  radio does not follow if it is more than 12.5 kHz from the main carrier.
-- Channel allocations in another band or with a different offset (extended
-  carrier numbering) are not supported yet: libtetra does not keep those
-  fields.
+- The carrier frequencies come from the cell's broadcast, or from the
+  allocation itself when it names another band or offset (extended carrier
+  numbering). They keep your tuning offset from the main carrier. The radio
+  does not follow if it is more than 12.5 kHz from the main carrier.
+- With transmission trunking, where each transmission gets a new channel
+  through the control channel, the radio comes back after the 10 s of
+  silence and may miss the start of the next transmission.
 - `-DC62_TETRA_FOLLOW=OFF` builds without it: the radio stays on the tuned
   carrier.
 
@@ -233,8 +237,8 @@ baseband dump through the same demodulator, libtetra and follower with
 ./tetra_trace tetra_burst001.wav
 ```
 
-It prints the cell, every call control event with its channel allocation
-and frequency, and each retune the radio would make (lines starting with
-`>>`). A recording holds a single carrier, so it shows the decisions, not
-what the radio would hear afterwards. Use `-n` for recordings not made with
-a C62.
+It prints the cell, every call control event with its channel allocation,
+libtetra's retune requests with the radio's answer, and each retune the
+radio would make (lines starting with `>>`). A recording holds a single
+carrier, so it shows the decisions, not what the radio would hear
+afterwards. Use `-n` for recordings not made with a C62.

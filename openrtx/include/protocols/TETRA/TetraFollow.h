@@ -15,31 +15,42 @@ extern "C" {
 #endif
 
 /*
- * TETRA call following: chooses the carrier and the timeslots the TMO
- * receiver listens to.
+ * TETRA call following policy: which calls the radio follows to the other
+ * carriers of a cell, and where it listens.
  *
  * On a trunked cell the main carrier carries the control channel, and calls
- * are given traffic channels, often on another carrier of the same cell. The
- * follower selects one speech call and tracks its latest channel allocation.
- * It returns to the main carrier ("home") when the call is released, sent
- * back to the control channel, silent for too long, or when the receiver
- * loses synchronisation.
+ * are given traffic channels, often on another carrier of the same cell.
+ * libtetra tracks the channel allocations and asks, through its retune
+ * callback, to tune to a call's carrier and back to the main carrier when
+ * the call ends. The follower answers those requests:
+ *
+ * - it follows one clear speech call at a time, and stays with the call it
+ *   is hearing, including one on the main carrier;
+ * - it keeps the radio's tuning offset from the main carrier;
+ * - it tracks the call's timeslots, which libtetra reports only in call
+ *   events when the call moves within a carrier;
+ * - it returns to the main carrier on its own after a shorter silence than
+ *   libtetra's, or when the call turns out encrypted or data. The caller
+ *   then restarts libtetra's synchronisation there (tetra_tmo_resync()).
  *
  * All carriers of a cell share the TDMA timing, so the receiver keeps its
- * slot timing across a retune: the caller retunes without resetting it.
+ * slot timing across a retune requested by libtetra.
  *
- * Independent of the radio and of the protocol stack: the caller translates
- * its call events into tetraFollowCall records and applies the target.
+ * Independent of the radio and of libtetra: the caller translates events
+ * and requests into the structures below and applies the target.
  */
 
 /** All four timeslots, bit 0 = TN1 */
 #define TETRA_FOLLOW_ALL_SLOTS 0x0f
 
 /** Default silence before returning to the main carrier, ms */
-#define TETRA_FOLLOW_TIMEOUT_MS 5000
+#define TETRA_FOLLOW_TIMEOUT_MS 10000
 
 /** Largest tuning error accepted between the radio and the main carrier */
 #define TETRA_FOLLOW_MAX_TUNING_HZ 12500
+
+/** Calls whose type is remembered */
+#define TETRA_FOLLOW_MAX_CALLS 8
 
 enum tetraFollowEvent {
     TETRA_FOLLOW_UPDATE,  /**< Set-up, connect, grant or other call update */
@@ -51,10 +62,20 @@ enum tetraFollowEvent {
 struct tetraFollowCall {
     enum tetraFollowEvent event;
     uint16_t callId;
-    uint32_t freq;  /**< Allocated carrier downlink, Hz; 0 if none or unknown */
-    uint8_t slots;  /**< Allocated timeslots, bit 0 = TN1; 0: control channel */
-    bool speech;    /**< Speech call (not circuit mode data) */
-    bool encrypted; /**< End-to-end or air interface encryption */
+    uint16_t carrier; /**< Allocated carrier number, 0xffff if none */
+    uint8_t slots;    /**< Allocated timeslots, bit 0 = TN1; 0 if none */
+    bool speech;      /**< Speech call (not circuit mode data) */
+    bool encrypted;   /**< End-to-end or air interface encryption */
+};
+
+/** A retune request from the receiver */
+struct tetraFollowRetune {
+    bool main;         /**< Back to the main carrier, else follow a call */
+    uint16_t callId;   /**< Call to follow */
+    uint16_t carrier;  /**< Carrier number */
+    uint32_t freq;     /**< Carrier downlink from the cell's numbering, Hz */
+    uint32_t mainFreq; /**< Main carrier downlink, Hz; 0 if unknown */
+    uint8_t slots;     /**< Timeslots of the call, bit 0 = TN1 */
 };
 
 /** Where to listen */
@@ -64,17 +85,31 @@ struct tetraFollowTarget {
     bool away;     /**< On a carrier other than the main one */
 };
 
+struct tetraFollowCallInfo {
+    bool used;
+    uint16_t callId;
+    bool speech;
+    bool encrypted;
+};
+
 struct tetraFollow {
     /* Settings */
-    uint32_t home;        /**< Main carrier, Hz */
+    uint32_t home;        /**< Main carrier as the radio tunes it, Hz */
     uint32_t timeoutMs;   /**< Silence before returning home */
     bool followEncrypted; /**< Also follow calls that cannot be heard */
+    /* Known calls */
+    struct tetraFollowCallInfo calls[TETRA_FOLLOW_MAX_CALLS];
+    uint8_t nextCall;
     /* Selected call */
     bool selected;
     uint16_t callId;
-    uint32_t freq; /**< Its carrier, 0 while it is on the main carrier */
-    uint8_t slots; /**< Its timeslots, valid when freq != 0 */
     long long lastActivity;
+    /* Carrier being received */
+    bool away;
+    bool leave;       /**< Return home at the next tick */
+    uint16_t carrier; /**< Carrier number while away */
+    uint32_t freq;    /**< Frequency while away, Hz */
+    uint8_t slots;    /**< Timeslots while away */
 };
 
 /**
@@ -95,7 +130,7 @@ uint32_t tetraFollow_carrierFreq(uint32_t home, uint32_t mainHz,
  * Initialise the follower, at home with no call selected.
  *
  * @param f: follower.
- * @param home: main carrier downlink frequency, Hz.
+ * @param home: frequency the radio is tuned to for the main carrier, Hz.
  */
 void tetraFollow_init(struct tetraFollow *f, uint32_t home);
 
@@ -114,26 +149,41 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
  *
  * @param f: follower.
  * @param callId: call the traffic belongs to, 0 if unknown.
+ * @param speech: speech traffic.
  * @param encrypted: the traffic is encrypted.
  * @param now: current time, ms.
  */
-void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool encrypted,
-                         long long now);
+void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool speech,
+                         bool encrypted, long long now);
 
 /**
- * The receiver lost synchronisation: drop the call and go home.
+ * Answer a retune request of the receiver. If accepted, the caller tunes
+ * to tetraFollow_target() before returning to the receiver.
  *
  * @param f: follower.
+ * @param r: request.
+ * @param now: current time, ms.
+ * @return true if the radio should retune.
  */
-void tetraFollow_lostSync(struct tetraFollow *f);
+bool tetraFollow_retune(struct tetraFollow *f,
+                        const struct tetraFollowRetune *r, long long now);
 
 /**
- * Check the silence timeout. Call periodically.
+ * Check the silence timeout and pending returns. Call periodically.
  *
  * @param f: follower.
  * @param now: current time, ms.
+ * @return true if the follower went home on its own: the caller tunes to
+ * the target and restarts the receiver's synchronisation.
  */
-void tetraFollow_tick(struct tetraFollow *f, long long now);
+bool tetraFollow_tick(struct tetraFollow *f, long long now);
+
+/**
+ * Go home and drop the call, for example when the receiver is restarted.
+ *
+ * @param f: follower.
+ */
+void tetraFollow_home(struct tetraFollow *f);
 
 /**
  * @param f: follower.

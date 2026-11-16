@@ -26,85 +26,139 @@ void tetraFollow_init(struct tetraFollow *f, uint32_t home)
     memset(f, 0, sizeof(*f));
     f->home = home;
     f->timeoutMs = TETRA_FOLLOW_TIMEOUT_MS;
+    tetraFollow_home(f);
 }
 
+void tetraFollow_home(struct tetraFollow *f)
+{
+    f->selected = false;
+    f->away = false;
+    f->leave = false;
+    f->carrier = 0xffff;
+    f->freq = 0;
+    f->slots = TETRA_FOLLOW_ALL_SLOTS;
+}
+
+static struct tetraFollowCallInfo *findCall(struct tetraFollow *f,
+                                            uint16_t callId)
+{
+    for (unsigned i = 0; i < TETRA_FOLLOW_MAX_CALLS; i++) {
+        if (f->calls[i].used && f->calls[i].callId == callId)
+            return &f->calls[i];
+    }
+
+    return NULL;
+}
+
+/** Remember a call's type, replacing the oldest entry when full. */
+static void noteCall(struct tetraFollow *f, uint16_t callId, bool speech,
+                     bool encrypted)
+{
+    struct tetraFollowCallInfo *c = findCall(f, callId);
+
+    if (c == NULL) {
+        for (unsigned i = 0; i < TETRA_FOLLOW_MAX_CALLS && c == NULL; i++) {
+            if (!f->calls[i].used)
+                c = &f->calls[i];
+        }
+    }
+
+    if (c == NULL) {
+        c = &f->calls[f->nextCall];
+        f->nextCall = (f->nextCall + 1) % TETRA_FOLLOW_MAX_CALLS;
+    }
+
+    c->used = true;
+    c->callId = callId;
+    c->speech = speech;
+    c->encrypted = encrypted;
+}
+
+static bool playable(const struct tetraFollow *f, bool speech, bool encrypted)
+{
+    return speech && (!encrypted || f->followEncrypted);
+}
+
+static void selectCall(struct tetraFollow *f, uint16_t callId, long long now)
+{
+    f->selected = true;
+    f->callId = callId;
+    f->lastActivity = now;
+}
+
+/** Drop the selected call, and leave its carrier if away. */
 static void drop(struct tetraFollow *f)
 {
     f->selected = false;
-    f->freq = 0;
-    f->slots = 0;
-}
-
-/**
- * Take the channel allocation of an event for the selected call, if it has
- * one. An allocation on the main carrier, or to the control channel, brings
- * the receiver home while the call stays selected: with transmission
- * trunking each transmission gets a new allocation, sent on the control
- * channel.
- */
-static void allocate(struct tetraFollow *f, const struct tetraFollowCall *c)
-{
-    if (c->freq == 0)
-        return;
-
-    if (c->freq == f->home || c->slots == 0) {
-        f->freq = 0;
-        f->slots = 0;
-    } else {
-        f->freq = c->freq;
-        f->slots = c->slots & TETRA_FOLLOW_ALL_SLOTS;
-    }
+    if (f->away)
+        f->leave = true;
 }
 
 void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
                       long long now)
 {
-    bool hidden = c->encrypted && !f->followEncrypted;
+    bool ok = playable(f, c->speech, c->encrypted);
+
+    if (c->event == TETRA_FOLLOW_RELEASE) {
+        struct tetraFollowCallInfo *info = findCall(f, c->callId);
+        if (info != NULL)
+            info->used = false;
+    } else {
+        noteCall(f, c->callId, c->speech, c->encrypted);
+    }
 
     if (f->selected) {
         /* One call at a time: others wait until it ends */
         if (c->callId != f->callId)
             return;
 
-        if (c->event == TETRA_FOLLOW_RELEASE || hidden) {
+        if (c->event == TETRA_FOLLOW_RELEASE || !ok) {
             drop(f);
             return;
         }
 
-        allocate(f, c);
+        /* Moved within the carrier: libtetra does not ask to retune */
+        if (f->away && c->carrier == f->carrier && c->slots != 0)
+            f->slots = c->slots & TETRA_FOLLOW_ALL_SLOTS;
+
         f->lastActivity = now;
         return;
     }
-
-    if (c->event != TETRA_FOLLOW_UPDATE || !c->speech || hidden)
-        return;
 
     /*
      * Select the call even when it stays on the main carrier, so that a call
      * starting elsewhere does not take the receiver away from it.
      */
-    f->selected = true;
-    f->callId = c->callId;
-    f->freq = 0;
-    f->slots = 0;
-    f->lastActivity = now;
-    allocate(f, c);
+    if (c->event == TETRA_FOLLOW_UPDATE && ok)
+        selectCall(f, c->callId, now);
 }
 
-void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool encrypted,
-                         long long now)
+void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool speech,
+                         bool encrypted, long long now)
 {
-    if (!f->selected)
+    bool ok = playable(f, speech, encrypted);
+
+    if (callId != 0 && encrypted) {
+        struct tetraFollowCallInfo *info = findCall(f, callId);
+        if (info != NULL)
+            info->encrypted = true;
+    }
+
+    if (!f->selected) {
+        /* At home, the call being heard is selected */
+        if (!f->away && callId != 0 && ok)
+            selectCall(f, callId, now);
         return;
+    }
 
     /*
      * Away from home only the call's timeslots are decoded, so traffic there
      * is the call's even if the receiver could not tell (no usage marker).
      */
-    if (callId != f->callId && !(f->freq != 0 && callId == 0))
+    if (callId != f->callId && !(f->away && callId == 0))
         return;
 
-    if (encrypted && !f->followEncrypted) {
+    if (!ok) {
         drop(f);
         return;
     }
@@ -112,23 +166,62 @@ void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool encrypted,
     f->lastActivity = now;
 }
 
-void tetraFollow_lostSync(struct tetraFollow *f)
+bool tetraFollow_retune(struct tetraFollow *f,
+                        const struct tetraFollowRetune *r, long long now)
 {
-    drop(f);
+    if (r->main) {
+        tetraFollow_home(f);
+        return true;
+    }
+
+    const struct tetraFollowCallInfo *info = findCall(f, r->callId);
+    if (info != NULL && !playable(f, info->speech, info->encrypted))
+        return false;
+
+    if (f->selected && f->callId != r->callId)
+        return false;
+
+    uint32_t freq = tetraFollow_carrierFreq(f->home, r->mainFreq, r->freq);
+    if (freq == 0)
+        return false;
+
+    selectCall(f, r->callId, now);
+    f->leave = false;
+    f->away = freq != f->home;
+    if (f->away) {
+        f->carrier = r->carrier;
+        f->freq = freq;
+        f->slots = r->slots & TETRA_FOLLOW_ALL_SLOTS;
+        if (f->slots == 0)
+            f->slots = TETRA_FOLLOW_ALL_SLOTS;
+    } else {
+        f->carrier = 0xffff;
+        f->freq = 0;
+        f->slots = TETRA_FOLLOW_ALL_SLOTS;
+    }
+
+    return true;
 }
 
-void tetraFollow_tick(struct tetraFollow *f, long long now)
+bool tetraFollow_tick(struct tetraFollow *f, long long now)
 {
     if (f->selected && now - f->lastActivity >= (long long)f->timeoutMs)
         drop(f);
+
+    if (f->away && f->leave) {
+        tetraFollow_home(f);
+        return true;
+    }
+
+    return false;
 }
 
 struct tetraFollowTarget tetraFollow_target(const struct tetraFollow *f)
 {
     struct tetraFollowTarget t;
 
-    t.away = f->selected && f->freq != 0;
-    t.freq = t.away ? f->freq : f->home;
-    t.slots = t.away ? f->slots : TETRA_FOLLOW_ALL_SLOTS;
+    t.away = f->away;
+    t.freq = f->away ? f->freq : f->home;
+    t.slots = f->away ? f->slots : TETRA_FOLLOW_ALL_SLOTS;
     return t;
 }

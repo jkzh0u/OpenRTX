@@ -27,24 +27,34 @@ static int8_t soft[HALF_SAMPLES * 3 / 4 + 8];
 static struct tetraDemod demod;
 static struct tetra_tmo_rx tmo;
 static struct tetraFollow follower;
+static uint8_t slots;       // Timeslots libtetra decodes
+static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
-#ifdef CONFIG_TETRA_FOLLOW
 /**
- * Frequency to tune for a carrier number of the cell, 0 if unknown.
+ * Listen where the follower says: retune and select the timeslots.
  */
-static uint32_t carrierFreq(uint16_t carrier)
+static void tune()
 {
-    const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+#ifdef CONFIG_TETRA_FOLLOW
+    struct tetraFollowTarget t = tetraFollow_target(&follower);
 
-    if (carrier == 0xffff || cell == NULL || !cell->have_sysinfo
-        || cell->band == 0)
-        return 0;
+    if (t.freq == 0 || rtxCfg == NULL)
+        return;
 
-    return tetraFollow_carrierFreq(follower.home, cell->dl_freq_hz,
-                                   tetra_carrier_hz(cell->band, carrier,
-                                                    cell->offset));
+    if (t.slots != slots) {
+        tetra_tmo_set_slots(&tmo, t.slots);
+        slots = t.slots;
+    }
+
+    if (t.freq != rtxCfg->rxFrequency) {
+        rtxCfg->rxFrequency = t.freq;
+        radio_updateConfiguration();
+        tetraStatus_setFollow(t.away ? t.freq : 0);
+    }
+#endif
 }
 
+#ifdef CONFIG_TETRA_FOLLOW
 /**
  * libtetra event callback: the status, then the call follower.
  */
@@ -53,11 +63,6 @@ static void onEvent(void *user, const struct tetra_event *ev)
     tetraStatus_onEvent(user, ev);
 
     switch (ev->type) {
-        case TETRA_EV_SYNC:
-            if (!ev->u.sync.locked)
-                tetraFollow_lostSync(&follower);
-            break;
-
         case TETRA_EV_CALL: {
             const struct tetra_call *c = &ev->u.call;
             struct tetraFollowCall fc;
@@ -74,22 +79,49 @@ static void onEvent(void *user, const struct tetra_event *ev)
                     break;
             }
             fc.callId = c->call_id;
-            fc.freq = carrierFreq(c->carrier);
+            fc.carrier = c->carrier;
             fc.slots = c->timeslots;
             fc.speech = c->circuit_type == 0;
             fc.encrypted = c->encrypted;
             tetraFollow_call(&follower, &fc, getTick());
+            tune();
             break;
         }
 
         case TETRA_EV_TRAFFIC:
             tetraFollow_traffic(&follower, ev->u.traffic.call_id,
+                                ev->u.traffic.circuit_type == 0,
                                 ev->u.traffic.encrypted, getTick());
             break;
 
         default:
             break;
     }
+}
+
+/**
+ * libtetra retune callback: a call moved to another carrier of the cell, or
+ * back to the main carrier. The follower decides; the radio retunes before
+ * returning, as libtetra keeps decoding with the same slot timing.
+ */
+static bool onRetune(void *user, const struct tetra_retune *r)
+{
+    const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+    struct tetraFollowRetune fr;
+
+    (void)user;
+    fr.main = r->reason == TETRA_RETUNE_MAIN;
+    fr.callId = r->call_id;
+    fr.carrier = r->carrier;
+    fr.freq = r->freq_hz;
+    fr.mainFreq = (cell != NULL && cell->have_sysinfo) ? cell->dl_freq_hz : 0;
+    fr.slots = r->timeslots;
+
+    if (!tetraFollow_retune(&follower, &fr, getTick()))
+        return false;
+
+    tune();
+    return true;
 }
 #endif
 
@@ -98,7 +130,6 @@ OpMode_TETRA::OpMode_TETRA()
     , dataErrors(0)
     , demodJumps(0)
     , homeFreq(0)
-    , slots(TETRA_FOLLOW_ALL_SLOTS)
     , basebandPath(-1)
     , basebandId(-1)
 {
@@ -134,50 +165,18 @@ void OpMode_TETRA::resync(bool overrun)
     memset(&cfg, 0, sizeof(cfg));
 #ifdef CONFIG_TETRA_FOLLOW
     cfg.cb = onEvent;
+    cfg.retune = onRetune;
 #else
     cfg.cb = tetraStatus_onEvent;
 #endif
     cfg.promiscuous = true;
     tetra_tmo_init(&tmo, &cfg);
     slots = TETRA_FOLLOW_ALL_SLOTS;
-    tetraFollow_lostSync(&follower);
+
+    /* A new receiver knows nothing of the followed call: go home */
+    tetraFollow_home(&follower);
     tetraStatus_lostSync(overrun);
-}
-
-/**
- * @return true while following a call on a carrier other than the main one.
- */
-bool OpMode_TETRA::away()
-{
-    return tetraFollow_target(&follower).away;
-}
-
-/**
- * Listen where the follower says: retune and select the timeslots. libtetra
- * is not reset, all carriers of the cell share its slot timing.
- */
-void OpMode_TETRA::applyFollow(rtxStatus_t *const rtx)
-{
-#ifdef CONFIG_TETRA_FOLLOW
-    tetraFollow_tick(&follower, getTick());
-    struct tetraFollowTarget t = tetraFollow_target(&follower);
-
-    if (t.freq == 0)
-        return;
-
-    if (t.slots != slots) {
-        tetra_tmo_set_slots(&tmo, t.slots);
-        slots = t.slots;
-    }
-
-    if (t.freq != rtx->rxFrequency) {
-        rtx->rxFrequency = t.freq;
-        radio_updateConfiguration();
-        tetraStatus_setFollow(t.away ? t.freq : 0);
-    }
-#else
-    (void)rtx;
-#endif
+    tune();
 }
 
 void OpMode_TETRA::enable()
@@ -238,6 +237,7 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
             return;
     }
 
+    rtxCfg = rtx;
     if (startRx) {
         startSampling();
         radio_enableRx();
@@ -247,7 +247,7 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     /*
      * A new frequency is a new cell: start from scratch. Other settings keep
      * the receiver. While following a call the radio has just been tuned
-     * back to the main carrier: applyFollow() retunes it.
+     * back to the main carrier: tune() below retunes it.
      */
     if ((newCfg || homeFreq == 0) && rtx->rxFrequency != homeFreq) {
         homeFreq = rtx->rxFrequency;
@@ -281,17 +281,28 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
      * Except away from the main carrier, which may have no synchronisation
      * bursts to lock to again: there libtetra keeps its slot timing,
      * searching a few bits either side of it, and if it does lose the lock
-     * the follower returns to the main carrier.
+     * it asks to return to the main carrier.
      */
     uint32_t jumps = tetraDemod_reacquisitions(&demod);
     if (jumps != demodJumps) {
         demodJumps = jumps;
-        if (!away())
+        if (!tetraFollow_target(&follower).away)
             resync(false);
     }
 
     tetra_tmo_push_soft(&tmo, soft, n);
-    applyFollow(rtx);
+
+#ifdef CONFIG_TETRA_FOLLOW
+    /*
+     * The follower left the call's carrier on its own (silence, encryption):
+     * libtetra still thinks it is there, so restart its synchronisation on
+     * the main carrier. tune() selects all timeslots again.
+     */
+    if (tetraFollow_tick(&follower, getTick()))
+        tetra_tmo_resync(&tmo);
+#endif
+    /* Also undoes a configuration update that tuned back home meanwhile */
+    tune();
 
     tetraStatus_setDemod(tetraDemod_phaseError(&demod),
                          tetraDemod_carrierOffset(&demod));

@@ -10,25 +10,47 @@
 
 static const uint32_t HOME = 390012500;
 static const uint32_t OTHER = 390512500;
+static const uint16_t HOME_CARRIER = 3600;
+static const uint16_t OTHER_CARRIER = 3620;
 
 static tetraFollowCall makeCall(tetraFollowEvent event, uint16_t callId,
-                                uint32_t freq, uint8_t slots)
+                                uint16_t carrier, uint8_t slots)
 {
     tetraFollowCall c;
     c.event = event;
     c.callId = callId;
-    c.freq = freq;
+    c.carrier = carrier;
     c.slots = slots;
     c.speech = true;
     c.encrypted = false;
     return c;
 }
 
+static tetraFollowRetune makeRetune(uint16_t callId, uint16_t carrier,
+                                    uint32_t freq, uint8_t slots)
+{
+    tetraFollowRetune r;
+    r.main = false;
+    r.callId = callId;
+    r.carrier = carrier;
+    r.freq = freq;
+    r.mainFreq = HOME;
+    r.slots = slots;
+    return r;
+}
+
+static tetraFollowRetune makeMain()
+{
+    tetraFollowRetune r = makeRetune(0, HOME_CARRIER, HOME, 0);
+    r.main = true;
+    return r;
+}
+
 static void requireHome(const tetraFollow &f)
 {
     tetraFollowTarget t = tetraFollow_target(&f);
     REQUIRE_FALSE(t.away);
-    REQUIRE(t.freq == HOME);
+    REQUIRE(t.freq == f.home);
     REQUIRE(t.slots == TETRA_FOLLOW_ALL_SLOTS);
 }
 
@@ -38,6 +60,18 @@ static void requireAway(const tetraFollow &f, uint32_t freq, uint8_t slots)
     REQUIRE(t.away);
     REQUIRE(t.freq == freq);
     REQUIRE(t.slots == slots);
+}
+
+/* Set-up of a call on the other carrier, then libtetra's retune request */
+static void follow(tetraFollow &f, uint16_t callId, uint8_t slots,
+                   long long now)
+{
+    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, callId, OTHER_CARRIER,
+                                 slots);
+    tetraFollow_call(&f, &c, now);
+    tetraFollowRetune r = makeRetune(callId, OTHER_CARRIER, OTHER, slots);
+    REQUIRE(tetraFollow_retune(&f, &r, now));
+    requireAway(f, OTHER, slots);
 }
 
 TEST_CASE("TETRA carrier frequencies follow the radio's tuning",
@@ -67,90 +101,141 @@ TEST_CASE("TETRA follower starts on the main carrier", "[tetra][follow]")
     tetraFollow f;
     tetraFollow_init(&f, HOME);
     requireHome(f);
+    REQUIRE_FALSE(tetraFollow_tick(&f, 100000));
+    requireHome(f);
 }
 
-TEST_CASE("TETRA follower follows a grant on another carrier",
+TEST_CASE("TETRA follower follows a call to another carrier",
           "[tetra][follow]")
 {
     tetraFollow f;
     tetraFollow_init(&f, HOME);
+    follow(f, 100, 0x2, 0);
 
-    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 100, OTHER, 0x2);
-    tetraFollow_call(&f, &c, 0);
-    requireAway(f, OTHER, 0x2);
-
-    SECTION("release brings it home")
+    SECTION("the receiver brings it home")
     {
-        c.event = TETRA_FOLLOW_RELEASE;
-        tetraFollow_call(&f, &c, 10);
+        tetraFollowRetune r = makeMain();
+        REQUIRE(tetraFollow_retune(&f, &r, 10));
         requireHome(f);
     }
 
-    SECTION("loss of synchronisation brings it home")
+    SECTION("a release brings it home if the receiver does not")
     {
-        tetraFollow_lostSync(&f);
+        tetraFollowCall c = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+        tetraFollow_call(&f, &c, 10);
+        REQUIRE(tetraFollow_tick(&f, 20));
         requireHome(f);
+        REQUIRE_FALSE(tetraFollow_tick(&f, 30));
     }
 
-    SECTION("a new allocation moves it")
+    SECTION("a new allocation on another carrier moves it")
     {
-        c = makeCall(TETRA_FOLLOW_UPDATE, 100, OTHER + 25000, 0x8);
-        tetraFollow_call(&f, &c, 10);
+        tetraFollowRetune r = makeRetune(100, OTHER_CARRIER + 1, OTHER + 25000,
+                                         0x8);
+        REQUIRE(tetraFollow_retune(&f, &r, 10));
         requireAway(f, OTHER + 25000, 0x8);
+    }
+
+    SECTION("a new allocation on the same carrier changes the timeslots")
+    {
+        tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 100, OTHER_CARRIER,
+                                     0x4);
+        tetraFollow_call(&f, &c, 10);
+        requireAway(f, OTHER, 0x4);
     }
 
     SECTION("an event without allocation keeps the channel")
     {
-        c = makeCall(TETRA_FOLLOW_CEASED, 100, 0, 0);
+        tetraFollowCall c = makeCall(TETRA_FOLLOW_CEASED, 100, 0xffff, 0);
         tetraFollow_call(&f, &c, 10);
         requireAway(f, OTHER, 0x2);
     }
+
+    SECTION("other calls are not followed meanwhile")
+    {
+        tetraFollowRetune r = makeRetune(101, OTHER_CARRIER + 1, OTHER + 25000,
+                                         0x8);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &r, 10));
+        requireAway(f, OTHER, 0x2);
+    }
+
+    SECTION("going home on request of the caller drops the call")
+    {
+        tetraFollow_home(&f);
+        requireHome(f);
+        tetraFollowRetune r = makeRetune(101, OTHER_CARRIER, OTHER, 0x8);
+        REQUIRE(tetraFollow_retune(&f, &r, 10));
+        requireAway(f, OTHER, 0x8);
+    }
 }
 
-TEST_CASE("TETRA follower handles transmission trunking", "[tetra][follow]")
+TEST_CASE("TETRA follower keeps the radio's tuning offset", "[tetra][follow]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME - 300);
+
+    tetraFollowRetune r = makeRetune(5, OTHER_CARRIER, OTHER, 0x1);
+    REQUIRE(tetraFollow_retune(&f, &r, 0));
+    requireAway(f, OTHER - 300, 0x1);
+
+    r = makeMain();
+    REQUIRE(tetraFollow_retune(&f, &r, 10));
+    requireHome(f);
+    REQUIRE(tetraFollow_target(&f).freq == HOME - 300);
+
+    // Too far from the main carrier, or the main carrier unknown: stay
+    tetraFollow_init(&f, HOME + 25000);
+    r = makeRetune(5, OTHER_CARRIER, OTHER, 0x1);
+    REQUIRE_FALSE(tetraFollow_retune(&f, &r, 0));
+    requireHome(f);
+
+    tetraFollow_init(&f, HOME);
+    r.mainFreq = 0;
+    REQUIRE_FALSE(tetraFollow_retune(&f, &r, 0));
+    requireHome(f);
+}
+
+TEST_CASE("TETRA follower stays with the call on the main carrier",
+          "[tetra][follow]")
 {
     tetraFollow f;
     tetraFollow_init(&f, HOME);
+    tetraFollowRetune other = makeRetune(6, OTHER_CARRIER, OTHER, 0x2);
 
-    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 7, OTHER, 0x4);
-    tetraFollow_call(&f, &c, 0);
-    requireAway(f, OTHER, 0x4);
+    SECTION("selected by its set-up")
+    {
+        tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 5, HOME_CARRIER,
+                                     0x2);
+        tetraFollow_call(&f, &c, 0);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &other, 10));
+        requireHome(f);
 
-    // Transmission ceased: back to the control channel
-    c = makeCall(TETRA_FOLLOW_CEASED, 7, OTHER, 0);
-    tetraFollow_call(&f, &c, 100);
-    requireHome(f);
+        // Once it ends, the next call is followed
+        c.event = TETRA_FOLLOW_RELEASE;
+        tetraFollow_call(&f, &c, 20);
+        REQUIRE(tetraFollow_retune(&f, &other, 30));
+        requireAway(f, OTHER, 0x2);
+    }
 
-    // The call stays selected: another call does not take over
-    tetraFollowCall other = makeCall(TETRA_FOLLOW_UPDATE, 8, OTHER, 0x8);
-    tetraFollow_call(&f, &other, 200);
-    requireHome(f);
+    SECTION("selected by its traffic")
+    {
+        tetraFollow_traffic(&f, 5, true, false, 0);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &other, 10));
 
-    // Next transmission of the same call, on a different channel
-    c = makeCall(TETRA_FOLLOW_UPDATE, 7, OTHER - 25000, 0x2);
-    tetraFollow_call(&f, &c, 300);
-    requireAway(f, OTHER - 25000, 0x2);
-}
+        // Once it is silent, the next call is followed
+        tetraFollow_traffic(&f, 5, true, false, 1000);
+        REQUIRE_FALSE(tetraFollow_tick(&f, 1000 + TETRA_FOLLOW_TIMEOUT_MS));
+        REQUIRE(tetraFollow_retune(&f, &other, 1000 + TETRA_FOLLOW_TIMEOUT_MS));
+        requireAway(f, OTHER, 0x2);
+    }
 
-TEST_CASE("TETRA follower treats the main carrier as home", "[tetra][follow]")
-{
-    tetraFollow f;
-    tetraFollow_init(&f, HOME);
-
-    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 5, HOME, 0x2);
-    tetraFollow_call(&f, &c, 0);
-    requireHome(f);
-
-    // The call on the main carrier is selected: others wait
-    tetraFollowCall other = makeCall(TETRA_FOLLOW_UPDATE, 6, OTHER, 0x2);
-    tetraFollow_call(&f, &other, 10);
-    requireHome(f);
-
-    // Once it ends, the next call is followed
-    c.event = TETRA_FOLLOW_RELEASE;
-    tetraFollow_call(&f, &c, 20);
-    tetraFollow_call(&f, &other, 30);
-    requireAway(f, OTHER, 0x2);
+    SECTION("an allocation of it on the main carrier keeps the radio home")
+    {
+        tetraFollowRetune r = makeRetune(5, HOME_CARRIER, HOME, 0x2);
+        REQUIRE(tetraFollow_retune(&f, &r, 0));
+        requireHome(f);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &other, 10));
+    }
 }
 
 TEST_CASE("TETRA follower ignores calls it cannot play", "[tetra][follow]")
@@ -158,16 +243,18 @@ TEST_CASE("TETRA follower ignores calls it cannot play", "[tetra][follow]")
     tetraFollow f;
     tetraFollow_init(&f, HOME);
 
-    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 1, OTHER, 0x2);
+    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 1, OTHER_CARRIER, 0x2);
+    tetraFollowRetune r = makeRetune(1, OTHER_CARRIER, OTHER, 0x2);
 
     SECTION("encrypted")
     {
         c.encrypted = true;
         tetraFollow_call(&f, &c, 0);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &r, 0));
         requireHome(f);
 
         f.followEncrypted = true;
-        tetraFollow_call(&f, &c, 0);
+        REQUIRE(tetraFollow_retune(&f, &r, 0));
         requireAway(f, OTHER, 0x2);
     }
 
@@ -175,24 +262,44 @@ TEST_CASE("TETRA follower ignores calls it cannot play", "[tetra][follow]")
     {
         c.speech = false;
         tetraFollow_call(&f, &c, 0);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &r, 0));
         requireHome(f);
     }
 
-    SECTION("events other than set-up or grant")
+    SECTION("not selected by events other than set-up or grant")
     {
         c.event = TETRA_FOLLOW_CEASED;
         tetraFollow_call(&f, &c, 0);
-        requireHome(f);
+        REQUIRE_FALSE(f.selected);
         c.event = TETRA_FOLLOW_RELEASE;
         tetraFollow_call(&f, &c, 0);
-        requireHome(f);
+        REQUIRE_FALSE(f.selected);
     }
 
-    SECTION("a followed call that turns out encrypted")
+    SECTION("a call never seen is followed")
     {
-        tetraFollow_call(&f, &c, 0);
+        r.callId = 2;
+        REQUIRE(tetraFollow_retune(&f, &r, 0));
         requireAway(f, OTHER, 0x2);
-        tetraFollow_traffic(&f, 1, true, 10);
+    }
+
+    SECTION("a followed call whose traffic turns out encrypted")
+    {
+        follow(f, 1, 0x2, 0);
+        tetraFollow_traffic(&f, 1, true, true, 10);
+        REQUIRE(tetraFollow_tick(&f, 20));
+        requireHome(f);
+
+        // Remembered: not followed again
+        REQUIRE_FALSE(tetraFollow_retune(&f, &r, 30));
+    }
+
+    SECTION("a followed call that turns out encrypted in signalling")
+    {
+        follow(f, 1, 0x2, 0);
+        c.encrypted = true;
+        tetraFollow_call(&f, &c, 10);
+        REQUIRE(tetraFollow_tick(&f, 20));
         requireHome(f);
     }
 }
@@ -201,26 +308,44 @@ TEST_CASE("TETRA follower returns home after silence", "[tetra][follow]")
 {
     tetraFollow f;
     tetraFollow_init(&f, HOME);
-
-    tetraFollowCall c = makeCall(TETRA_FOLLOW_UPDATE, 3, OTHER, 0x1);
-    tetraFollow_call(&f, &c, 1000);
+    follow(f, 3, 0x1, 1000);
 
     // Traffic keeps it there, including traffic of an unknown call
-    tetraFollow_traffic(&f, 3, false, 4000);
-    tetraFollow_traffic(&f, 0, false, 8000);
-    tetraFollow_tick(&f, 8000 + TETRA_FOLLOW_TIMEOUT_MS - 1);
+    tetraFollow_traffic(&f, 3, true, false, 4000);
+    tetraFollow_traffic(&f, 0, true, false, 8000);
+    REQUIRE_FALSE(tetraFollow_tick(&f, 8000 + TETRA_FOLLOW_TIMEOUT_MS - 1));
     requireAway(f, OTHER, 0x1);
 
     // Traffic of another call does not
-    tetraFollow_traffic(&f, 4, false, 9000);
-    tetraFollow_tick(&f, 8000 + TETRA_FOLLOW_TIMEOUT_MS);
+    tetraFollow_traffic(&f, 4, true, false, 9000);
+    REQUIRE(tetraFollow_tick(&f, 8000 + TETRA_FOLLOW_TIMEOUT_MS));
     requireHome(f);
-
-    // Neither does traffic of an unknown call at home
-    tetraFollow_init(&f, HOME);
-    c = makeCall(TETRA_FOLLOW_UPDATE, 3, HOME, 0x1);
-    tetraFollow_call(&f, &c, 0);
-    tetraFollow_traffic(&f, 0, false, 4000);
-    tetraFollow_tick(&f, TETRA_FOLLOW_TIMEOUT_MS);
     REQUIRE_FALSE(f.selected);
+
+    // At home, traffic of an unknown call selects nothing
+    tetraFollow_traffic(&f, 0, true, false, 20000);
+    REQUIRE_FALSE(f.selected);
+}
+
+TEST_CASE("TETRA follower remembers a limited number of calls",
+          "[tetra][follow]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+
+    // An encrypted call, then enough other calls to push it out
+    tetraFollowCall c = makeCall(TETRA_FOLLOW_CEASED, 1, 0xffff, 0);
+    c.encrypted = true;
+    tetraFollow_call(&f, &c, 0);
+    c.encrypted = false;
+    for (uint16_t id = 2; id < 2 + TETRA_FOLLOW_MAX_CALLS; id++) {
+        c.callId = id;
+        tetraFollow_call(&f, &c, 0);
+    }
+    REQUIRE_FALSE(f.selected);
+
+    // Forgotten: followed like a call never seen
+    tetraFollowRetune r = makeRetune(1, OTHER_CARRIER, OTHER, 0x2);
+    REQUIRE(tetraFollow_retune(&f, &r, 0));
+    requireAway(f, OTHER, 0x2);
 }

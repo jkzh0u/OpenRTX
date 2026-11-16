@@ -10,7 +10,8 @@
  * Runs a 48 kHz recording of the radio's discriminator output (a WAV from
  * scripts/c62_bbdump.py) through the same chain as the radio's TETRA mode:
  * TetraDemod, libtetra and TetraFollow. Prints the cell, the call control
- * events with their channel allocations, and where the follower would tune.
+ * events with their channel allocations, libtetra's retune requests with
+ * the follower's answers, and where the radio would tune.
  * A recording holds one carrier, so the trace shows the decisions the radio
  * would take, not what it would hear after a retune.
  *
@@ -21,7 +22,7 @@
  *        -I$LIBTETRA/include -I$LIBTETRA/src tests/platform/tetra_trace.c \
  *        openrtx/src/protocols/TETRA/TetraDemod.c \
  *        openrtx/src/protocols/TETRA/TetraFollow.c \
- *        $(find $LIBTETRA/src -name '*.c') -lm
+ *        $(find $LIBTETRA/src -name '*.c' ! -path '*crypto*') -lm
  *
  * Run:
  *
@@ -82,7 +83,7 @@ static void printFreq(uint32_t hz)
            (unsigned long)(hz % 1000000 / 10));
 }
 
-/* Same mapping as the radio's TETRA mode (OpMode_TETRA.cpp) */
+/* Frequency of a carrier from the cell's numbering, for printing */
 static uint32_t carrierFreq(uint16_t carrier)
 {
     const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
@@ -167,7 +168,7 @@ static void onCall(const struct tetra_call *c)
             break;
     }
     fc.callId = c->call_id;
-    fc.freq = freq;
+    fc.carrier = c->carrier;
     fc.slots = c->timeslots;
     fc.speech = c->circuit_type == 0;
     fc.encrypted = c->encrypted;
@@ -182,8 +183,6 @@ static void onEvent(void *user, const struct tetra_event *ev)
         case TETRA_EV_SYNC:
             printf("%8.3f  sync %s\n", now,
                    ev->u.sync.locked ? "locked" : "lost");
-            if (!ev->u.sync.locked)
-                tetraFollow_lostSync(&follower);
             break;
 
         case TETRA_EV_CELL:
@@ -201,8 +200,8 @@ static void onEvent(void *user, const struct tetra_event *ev)
                 printf("%8.3f  traffic call %u TN%u um %u%s\n", now, t->call_id,
                        ev->time.tn, t->usage_marker,
                        t->encrypted ? " encrypted" : "");
-            tetraFollow_traffic(&follower, t->call_id, t->encrypted,
-                                (long long)(now * 1000));
+            tetraFollow_traffic(&follower, t->call_id, t->circuit_type == 0,
+                                t->encrypted, (long long)(now * 1000));
             break;
         }
 
@@ -211,22 +210,54 @@ static void onEvent(void *user, const struct tetra_event *ev)
     }
 }
 
+/* Same answer as the radio's TETRA mode (OpMode_TETRA.cpp) */
+static bool onRetune(void *user, const struct tetra_retune *r)
+{
+    const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+    struct tetraFollowRetune fr;
+    bool ok;
+
+    (void)user;
+    fr.main = r->reason == TETRA_RETUNE_MAIN;
+    fr.callId = r->call_id;
+    fr.carrier = r->carrier;
+    fr.freq = r->freq_hz;
+    fr.mainFreq = (cell != NULL && cell->have_sysinfo) ? cell->dl_freq_hz : 0;
+    fr.slots = r->timeslots;
+    ok = tetraFollow_retune(&follower, &fr, (long long)(now * 1000));
+
+    printf("%8.3f  retune request: ", now);
+    if (fr.main)
+        printf("main carrier %u", r->carrier);
+    else
+        printf("call %u to carrier %u slots 0x%x", r->call_id, r->carrier,
+               r->timeslots);
+    printf(" = ");
+    printFreq(r->freq_hz);
+    printf(", %s\n", ok ? "accepted" : "declined");
+    return ok;
+}
+
 static void resync(void)
 {
     struct tetra_rx_config cfg;
 
     memset(&cfg, 0, sizeof(cfg));
     cfg.cb = onEvent;
+    cfg.retune = onRetune;
     cfg.promiscuous = true;
     tetra_tmo_init(&tmo, &cfg);
-    tetraFollow_lostSync(&follower);
+    tetraFollow_home(&follower);
 }
 
 static void reportTarget(void)
 {
     struct tetraFollowTarget t;
 
-    tetraFollow_tick(&follower, (long long)(now * 1000));
+    if (tetraFollow_tick(&follower, (long long)(now * 1000))) {
+        printf("%8.3f  follower left the call's carrier, resync\n", now);
+        tetra_tmo_resync(&tmo);
+    }
     t = tetraFollow_target(&follower);
     if (follower.home == 0
         || (t.freq == lastTarget.freq && t.slots == lastTarget.slots))
