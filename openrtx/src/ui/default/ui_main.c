@@ -31,6 +31,25 @@ static const color_t tetraMuted = { 150, 150, 150, 255 };  /* Grey */
 static const color_t tetraWarn = { 255, 150, 30, 255 };    /* Orange */
 static const color_t tetraText = { 255, 230, 140, 255 };   /* Light yellow */
 
+/* The meter: a pastel traffic light */
+static const color_t tetraPastelGreen = { 150, 220, 165, 255 };
+static const color_t tetraPastelYellow = { 235, 215, 140, 255 };
+static const color_t tetraPastelRed = { 235, 140, 130, 255 };
+static const color_t tetraScale = { 200, 200, 200, 255 };
+
+/**
+ * Pastel traffic light colour of a reading: green from good, yellow from
+ * fair, red below.
+ */
+static color_t _ui_tetraTraffic(unsigned value, unsigned good, unsigned fair)
+{
+    if (value >= good)
+        return tetraPastelGreen;
+    if (value >= fair)
+        return tetraPastelYellow;
+    return tetraPastelRed;
+}
+
 /* On the red alarm screen everything is white */
 static bool tetraAlarmScreen;
 
@@ -953,13 +972,24 @@ void _ui_drawMainBottom()
             if (ts.sync && ts.phaseErr < 45)
                 quality = (ts.phaseErr <= 10) ? 255
                         : (uint8_t)((45 - ts.phaseErr) * 255 / 35);
-            gfx_drawSmeterLevel(meter_pos,
-                                meter_width,
-                                meter_height,
-                                rssi,
-                                quality,
-                                volume,
-                                true);
+            // Pastel traffic light: each bar green when good, yellow when
+            // fair, red when poor
+            smeterColors_t colors = {
+                .volume = tetraMuted,
+                .level = _ui_tetraTraffic(quality, 170, 90),
+                .rssi = _ui_tetraTraffic(rssiToSlevel(rssi), 7, 4),
+                .marks = tetraScale,
+                .majorMark = tetraPastelYellow,
+                .overMark = tetraPastelRed,
+            };
+            gfx_drawSmeterLevelColors(meter_pos,
+                                      meter_width,
+                                      meter_height,
+                                      rssi,
+                                      quality,
+                                      volume,
+                                      true,
+                                      &colors);
             (void) mic_level;
             break;
         }
