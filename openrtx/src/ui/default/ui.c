@@ -677,25 +677,94 @@ static void _ui_fsm_confirmVFOInput(bool *sync_rtx)
 }
 
 #ifdef CONFIG_TETRA
+/* In ui_main.c */
+extern void _ui_tetraToggleLine1(void);
+extern void _ui_drawTetraRecent(ui_state_t *ui_state);
+extern uint32_t _ui_tetraHoldCandidate(void);
+extern uint32_t _ui_tetraRecentSsi(uint8_t index);
+
+/*
+ * What the last short press of # or * did, for a long press to undo it: a
+ * long press comes after the short press of the same key.
+ */
+static enum { TETRA_KEY_NONE, TETRA_KEY_STEP, TETRA_KEY_RELEASE } tetraLastKey;
+static int tetraLastStep;
+static uint32_t tetraLastHeld;
+
+static void _ui_tetraUndoShortKey(void)
+{
+    if (tetraLastKey == TETRA_KEY_STEP)
+        tetraIds_stepFilter(-tetraLastStep);
+    else if (tetraLastKey == TETRA_KEY_RELEASE)
+        tetraIds_hold(tetraLastHeld);
+    tetraLastKey = TETRA_KEY_NONE;
+}
+
 /**
- * In TETRA mode, # and * select the next and the previous talkgroup filter
- * of the built-in list, if it defines any.
+ * TETRA keys on the main screens:
+ * - # / *: next / previous talkgroup filter, or release a held talkgroup;
+ * - long #: hold the current or last heard talkgroup, or release it;
+ * - long *: switch line 1 between the last call heard and the signal;
+ * - 0: recent calls.
  *
  * @return true if the key was used.
  */
-static bool _ui_tetraFilterKeys(kbd_msg_t msg)
+static bool _ui_tetraKeys(kbd_msg_t msg)
 {
-    if((state.channel.mode != OPMODE_TETRA) || (tetraIds_filterCount() < 2))
+    if(state.channel.mode != OPMODE_TETRA)
         return false;
 
-    if(msg.keys & KEY_HASH)
-        tetraIds_stepFilter(1);
-    else if(msg.keys & KEY_STAR)
-        tetraIds_stepFilter(-1);
-    else
-        return false;
+    if(msg.long_press)
+    {
+        if(msg.keys & KEY_HASH)
+        {
+            _ui_tetraUndoShortKey();
+            if(tetraIds_held() != 0)
+                tetraIds_release();
+            else
+                tetraIds_hold(_ui_tetraHoldCandidate());
+            return true;
+        }
+        if(msg.keys & KEY_STAR)
+        {
+            _ui_tetraUndoShortKey();
+            _ui_tetraToggleLine1();
+            return true;
+        }
+        return (msg.keys & KEY_0) != 0;
+    }
 
-    return true;
+    if(msg.keys & (KEY_HASH | KEY_STAR))
+    {
+        int step = (msg.keys & KEY_HASH) ? 1 : -1;
+        if(tetraIds_held() != 0)
+        {
+            tetraLastHeld = tetraIds_held();
+            tetraIds_release();
+            tetraLastKey = TETRA_KEY_RELEASE;
+        }
+        else if(tetraIds_filterCount() > 1)
+        {
+            tetraIds_stepFilter(step);
+            tetraLastStep = step;
+            tetraLastKey = TETRA_KEY_STEP;
+        }
+        else
+        {
+            tetraLastKey = TETRA_KEY_NONE;
+        }
+        return true;
+    }
+
+    if(msg.keys & KEY_0)
+    {
+        ui_state.last_main_state = state.ui_screen;
+        ui_state.menu_selected = 0;
+        state.ui_screen = TETRA_RECENT;
+        return true;
+    }
+
+    return false;
 }
 #endif
 
@@ -1564,9 +1633,9 @@ void ui_updateFSM(bool *sync_rtx)
                 else
                 {
                     #ifdef CONFIG_TETRA
-                    if(_ui_tetraFilterKeys(msg))
+                    if(_ui_tetraKeys(msg))
                     {
-                        // Talkgroup filter selected
+                        // TETRA filter, hold, line 1 or recent calls
                     }
                     else
                     #endif
@@ -1777,9 +1846,9 @@ void ui_updateFSM(bool *sync_rtx)
                 else
                 {
                     #ifdef CONFIG_TETRA
-                    if(_ui_tetraFilterKeys(msg))
+                    if(_ui_tetraKeys(msg))
                     {
-                        // Talkgroup filter selected
+                        // TETRA filter, hold, line 1 or recent calls
                     }
                     else
                     #endif
@@ -1854,6 +1923,32 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
             // Top menu screen
+            #ifdef CONFIG_TETRA
+            // TETRA recent calls: Enter holds the selected one
+            case TETRA_RECENT:
+                if(msg.long_press)
+                    break;
+                if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+                {
+                    if(ui_state.menu_selected > 0)
+                        ui_state.menu_selected--;
+                }
+                else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+                {
+                    if(_ui_tetraRecentSsi(ui_state.menu_selected + 1) != 0)
+                        ui_state.menu_selected++;
+                }
+                else if(msg.keys & KEY_ENTER)
+                {
+                    tetraIds_hold(_ui_tetraRecentSsi(ui_state.menu_selected));
+                    state.ui_screen = ui_state.last_main_state;
+                }
+                else if(msg.keys & (KEY_ESC | KEY_0))
+                {
+                    state.ui_screen = ui_state.last_main_state;
+                }
+                break;
+            #endif
             case MENU_TOP:
                 if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
                     _ui_menuUp(menu_num);
@@ -2731,6 +2826,12 @@ bool ui_updateGUI()
         case MENU_SETTINGS:
             _ui_drawMenuSettings(&ui_state);
             break;
+#ifdef CONFIG_TETRA
+        // TETRA recent calls
+        case TETRA_RECENT:
+            _ui_drawTetraRecent(&ui_state);
+            break;
+#endif
         // Flash backup and restore screen
         case MENU_BACKUP_RESTORE:
             _ui_drawMenuBackupRestore(&ui_state);

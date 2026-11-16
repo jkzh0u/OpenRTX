@@ -38,6 +38,7 @@
 #include "core/graphics.h"
 #include "interfaces/display.h"
 #include "interfaces/cps_io.h"
+#include "protocols/TETRA/TetraCalls.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
 
@@ -52,8 +53,13 @@ state_t last_state;
 /* _ui_calculateLayout(), copied from ui.c by scripts/c62/ui_render.sh */
 #include "ui_layout.inc"
 
+/* _ui_drawMenuList(), copied from ui_menu.c, without voice prompts */
+#define announceMenuItemIfNeeded(...)
+#include "ui_menu_list.inc"
+
 void _ui_drawMainVFO(ui_state_t *ui_state);
 void _ui_drawMainMEM(ui_state_t *ui_state);
+void _ui_drawTetraRecent(ui_state_t *ui_state);
 
 static struct tetraStatus tetra;
 static const long long now = 100000;
@@ -193,26 +199,46 @@ void display_renderRows(uint8_t startRow, uint8_t endRow, void *fb)
 
 /* ---- Scenes ---- */
 
-static void scene(const char *name, bool memoryMode)
+enum screen { SCREEN_VFO, SCREEN_MEM, SCREEN_RECENT };
+
+static void draw(const char *name, enum screen screen)
 {
     static ui_state_t ui;
 
     snprintf(outPath, sizeof(outPath), "%s/%s.png", outDir, name);
     memset(&ui, 0, sizeof(ui));
-    if (memoryMode)
+    if (screen == SCREEN_MEM)
         _ui_drawMainMEM(&ui);
+    else if (screen == SCREEN_RECENT)
+        _ui_drawTetraRecent(&ui);
     else
         _ui_drawMainVFO(&ui);
     gfx_render();
     printf("%s\n", outPath);
 }
 
+static void scene(const char *name, bool memoryMode)
+{
+    draw(name, memoryMode ? SCREEN_MEM : SCREEN_VFO);
+}
+
 static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
                         uint32_t talker)
 {
+    uint32_t cellFreq = 392512500;
+    channel_t ch;
+
+    /* With a channel list, its first TETRA channel is the example cell */
+    for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
+        if (ch.mode == OPMODE_TETRA) {
+            cellFreq = ch.rx_frequency;
+            break;
+        }
+    }
+
     last_state.channel.mode = OPMODE_TETRA;
-    last_state.channel.rx_frequency = 392512500;
-    last_state.channel.tx_frequency = 392512500;
+    last_state.channel.rx_frequency = cellFreq;
+    last_state.channel.tx_frequency = cellFreq;
     strcpy(last_state.channel.name, "TETRA 392");
     last_state.channel_index = 4;
 
@@ -232,6 +258,7 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.mcc = mcc;
     tetra.mnc = mnc;
     tetra.la = 1;
+    tetra.dlFreq = cellFreq;
     tetra.phaseErr = 12;
     tetra.carrierHz = -234;
     scene("tetra-2-cell", false);
@@ -251,6 +278,7 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.callDst = group;
     tetra.talker = talker;
     tetra.voice = true;
+    tetra.txStart = now - 12000;
     scene("tetra-4-call", false);
 
     /* Call followed to another carrier */
@@ -265,6 +293,51 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.voice = false;
     tetra.callEncrypted = true;
     scene("tetra-6-call-encrypted", false);
+
+    /* Last heard on line 1, after the call */
+    tetra.call = false;
+    tetra.callEncrypted = false;
+    tetraCalls_init(&tetra.recent);
+    tetraCalls_note(&tetra.recent, 101011, 0, true, true, false,
+                    now - 47 * 60000);
+    tetraCalls_note(&tetra.recent, 100020, 100253, true, true, false,
+                    now - 9 * 60000);
+    tetraCalls_note(&tetra.recent, 100112, 0, false, true, false,
+                    now - 4 * 60000);
+    tetraCalls_note(&tetra.recent, 60002, 0, true, true, false, now - 61000);
+    tetraCalls_note(&tetra.recent, group, talker, true, true, false,
+                    now - 95000);
+    scene("tetra-7-last-heard", false);
+    draw("tetra-8-recent", SCREEN_RECENT);
+
+    /* Holding the last talkgroup heard */
+    tetraIds_hold(group);
+    scene("tetra-9-hold", false);
+    tetraIds_release();
+
+    /* An alarm call */
+    tetra.call = true;
+    tetra.callId = 40;
+    tetra.callGroup = true;
+    tetra.callDst = 60002;
+    tetra.talker = 0;
+    tetra.voice = true;
+    tetra.txStart = now - 3000;
+    tetra.callAlarm = true;
+    scene("tetra-10-alarm", false);
+    tetra.call = false;
+    tetra.callAlarm = false;
+
+    /* Lost: scanning the network's carriers */
+    tetra.sync = false;
+    tetra.searching = true;
+    tetra.phaseErr = 61;
+    tetra.carrierHz = -3020;
+    scene("tetra-11-scanning", false);
+    tetra.sync = true;
+    tetra.searching = false;
+    tetra.phaseErr = 12;
+    tetra.carrierHz = -234;
 }
 
 

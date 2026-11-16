@@ -52,7 +52,8 @@ enum uiScreen
     SETTINGS_FM,
     SETTINGS_ACCESSIBILITY,
     SETTINGS_RESET2DEFAULTS,
-    LOW_BAT
+    LOW_BAT,
+    TETRA_RECENT
 };
 
 enum SetRxTx

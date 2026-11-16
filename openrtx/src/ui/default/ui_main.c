@@ -47,6 +47,131 @@ static bool _ui_tetraCallShown(const struct tetraStatus *ts)
     return ts->sync && ts->call;
 }
 
+/* Line 1 in VFO mode: signal figures instead of the last call heard */
+static bool tetraShowSignal;
+
+/**
+ * Switch line 1 between the last call heard and the signal figures.
+ */
+void _ui_tetraToggleLine1(void)
+{
+    tetraShowSignal = !tetraShowSignal;
+}
+
+/**
+ * Format a time since, e.g. 45s, 12m, 3h.
+ */
+static void _ui_tetraAge(char *buf, size_t len, long long ms)
+{
+    long long s = ms / 1000;
+
+    if (s < 60)
+        snprintf(buf, len, "%llds", s);
+    else if (s < 3600)
+        snprintf(buf, len, "%lldm", s / 60);
+    else
+        snprintf(buf, len, "%lldh", s / 3600);
+}
+
+/**
+ * Print "prefix name suffix" into out, shortening the name until the text
+ * fits a width in pixels.
+ */
+static void _ui_tetraFit(char *out, size_t len, fontSize_t font,
+                         uint16_t width, const char *prefix, const char *name,
+                         const char *suffix)
+{
+    int n = (int)strlen(name);
+
+    for (;;) {
+        snprintf(out, len, "%s%.*s%s", prefix, n, name, suffix);
+        if (n == 0 || gfx_getTextWidth(font, out) <= width)
+            return;
+        n--;
+        while (n > 0 && name[n - 1] == ' ')
+            n--;
+    }
+}
+
+/**
+ * Print "prefix name" in the top bar, in the small font of the battery
+ * percentage: centred if it fits between it and the same margin on the
+ * left, else from the left edge, shortening the name if needed.
+ */
+static void _ui_tetraTopText(const char *prefix, const char *name,
+                             color_t color)
+{
+    uint16_t side = gfx_getTextWidth(FONT_SIZE_6PT, "100%")
+                  + 2 * layout.horizontal_pad;
+    point_t pos = { layout.top_pos.x, layout.top_pos.y - 2 };
+    char text[40];
+
+    _ui_tetraFit(text, sizeof(text), FONT_SIZE_6PT,
+                 CONFIG_SCREEN_WIDTH - 2 * side, prefix, name, "");
+    if (strlen(text) == strlen(prefix) + strlen(name)) {
+        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, color, "%s", text);
+        return;
+    }
+
+    _ui_tetraFit(text, sizeof(text), FONT_SIZE_6PT,
+                 CONFIG_SCREEN_WIDTH - side - layout.horizontal_pad, prefix,
+                 name, "");
+    pos.x = layout.horizontal_pad;
+    gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, color, "%s", text);
+}
+
+/**
+ * Name of a talkgroup or radio from the built-in list, or its number.
+ */
+static void _ui_tetraSsiName(char *buf, size_t len, uint32_t ssi, bool group)
+{
+    const char *name = tetraIds_name(ssi);
+
+    if (name != NULL)
+        snprintf(buf, len, "%s", name);
+    else
+        snprintf(buf, len, "%s%lu", group ? "G " : "", (unsigned long)ssi);
+}
+
+/**
+ * Where the radio is: the name of the location area from the built-in
+ * list, else the channel of the list on this cell's main carrier if there
+ * is only one (without a trailing carrier number), else the location area.
+ */
+static void _ui_tetraLocation(const struct tetraStatus *ts, char *buf,
+                              size_t len)
+{
+    const char *la = ts->sysinfo ? tetraIds_laName(ts->la) : NULL;
+
+    if (la != NULL) {
+        snprintf(buf, len, "%s", la);
+        return;
+    }
+
+    if (!ts->sysinfo) {
+        snprintf(buf, len, "%u-%u", ts->mcc, ts->mnc);
+        return;
+    }
+
+    channel_t ch;
+    unsigned matches = 0;
+    for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
+        if (ch.mode != OPMODE_TETRA || ch.rx_frequency != ts->dlFreq)
+            continue;
+        if (matches++ == 0)
+            snprintf(buf, len, "%s", ch.name);
+    }
+
+    if (matches == 1) {
+        size_t n = strlen(buf);
+        if (n > 2 && buf[n - 2] == ' ' && buf[n - 1] >= '0' && buf[n - 1] <= '9')
+            buf[n - 2] = '\0';
+        return;
+    }
+
+    snprintf(buf, len, "LA %u", ts->la);
+}
+
 /**
  * TETRA cell or call information, from line 1 to line 4 during a call,
  * on line 2 otherwise.
@@ -90,9 +215,12 @@ static void _ui_drawTetraInfo(void)
                       color_white, "Ch %lu.%05lu",
                       (unsigned long)(ts.followHz / 1000000),
                       (unsigned long)(ts.followHz % 1000000 / 10));
-        else
+        else {
+            char where[CPS_STR_SIZE];
+            _ui_tetraLocation(&ts, where, sizeof(where));
             gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER,
-                      color_white, "%u-%u LA %u", ts.mcc, ts.mnc, ts.la);
+                      color_white, "%s", where);
+        }
 
         // Call state
         if (ts.callEncrypted) {
@@ -100,33 +228,37 @@ static void _ui_drawTetraInfo(void)
                            TEXT_ALIGN_LEFT, color_white, SYMBOL_LOCK);
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
                       color_white, "Encrypted");
-        } else if (ts.callId != 0) {
+        } else if (ts.voice) {
+            // Length of the current transmission
+            long long talk = (getTick() - ts.txStart) / 1000;
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      color_white, "%s, call %u",
-                      ts.voice ? "Voice" : "Idle", ts.callId);
+                      color_white, "Voice %lld:%02lld", talk / 60, talk % 60);
         } else {
             gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER,
-                      color_white, "%s", ts.voice ? "Voice" : "Idle");
+                      color_white, "Idle");
         }
         return;
     }
 
     if (!ts.sync) {
         gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                  color_white, "T searching");
+                  color_white, ts.searching ? "T scanning" : "T searching");
         return;
     }
 
     gfx_drawSymbol(layout.line2_pos, layout.line2_symbol_size,
                    TEXT_ALIGN_LEFT, color_white, SYMBOL_TRANSMISSION_TOWER);
-    if (ts.sysinfo)
+    if (ts.sysinfo) {
+        char where[CPS_STR_SIZE];
+        _ui_tetraLocation(&ts, where, sizeof(where));
         gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
-                  color_white, "T %u-%u LA %u%s", ts.mcc, ts.mnc, ts.la,
+                  color_white, "T %s%s", where,
                   ts.airEncryption ? " enc" : "");
-    else
+    } else {
         gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
                   color_white, "T %u-%u CC %u", ts.mcc, ts.mnc,
                   ts.colourCode);
+    }
 }
 
 /**
@@ -163,11 +295,131 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
         return;
     }
 
-    // Phase error, carrier offset, lost sample blocks, resyncs
     ui_state->m17_meta_text_scroll_position = 0;
+
+    // The last call heard, unless switched to the signal figures
+    if (!tetraShowSignal && ts.recent.count > 0) {
+        const struct tetraCallEntry *e = &ts.recent.entry[0];
+        char name[24], age[24];
+        if (e->dst != 0)
+            _ui_tetraSsiName(name, sizeof(name), e->dst, e->group);
+        else
+            _ui_tetraSsiName(name, sizeof(name), e->src, false);
+        char suffix[28], text[40];
+        _ui_tetraAge(age, sizeof(age), now - e->time);
+        snprintf(suffix, sizeof(suffix), " %s", age);
+        _ui_tetraFit(text, sizeof(text), layout.line1_font,
+                     CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad, "", name,
+                     suffix);
+        gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
+                  color_white, "%s", text);
+        return;
+    }
+
+    // Phase error, carrier offset, lost sample blocks, resyncs
     gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
               color_white, "e%u%% %+dHz o%u r%u", ts.phaseErr, ts.carrierHz,
               ts.overruns, ts.resyncs);
+}
+
+/* In ui_menu.c */
+extern void _ui_drawMenuList(uint8_t selected,
+                             int (*getCurrentEntry)(char *buf, uint8_t max_len,
+                                                    uint8_t index));
+
+static int _ui_getTetraRecentEntry(char *buf, uint8_t max_len, uint8_t index)
+{
+    struct tetraStatus ts;
+    tetra_getStatus(&ts);
+
+    if (index >= ts.recent.count)
+        return -1;
+
+    const struct tetraCallEntry *e = &ts.recent.entry[index];
+    char name[24], age[24];
+    if (e->dst != 0)
+        _ui_tetraSsiName(name, sizeof(name), e->dst, e->group);
+    else
+        _ui_tetraSsiName(name, sizeof(name), e->src, false);
+    char suffix[28];
+    _ui_tetraAge(age, sizeof(age), getTick() - e->time);
+    snprintf(suffix, sizeof(suffix), " %s", age);
+    _ui_tetraFit(buf, max_len, layout.menu_font, CONFIG_SCREEN_WIDTH - 4, "",
+                 name, suffix);
+    return 0;
+}
+
+/**
+ * Recent calls, newest first.
+ */
+void _ui_drawTetraRecent(ui_state_t *ui_state)
+{
+    struct tetraStatus ts;
+    tetra_getStatus(&ts);
+
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Recent calls");
+    if (ts.recent.count == 0)
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "None yet");
+    else
+        _ui_drawMenuList(ui_state->menu_selected, _ui_getTetraRecentEntry);
+}
+
+/**
+ * @return the identity to hold: the shown call's talkgroup, or its radio
+ * for a call between radios, else the last call heard. 0 if none.
+ */
+uint32_t _ui_tetraHoldCandidate(void)
+{
+    struct tetraStatus ts;
+    tetra_getStatus(&ts);
+
+    if (_ui_tetraCallShown(&ts)) {
+        if (ts.callDst != 0 && (ts.callGroup || tetraIds_name(ts.callDst)))
+            return ts.callDst;
+        return ts.talker != 0 ? ts.talker : ts.callDst;
+    }
+
+    if (ts.recent.count > 0) {
+        const struct tetraCallEntry *e = &ts.recent.entry[0];
+        return e->dst != 0 ? e->dst : e->src;
+    }
+
+    return 0;
+}
+
+/**
+ * @return the identity of a recent call, as for _ui_tetraHoldCandidate().
+ */
+uint32_t _ui_tetraRecentSsi(uint8_t index)
+{
+    struct tetraStatus ts;
+    tetra_getStatus(&ts);
+
+    if (index >= ts.recent.count)
+        return 0;
+    const struct tetraCallEntry *e = &ts.recent.entry[index];
+    return e->dst != 0 ? e->dst : e->src;
+}
+
+/**
+ * During a call to or from an alarm talkgroup, paint the screen red.
+ */
+static void _ui_drawTetraAlarm(void)
+{
+    static const color_t alarmRed = { 170, 0, 0, 255 };
+    struct tetraStatus ts;
+
+    if (last_state.channel.mode != OPMODE_TETRA)
+        return;
+    tetra_getStatus(&ts);
+    if (_ui_tetraCallShown(&ts) && ts.callAlarm) {
+        point_t origin = { 0, 0 };
+        gfx_drawRect(origin, CONFIG_SCREEN_WIDTH, CONFIG_SCREEN_HEIGHT,
+                     alarmRed, true);
+    }
 }
 #endif
 
@@ -213,13 +465,18 @@ void _ui_drawMainTop(ui_state_t * ui_state)
     // Talkgroup filter, if the built-in list defines any: yellow while it
     // holds calls back
     if ((last_state.channel.mode == OPMODE_TETRA)
-        && (tetraIds_filterCount() > 1)) {
+        && (tetraIds_filterCount() > 1) && (tetraIds_held() == 0)) {
         // Small font, as the battery percentage, to leave room for it
         size_t filter = tetraIds_selectedFilter();
-        point_t pos = { layout.top_pos.x, layout.top_pos.y - 2 };
-        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
-                  (filter != 0) ? yellow_fab413 : color_white, "TG %s",
-                  tetraIds_filterName(filter));
+        _ui_tetraTopText("TG ", tetraIds_filterName(filter),
+                         (filter != 0) ? yellow_fab413 : color_white);
+    }
+
+    // A held talkgroup, in place of the filter
+    if ((last_state.channel.mode == OPMODE_TETRA) && (tetraIds_held() != 0)) {
+        char name[24];
+        _ui_tetraSsiName(name, sizeof(name), tetraIds_held(), false);
+        _ui_tetraTopText("Hold ", name, yellow_fab413);
     }
 #endif
     // If the radio has no built-in battery, print input voltage
@@ -417,6 +674,15 @@ void _ui_drawFrequency()
 {
     freq_t freq = platform_getPttStatus() ? last_state.channel.tx_frequency
                                           : last_state.channel.rx_frequency;
+#ifdef CONFIG_TETRA
+    // The cell the radio moved to, rather than the one it was set to
+    if (last_state.channel.mode == OPMODE_TETRA) {
+        struct tetraStatus ts;
+        tetra_getStatus(&ts);
+        if (ts.tunedHz != 0)
+            freq = ts.tunedHz;
+    }
+#endif
 
     char freq_str[16] = {0};
     sniprintf(freq_str, sizeof(freq_str), "%03lu.%05lu",
@@ -563,6 +829,9 @@ void _ui_drawMainBottom()
 void _ui_drawMainVFO(ui_state_t* ui_state)
 {
     gfx_clearScreen();
+    #ifdef CONFIG_TETRA
+    _ui_drawTetraAlarm();
+    #endif
     _ui_drawMainTop(ui_state);
     _ui_drawModeInfo(ui_state);
 
@@ -589,6 +858,9 @@ void _ui_drawMainVFOInput(ui_state_t* ui_state)
 void _ui_drawMainMEM(ui_state_t* ui_state)
 {
     gfx_clearScreen();
+    #ifdef CONFIG_TETRA
+    _ui_drawTetraAlarm();
+    #endif
     _ui_drawMainTop(ui_state);
     _ui_drawModeInfo(ui_state);
 
