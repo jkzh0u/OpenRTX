@@ -8,7 +8,13 @@
  * Toronto Transit Commission TETRA network (MCC 302, MNC 2013): the
  * carriers RadioReference marks as control channels, three per site.
  * Source: https://www.radioreference.com/db/sid/9380 (updated 8 Sep 2026).
- * The underground site, with no control channel listed, is left out.
+ *
+ * Then the 13 underground zones of the subway, each a stretch of line
+ * between two stations with its own control channel, from
+ * https://adryd.com/pages/2025-03-11-ttc-radio-zones/ (updated 30 Nov 2025).
+ * Zones reuse four frequencies; each also has a secondary carrier 0.1 MHz
+ * above, which together match the eight frequencies RadioReference lists
+ * for its underground site.
  *
  * Build the C62 firmware with -DC62_CHANNELS=scripts/c62/channels/ttc_tetra.h
  * Names show 12 characters on the main screen.
@@ -56,3 +62,29 @@ CPS_CHANNEL("Arrow 3", 423737500, OPMODE_TETRA)
 CPS_CHANNEL("Birchmount 1", 423337500, OPMODE_TETRA)
 CPS_CHANNEL("Birchmount 2", 423437500, OPMODE_TETRA)
 CPS_CHANNEL("Birchmount 3", 423637500, OPMODE_TETRA)
+/* Zone 1: Kipling to Old Mill */
+CPS_CHANNEL("Z1 Kipling", 422325000, OPMODE_TETRA)
+/* Zone 2: Old Mill to Ossington */
+CPS_CHANNEL("Z2 Keele", 422525000, OPMODE_TETRA)
+/* Zone 3: Ossington to Chester */
+CPS_CHANNEL("Z3 Bay", 422262500, OPMODE_TETRA)
+/* Zone 4: Chester to Victoria Park */
+CPS_CHANNEL("Z4 Greenwood", 422462500, OPMODE_TETRA)
+/* Zone 5: Victoria Park to Kennedy */
+CPS_CHANNEL("Z5 Kennedy", 422525000, OPMODE_TETRA)
+/* Zone 6: York University to Lawrence West */
+CPS_CHANNEL("Z6 Downsview", 422525000, OPMODE_TETRA)
+/* Zone 7: Lawrence West to St. George */
+CPS_CHANNEL("Z7 StClair W", 422462500, OPMODE_TETRA)
+/* Zone 8: St. George to Bloor-Yonge */
+CPS_CHANNEL("Z8 Union", 422325000, OPMODE_TETRA)
+/* Zone 9: Bloor-Yonge to Lawrence */
+CPS_CHANNEL("Z9 Davisvle", 422525000, OPMODE_TETRA)
+/* Zone 10: Lawrence to Finch */
+CPS_CHANNEL("Z10 Finch", 422262500, OPMODE_TETRA)
+/* Zone 11: Sheppard-Yonge to Bessarion */
+CPS_CHANNEL("Z11 Sheppard", 422462500, OPMODE_TETRA)
+/* Zone 12: Bessarion to Don Mills */
+CPS_CHANNEL("Z12 DonMills", 422325000, OPMODE_TETRA)
+/* Zone 13: Vaughan Metropolitan Centre to York University */
+CPS_CHANNEL("Z13 VMC", 422262500, OPMODE_TETRA)

@@ -262,9 +262,12 @@ own mode, so a TETRA channel starts T mode directly.
 
 `scripts/c62/channels/ttc_tetra.h` holds the Toronto Transit Commission
 TETRA network: the three carriers RadioReference lists as control channels
-at each of its 10 sites, named after the site. Usually one carrier per site
-carries the control channel and synchronisation: that is the one where the
-radio locks and shows `T 302-2013 LA <n>`.
+at each of its 10 surface sites, named after the site, then the control
+channels of the 13 underground subway zones (`Z1 Kipling` to `Z13 VMC`).
+Usually one carrier per surface site carries the control channel and
+synchronisation: that is the one where the radio locks and shows
+`T 302-2013 LA <n>`. The zones reuse four frequencies, so underground the
+one you receive depends on where you are.
 
 To make a list of your own, copy that file and keep one entry per line:
 
