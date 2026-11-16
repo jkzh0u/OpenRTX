@@ -54,6 +54,7 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | `C62_TETRA` | `ON` | TETRA receive mode "T" (section 5), with libtetra |
 | `C62_TETRA_SPEECH` | `ON` | Play clear TETRA speech, with OpenACELP (section 5) |
 | `C62_TETRA_FOLLOW` | `ON` | Follow TETRA calls to the other carriers of a cell (section 5) |
+| `C62_CHANNELS` | empty | Channel list built into the firmware, for memory mode (section 6) |
 | `C62_REG43_SWEEP` | `OFF` | Cycle `REG_43` through 7 test values in M17 RX |
 | `C62_REG43_SWEEP_MS` | `1400` | Recorded time per sweep value (one burst covers all 7 values) |
 
@@ -242,3 +243,34 @@ libtetra's retune requests with the radio's answer, and each retune the
 radio would make (lines starting with `>>`). A recording holds a single
 carrier, so it shows the decisions, not what the radio would hear
 afterwards. Use `-n` for recordings not made with a C62.
+
+## 6. Memory channels
+
+The C62 build cannot store channels or settings yet: after power on it is
+in VFO mode on 430.000 MHz, M17. A channel list can be built into the
+firmware instead, read only:
+
+```bash
+docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD":/work openrtx-c62 \
+    c62-build -DC62_CHANNELS=scripts/c62/channels/ttc_tetra.h
+```
+
+CMake remembers the option, so later builds keep the list. In VFO mode
+press **ESC** for memory mode, then **Up** and **Down** to step through the
+channels, and **ESC** again to return to VFO mode. Each channel sets its
+own mode, so a TETRA channel starts T mode directly.
+
+`scripts/c62/channels/ttc_tetra.h` holds the Toronto Transit Commission
+TETRA network: the three carriers RadioReference lists as control channels
+at each of its 10 sites, named after the site. Usually one carrier per site
+carries the control channel and synchronisation: that is the one where the
+radio locks and shows `T 302-2013 LA <n>`.
+
+To make a list of your own, copy that file and keep one entry per line:
+
+```c
+CPS_CHANNEL("Name", 422662500, OPMODE_TETRA)
+```
+
+with the name (12 characters show on screen), the frequency in Hz and
+`OPMODE_FM`, `OPMODE_M17` or `OPMODE_TETRA`. Channels are receive only.

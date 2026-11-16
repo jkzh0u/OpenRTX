@@ -23,7 +23,6 @@ target_sources(app
     ${OPENRTX_ROOT}/platform/drivers/baseband/BK1080.c
 
     ${OPENRTX_ROOT}/platform/drivers/stubs/nvmem_stub.c
-    ${OPENRTX_ROOT}/platform/drivers/stubs/cps_io_stub.c
 
     ${OPENRTX_ROOT}/platform/drivers/display/display_c62.c
     ${OPENRTX_ROOT}/platform/drivers/baseband/radio_C62.cpp
@@ -75,6 +74,11 @@ option(C62_TETRA_SPEECH "TETRA speech with OpenACELP" ON)
 #   tuned main carrier.
 option(C62_TETRA_FOLLOW "TETRA call following" ON)
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
+# C62_CHANNELS: channel list built into the firmware, for memory mode (the
+#   C62 has no codeplug storage yet): a header of CPS_CHANNEL() entries,
+#   see platform/drivers/CPS/cps_io_builtin.c. Relative to the OpenRTX
+#   directory, e.g. scripts/c62/channels/ttc_tetra.h. Empty: no channels.
+set(C62_CHANNELS "" CACHE STRING "Built-in channel list header")
 
 if(C62_WIDE_RX)
   target_compile_definitions(app PRIVATE C62_WIDE_RX)
@@ -143,11 +147,30 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraSpeech.c)
 endif()
 
+if(C62_CHANNELS)
+  get_filename_component(C62_CHANNELS_FILE ${C62_CHANNELS} ABSOLUTE
+                         BASE_DIR ${OPENRTX_ROOT})
+  if(NOT EXISTS ${C62_CHANNELS_FILE})
+    message(FATAL_ERROR "C62_CHANNELS: ${C62_CHANNELS_FILE} not found")
+  endif()
+  target_sources(app PRIVATE
+    ${OPENRTX_ROOT}/platform/drivers/CPS/cps_io_builtin.c)
+  set_source_files_properties(
+    ${OPENRTX_ROOT}/platform/drivers/CPS/cps_io_builtin.c
+    PROPERTIES OBJECT_DEPENDS ${C62_CHANNELS_FILE})
+  target_compile_definitions(app PRIVATE
+    "CPS_BUILTIN_LIST=\"${C62_CHANNELS_FILE}\"")
+else()
+  target_sources(app PRIVATE
+    ${OPENRTX_ROOT}/platform/drivers/stubs/cps_io_stub.c)
+endif()
+
 message(STATUS "C62: wide RX ${C62_WIDE_RX}, TETRA ${C62_TETRA} "
                "(speech ${C62_TETRA_SPEECH}, follow ${C62_TETRA_FOLLOW}), REG_43 sweep ${C62_REG43_SWEEP}, "
                "baseband dump ${C62_BASEBAND_DUMP} "
                "(${C62_BASEBAND_DUMP_BAUD} baud, format "
-               "${C62_BASEBAND_DUMP_FORMAT}, burst ${C62_BASEBAND_DUMP_BURST})")
+               "${C62_BASEBAND_DUMP_FORMAT}, burst ${C62_BASEBAND_DUMP_BURST}), "
+               "channels '${C62_CHANNELS}'")
 
 add_subdirectory(services)
 zephyr_library_link_libraries(lsf_client)
