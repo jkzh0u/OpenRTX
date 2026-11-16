@@ -187,11 +187,17 @@ void tetraStatus_onEvent(void *user, const struct tetra_event *ev)
             status.mnc = c->mnc;
             status.colourCode = c->colour_code;
             if (c->have_sysinfo) {
-                /* Moved to another cell: the UI says so for a while */
+                /*
+                 * Moved to another cell: the UI says so, and where from,
+                 * for a while
+                 */
                 if (status.sysinfo
                     && (status.la != c->location_area
-                        || status.dlFreq != c->dl_freq_hz))
+                        || status.dlFreq != c->dl_freq_hz)) {
                     status.cellChanged = getTick();
+                    status.prevLa = status.la;
+                    status.prevDlFreq = status.dlFreq;
+                }
                 status.sysinfo = true;
                 status.la = c->location_area;
                 status.dlFreq = c->dl_freq_hz;

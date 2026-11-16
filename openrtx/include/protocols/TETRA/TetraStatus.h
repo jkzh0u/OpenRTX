@@ -43,6 +43,8 @@ struct tetraStatus {
 
     uint32_t tunedHz;   /**< Main carrier received, Hz, 0 if not set */
     long long cellChanged; /**< Tick the radio last moved to another cell */
+    uint16_t prevLa;    /**< Location area before the last move */
+    uint32_t prevDlFreq; /**< Main carrier before the last move, Hz */
     bool searching;     /**< Looking for a cell on other frequencies */
 
     struct tetraCalls recent; /**< Recent calls, newest first */
