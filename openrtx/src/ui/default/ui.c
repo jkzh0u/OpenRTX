@@ -1011,6 +1011,34 @@ int _ui_handleToneSelectScroll(bool direction_up)
     return 1;
 }
 
+/**
+ * Next radio mode: FM, M17, TETRA. Side key + 5, or a long 5 on the main
+ * screens.
+ */
+static void _ui_cycleMode(bool *sync_rtx, enum vpQueueFlags queueFlags)
+{
+    #ifdef CONFIG_M17
+    if(state.channel.mode == OPMODE_FM)
+        state.channel.mode = OPMODE_M17;
+    #ifdef CONFIG_TETRA
+    else if(state.channel.mode == OPMODE_M17)
+        state.channel.mode = OPMODE_TETRA;
+    #endif
+    else //catch any invalid states so they don't get locked out
+    #endif
+        state.channel.mode = OPMODE_FM;
+    *sync_rtx = true;
+    vp_announceRadioMode(state.channel.mode, queueFlags);
+}
+
+/**
+ * @return true for a long press of 5 on its own, which changes the mode.
+ */
+static bool _ui_isModeKey(kbd_msg_t msg)
+{
+    return msg.long_press && (msg.keys == KEY_5);
+}
+
 static void _ui_fsm_menuMacro(kbd_msg_t msg, bool *sync_rtx)
 {
     // If there is no keyboard left and right select the menu entry to edit
@@ -1096,19 +1124,7 @@ static void _ui_fsm_menuMacro(kbd_msg_t msg, bool *sync_rtx)
             }
             break;
         case 5:
-            // Cycle through radio modes: FM, M17, TETRA
-            #ifdef CONFIG_M17
-            if(state.channel.mode == OPMODE_FM)
-                state.channel.mode = OPMODE_M17;
-            #ifdef CONFIG_TETRA
-            else if(state.channel.mode == OPMODE_M17)
-                state.channel.mode = OPMODE_TETRA;
-            #endif
-            else //catch any invalid states so they don't get locked out
-            #endif
-                state.channel.mode = OPMODE_FM;
-            *sync_rtx = true;
-            vp_announceRadioMode(state.channel.mode, queueFlags);
+            _ui_cycleMode(sync_rtx, queueFlags);
             break;
         case 6:
 
@@ -1762,7 +1778,15 @@ void ui_updateFSM(bool *sync_rtx)
                 break;
             // VFO frequency input screen
             case MAIN_VFO_INPUT:
-                if(msg.keys & KEY_ENTER)
+                // Only the 5 typed, and held: change mode, not frequency
+                if(_ui_isModeKey(msg) && (ui_state.input_set == SET_RX)
+                   && (ui_state.input_position == 1)
+                   && (ui_state.input_number == 5))
+                {
+                    state.ui_screen = MAIN_VFO;
+                    _ui_cycleMode(sync_rtx, queueFlags);
+                }
+                else if(msg.keys & KEY_ENTER)
                 {
                     _ui_fsm_confirmVFOInput(sync_rtx);
                 }
@@ -1854,6 +1878,11 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else
                 {
+                    if(_ui_isModeKey(msg))
+                    {
+                        _ui_cycleMode(sync_rtx, queueFlags);
+                    }
+                    else
                     #ifdef CONFIG_TETRA
                     if(_ui_tetraKeys(msg))
                     {
