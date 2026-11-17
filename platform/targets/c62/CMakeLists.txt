@@ -87,13 +87,14 @@ option(C62_TETRA_LOG "TETRA receive log over UART" ON)
 set(C62_TETRA_LOG_HISTORY 262144 CACHE STRING
     "TETRA log kept in PSRAM, bytes")
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
-# C62_CHANNELS: channel list built into the firmware, for memory mode (the
-#   C62 has no codeplug storage yet): a header of CPS_CHANNEL() entries,
-#   see platform/drivers/CPS/cps_io_builtin.c, and optionally talkgroup
-#   filters and TETRA_ID() entries naming talkgroups and radios, see
-#   openrtx/include/protocols/TETRA/TetraIds.h. Relative to the OpenRTX
-#   directory, e.g. scripts/c62/channels/ttc_tetra.h. Empty: no channels.
-set(C62_CHANNELS "" CACHE STRING "Built-in channel list header")
+# C62_CHANNELS: also build the channel list image build_c62/zephyr/
+#   channels.bin from this list, to flash at 0x2c0000 next to the firmware.
+#   The firmware reads whichever image is flashed there: one firmware for
+#   every list. Format: platform/drivers/CPS/cps_io_builtin.c and
+#   openrtx/include/protocols/TETRA/TetraIds.h; scripts/chlist.py builds
+#   images without CMake. Relative to the OpenRTX directory, e.g.
+#   scripts/c62/channels/ttc_tetra.h. Empty: no image built.
+set(C62_CHANNELS "" CACHE STRING "Channel list to build channels.bin from")
 
 if(C62_WIDE_RX)
   target_compile_definitions(app PRIVATE C62_WIDE_RX)
@@ -183,24 +184,27 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraSpeech.c)
 endif()
 
+# Channels and TETRA names come from the channel list image in flash
+target_sources(app PRIVATE
+  ${OPENRTX_ROOT}/openrtx/src/core/chlist.c
+  ${OPENRTX_ROOT}/platform/drivers/CPS/cps_io_builtin.c)
+target_compile_definitions(app PRIVATE CONFIG_CHLIST)
+
 if(C62_CHANNELS)
   get_filename_component(C62_CHANNELS_FILE ${C62_CHANNELS} ABSOLUTE
                          BASE_DIR ${OPENRTX_ROOT})
   if(NOT EXISTS ${C62_CHANNELS_FILE})
     message(FATAL_ERROR "C62_CHANNELS: ${C62_CHANNELS_FILE} not found")
   endif()
-  target_sources(app PRIVATE
-    ${OPENRTX_ROOT}/platform/drivers/CPS/cps_io_builtin.c)
-  set_source_files_properties(
-    ${OPENRTX_ROOT}/platform/drivers/CPS/cps_io_builtin.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraIds.c
-    PROPERTIES OBJECT_DEPENDS ${C62_CHANNELS_FILE})
-  target_compile_definitions(app PRIVATE
-    "CPS_BUILTIN_LIST=\"${C62_CHANNELS_FILE}\""
-    "TETRA_ID_LIST=\"${C62_CHANNELS_FILE}\"")
-else()
-  target_sources(app PRIVATE
-    ${OPENRTX_ROOT}/platform/drivers/stubs/cps_io_stub.c)
+  set(C62_CHANNELS_BIN ${CMAKE_BINARY_DIR}/zephyr/channels.bin)
+  # 0x90000: size of channel_list_partition in c62.dts
+  add_custom_command(
+    OUTPUT ${C62_CHANNELS_BIN}
+    COMMAND ${PYTHON_EXECUTABLE} ${OPENRTX_ROOT}/scripts/chlist.py
+            ${C62_CHANNELS_FILE} -o ${C62_CHANNELS_BIN} --max-size 0x90000
+    DEPENDS ${C62_CHANNELS_FILE} ${OPENRTX_ROOT}/scripts/chlist.py
+    COMMENT "Channel list image channels.bin")
+  add_custom_target(c62_channels ALL DEPENDS ${C62_CHANNELS_BIN})
 endif()
 
 message(STATUS "C62: wide RX ${C62_WIDE_RX}, TETRA ${C62_TETRA} "

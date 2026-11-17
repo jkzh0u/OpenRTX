@@ -267,9 +267,20 @@
 			read-only;
 		};
 
-		/* OpenRTX storage: erased in every factory dump examined */
+		/* 0x2b0000-0x350000 was erased in every factory dump examined */
+
+		/* OpenRTX settings, NVS (platform/drivers/NVM/nvmem_c62.c) */
 		storage_partition: partition@2b0000 {
-			reg = <0x2b0000 0xa0000>;
+			reg = <0x2b0000 0x10000>;
+		};
+
+		/* Channel list image (openrtx/include/core/chlist.h), built
+		 * by scripts/chlist.py and flashed apart from the firmware
+		 */
+		channel_list_partition: partition@2c0000 {
+			label = "channel_list";
+			reg = <0x2c0000 0x90000>;
+			read-only;
 		};
 
 		/* Factory resources left by the OEM firmware */

@@ -33,3 +33,6 @@ echo
 echo "Done. Flash with cskburn (radio in burn mode):"
 echo "  OpenRTX/build_c62/zephyr/zephyr.bin       at 0x000000"
 echo "  OpenRTX/build_c62/zephyr/dsp_firmware.bin at 0x100000"
+if [ -f build_c62/zephyr/channels.bin ]; then
+    echo "  OpenRTX/build_c62/zephyr/channels.bin     at 0x2c0000 (channel list)"
+fi

@@ -14,6 +14,8 @@
 #include <zephyr/drivers/uart.h>
 #include <zephyr/drivers/pinctrl.h>
 #include <zephyr/kernel.h>
+#include <zephyr/storage/flash_map.h>
+#include "core/chlist.h"
 #include <interfaces/audio.h>
 #include "drivers/SPI/spi_zephyr.h"
 #include "controller.h"
@@ -90,11 +92,34 @@ static int battery_init(void)
 extern void c62_tetraLogInit(void);
 #endif
 
+/**
+ * Use the channel list image flashed at channel_list_partition, read in
+ * place through the memory-mapped flash.
+ */
+static void channelListInit(void)
+{
+    const void *image = (const void *)(DT_REG_ADDR(DT_NODELABEL(flash0))
+                       + FIXED_PARTITION_OFFSET(channel_list_partition));
+    int ret = chlist_open(image,
+                          FIXED_PARTITION_SIZE(channel_list_partition));
+
+    if (ret == 0)
+        printk("Channel list: %u channels, %u TETRA names\n",
+               (unsigned)chlist_channelCount(), (unsigned)chlist_idCount());
+    else if (ret == -1)
+        printk("Channel list: none flashed\n");
+    else
+        printk("Channel list: not used, damaged or other version (%d)\n",
+               ret);
+}
+
 void platform_init_csk6()
 {
 #ifdef CONFIG_TETRA_LOG
     c62_tetraLogInit();
 #endif
+
+    channelListInit();
 
     // Configure the PTT key as input with pull-up
     gpio_pin_configure_dt(&button_ptt, GPIO_INPUT);

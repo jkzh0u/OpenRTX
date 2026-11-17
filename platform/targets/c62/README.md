@@ -74,3 +74,11 @@ cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
     0x100000 build/zephyr/dsp_firmware.bin \
     0x000000 build/zephyr/zephyr.bin
 ```
+
+The firmware holds no channels: memory mode channels and TETRA talkgroup
+names come from a channel list image flashed at `0x2c0000`, built with
+`scripts/chlist.py` (see `scripts/c62/README.md`, section 6):
+
+```bash
+cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all 0x2c0000 channels.bin
+```
