@@ -57,6 +57,7 @@ void _ui_drawMainVFO(ui_state_t *ui_state);
 void _ui_drawMainMEM(ui_state_t *ui_state);
 void _ui_drawTetraRecent(ui_state_t *ui_state);
 void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
+void _ui_drawTetraFieldTest(ui_state_t *ui_state);
 
 static struct tetraStatus tetra;
 static const long long now = 100000;
@@ -196,10 +197,18 @@ void display_renderRows(uint8_t startRow, uint8_t endRow, void *fb)
 
 /* ---- Scenes ---- */
 
-enum screen { SCREEN_VFO, SCREEN_MEM, SCREEN_RECENT, SCREEN_DETAIL };
+enum screen {
+    SCREEN_VFO,
+    SCREEN_MEM,
+    SCREEN_RECENT,
+    SCREEN_DETAIL,
+    SCREEN_FIELD_TEST
+};
 
 /* Memory channel number being typed, drawn on the next scene */
 static uint16_t chEntry;
+/* First line shown of a scrolling screen */
+static uint8_t scroll;
 
 static void draw(const char *name, enum screen screen)
 {
@@ -209,12 +218,15 @@ static void draw(const char *name, enum screen screen)
     memset(&ui, 0, sizeof(ui));
     ui.ch_entry = chEntry;
     ui.ch_entry_digits = (chEntry > 0) ? 1 : 0;
+    ui.menu_selected = scroll;
     if (screen == SCREEN_MEM)
         _ui_drawMainMEM(&ui);
     else if (screen == SCREEN_RECENT)
         _ui_drawTetraRecent(&ui);
     else if (screen == SCREEN_DETAIL)
         _ui_drawTetraRecentDetail(&ui);
+    else if (screen == SCREEN_FIELD_TEST)
+        _ui_drawTetraFieldTest(&ui);
     else
         _ui_drawMainVFO(&ui);
     gfx_render();
@@ -289,6 +301,39 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.searching = true;
     scene("tetra-2d-best-signal", false);
     tetra.searching = false;
+
+    /* Field test: neighbours, a measurement, network time; then scrolled */
+    tetra.tunedHz = cellFreq;
+    tetra.load = 1;
+    tetra.resyncs = 2;
+    tetra.time = true;
+    tetra.timeLocal = true;
+    tetra.timeOfDay = 8 * 3600 + 14 * 60 + 5;
+    tetra.timeTick = now - 30000;
+    tetra.roamState = 0;
+    tetra.nNeighbours = 3;
+    tetra.neighbour[0] = (struct tetraStatusNeighbour){ prevFreq, 3801, 2,
+                                                        2, false };
+    tetra.neighbour[1] = (struct tetraStatusNeighbour){ cellFreq + 50000,
+                                                        3805, 3, 1, false };
+    tetra.neighbour[2] = (struct tetraStatusNeighbour){ 0, 1234, 0xffff, 0,
+                                                        true };
+    tetra.nMeasured = 3;
+    tetra.measured[0] = (struct tetraStatusMeasured){ cellFreq, -84 };
+    tetra.measured[1] = (struct tetraStatusMeasured){ prevFreq, -97 };
+    tetra.measured[2] = (struct tetraStatusMeasured){ cellFreq + 50000,
+                                                      -109 };
+    tetra.measuredTime = now - 12000;
+    draw("tetra-15-field-test", SCREEN_FIELD_TEST);
+    scroll = 7;
+    draw("tetra-15a-field-test-middle", SCREEN_FIELD_TEST);
+    scroll = 255;
+    draw("tetra-15b-field-test-end", SCREEN_FIELD_TEST);
+    scroll = 0;
+    tetra.nNeighbours = 0;
+    tetra.nMeasured = 0;
+    tetra.time = false;
+    tetra.roamState = 0xff;
 
     /* Last SDS text, from the example talker */
     tetra.sdsSrc = talker;
