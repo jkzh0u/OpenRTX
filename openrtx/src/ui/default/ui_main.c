@@ -1400,6 +1400,22 @@ void _ui_drawMainVFOInput(ui_state_t* ui_state)
     _ui_drawMainBottom();
 }
 
+/**
+ * The memory channel number being typed, over the middle of the screen.
+ */
+static void _ui_drawChannelEntry(const ui_state_t *ui_state)
+{
+    if (ui_state->ch_entry_digits == 0)
+        return;
+
+    uint16_t h = gfx_getFontHeight(layout.line3_large_font);
+    point_t box = { 0, (int16_t)(layout.line3_large_pos.y - h - 8) };
+
+    gfx_drawRect(box, CONFIG_SCREEN_WIDTH, h + 10, color_black, true);
+    gfx_print(layout.line3_large_pos, layout.line3_large_font,
+              TEXT_ALIGN_CENTER, yellow_fab413, "Ch %u", ui_state->ch_entry);
+}
+
 void _ui_drawMainMEM(ui_state_t* ui_state)
 {
     gfx_clearScreen();
@@ -1412,6 +1428,7 @@ void _ui_drawMainMEM(ui_state_t* ui_state)
     {
         _ui_drawTetraMain(ui_state, true);
         _ui_drawMainBottom();
+        _ui_drawChannelEntry(ui_state);
         return;
     }
     #endif
@@ -1425,4 +1442,5 @@ void _ui_drawMainMEM(ui_state_t* ui_state)
     }
 
     _ui_drawMainBottom();
+    _ui_drawChannelEntry(ui_state);
 }

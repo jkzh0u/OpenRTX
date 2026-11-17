@@ -231,6 +231,10 @@ typedef struct ui_state_t
 #endif
     char new_callsign[10];
     freq_t new_offset;
+    // Memory channel number being typed, 0 digits when none
+    uint16_t ch_entry;
+    uint8_t ch_entry_digits;
+    long long ch_entry_tick;
     // Which state to return to when we exit menu
     uint8_t last_main_state;
 #if defined(CONFIG_UI_NO_KEYBOARD)

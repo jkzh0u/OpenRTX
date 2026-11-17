@@ -1039,6 +1039,131 @@ static bool _ui_isModeKey(kbd_msg_t msg)
     return msg.long_press && (msg.keys == KEY_5);
 }
 
+/* Typing a memory channel number: jump after this long without a key */
+#define CH_ENTRY_TIMEOUT_MS 2000
+/* Digits of a memory channel number */
+#define CH_ENTRY_MAX_DIGITS 4
+
+/*
+ * Number key pressed in memory mode: typed when released, so that holding
+ * it for its function does not type it first.
+ */
+static keyboard_t memPendingKey;
+
+static void _ui_chEntryCancel(void)
+{
+    ui_state.ch_entry = 0;
+    ui_state.ch_entry_digits = 0;
+}
+
+/**
+ * Jump to the memory channel typed, if there is one with that number.
+ */
+static void _ui_chEntryConfirm(bool *sync_rtx)
+{
+    uint16_t number = ui_state.ch_entry;
+
+    _ui_chEntryCancel();
+    if(number == 0)
+        return;
+
+    if((_ui_fsm_loadChannel(number - 1, sync_rtx) != -1)
+       && (state.channel_index == number - 1))
+    {
+        vp_announceChannelName(&state.channel, state.channel_index + 1,
+                               vp_getVoiceLevelQueueFlags());
+    }
+}
+
+static void _ui_chEntryDigit(uint8_t digit, bool *sync_rtx)
+{
+    // No channel 0
+    if((ui_state.ch_entry_digits == 0) && (digit == 0))
+        return;
+
+    ui_state.ch_entry = ui_state.ch_entry * 10 + digit;
+    ui_state.ch_entry_digits++;
+    ui_state.ch_entry_tick = getTick();
+    vp_flush();
+    vp_queueInteger(digit);
+    vp_play();
+
+    if(ui_state.ch_entry_digits >= CH_ENTRY_MAX_DIGITS)
+        _ui_chEntryConfirm(sync_rtx);
+}
+
+static void _ui_fsm_menuMacro(kbd_msg_t msg, bool *sync_rtx);
+
+/**
+ * Number keys in memory mode:
+ * - short press, on release: type a channel number; Enter jumps to it, ESC
+ *   cancels, and it jumps on its own after CH_ENTRY_TIMEOUT_MS;
+ * - long press: the function of side key + that number.
+ * In T mode 0 on its own stays the recent calls key, see _ui_tetraKeys().
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_memNumberKeys(kbd_msg_t msg, bool *sync_rtx)
+{
+    bool typing = ui_state.ch_entry_digits > 0;
+
+    // Released before its long press: type it
+    if((memPendingKey != 0) && ((msg.keys & memPendingKey) == 0))
+    {
+        _ui_chEntryDigit(__builtin_ctz(memPendingKey), sync_rtx);
+        memPendingKey = 0;
+        typing = ui_state.ch_entry_digits > 0;
+        if(msg.keys == 0)
+            return true;
+    }
+
+    keyboard_t number = msg.keys & KBD_NUM_MASK;
+    bool oneNumber = (number != 0) && (msg.keys == number)
+                  && ((number & (number - 1)) == 0);
+
+    if(!oneNumber)
+    {
+        if(typing && (msg.keys & KEY_ENTER))
+        {
+            _ui_chEntryConfirm(sync_rtx);
+            return true;
+        }
+        if(typing && (msg.keys & KEY_ESC))
+        {
+            _ui_chEntryCancel();
+            return true;
+        }
+        // Any other key gives up the number and does its own thing
+        if(msg.keys != 0)
+            _ui_chEntryCancel();
+        return false;
+    }
+
+    uint8_t digit = input_getPressedNumber(msg);
+
+    #ifdef CONFIG_TETRA
+    if((digit == 0) && !typing && (state.channel.mode == OPMODE_TETRA))
+        return false;
+    #endif
+
+    if(msg.long_press)
+    {
+        memPendingKey = 0;
+        // 0 has no function: still a digit
+        if(digit == 0)
+        {
+            _ui_chEntryDigit(0, sync_rtx);
+            return true;
+        }
+        _ui_chEntryCancel();
+        _ui_fsm_menuMacro(msg, sync_rtx);
+        return true;
+    }
+
+    memPendingKey = number;
+    return true;
+}
+
 static void _ui_fsm_menuMacro(kbd_msg_t msg, bool *sync_rtx)
 {
     // If there is no keyboard left and right select the menu entry to edit
@@ -1823,6 +1948,13 @@ void ui_updateFSM(bool *sync_rtx)
                     state.txDisable = false;
                     *sync_rtx = true;
                 }
+                // Long 9 unlocks the keypad, as side key + 9 does
+                if (ui_state.input_locked && msg.long_press
+                    && (msg.keys == KEY_9))
+                {
+                    ui_state.input_locked = false;
+                    break;
+                }
                 if (ui_state.input_locked)
                     break;
                 // M17 Destination callsign input
@@ -1878,9 +2010,9 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else
                 {
-                    if(_ui_isModeKey(msg))
+                    if(_ui_memNumberKeys(msg, sync_rtx))
                     {
-                        _ui_cycleMode(sync_rtx, queueFlags);
+                        // Channel number, or a long press function
                     }
                     else
                     #ifdef CONFIG_TETRA
@@ -2802,6 +2934,15 @@ void ui_updateFSM(bool *sync_rtx)
     }
     else if(event.type == EVENT_STATUS)
     {
+        // Channel number typed and left: jump to it
+        if(ui_state.ch_entry_digits > 0)
+        {
+            if(state.ui_screen != MAIN_MEM)
+                _ui_chEntryCancel();
+            else if(now - ui_state.ch_entry_tick >= CH_ENTRY_TIMEOUT_MS)
+                _ui_chEntryConfirm(sync_rtx);
+        }
+
 #ifdef CONFIG_GPS
         if ((state.ui_screen == MENU_GPS) &&
             (!vp_isPlaying()) &&
