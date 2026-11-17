@@ -53,13 +53,28 @@ you change on the radio are kept across power off.
 
 ## Quick reference: buttons
 
+The C62's keys have no ESC or Enter labels. This README uses OpenRTX's
+names for them:
+
+| On the radio | Name here |
+|---|---|
+| Green key, top left | **Enter** (also opens the menu) |
+| Red key, top right | **ESC** (back, cancel) |
+| Round key between them | **Up** / **Down** |
+| **P1** / **P2** | F1 / F2 |
+| Button on the side, below the PTT | **side key** |
+
+This follows the order the keypad driver reads the keys in, and is not
+yet confirmed on a radio: if a key does something else, the checklist in
+FIRST_FLASH.md (stage 4) is where to note it.
+
 On the main screen, in any mode:
 
 | Button | Does |
 |---|---|
-| **Menu** (Enter) | Open the menu. The **Channels** entry lists the channels of your channel list |
-| **ESC** | Switch between VFO mode (a frequency) and memory mode (the channel list) |
-| **Up** / **Down** | VFO: step the frequency. Memory: next / previous channel |
+| **Green** (Enter) | Open the menu. The **Channels** entry lists the channels of your channel list |
+| **Red** (ESC) | Switch between VFO mode (a frequency) and memory mode (the channel list) |
+| **Up** / **Down** (round key) | VFO: step the frequency. Memory: next / previous channel |
 | **0** to **9** | VFO: type a frequency, then **Enter**. Memory: type a channel number, see below |
 | Long **1** to **9** | Memory: the side key shortcut of that number, without the side key. Long **9** also unlocks the keypad |
 | Long **5** | VFO: change mode, if 5 is the first digit typed (it is then dropped) |

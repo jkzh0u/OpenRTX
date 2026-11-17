@@ -138,6 +138,10 @@ Moving (a ride, with the laptop):
 
 ## 4. Keys
 
+- [ ] Which key is which: green = Enter (opens the menu), red = ESC (back,
+      and switches VFO / memory mode), round key = Up / Down. If not, note
+      what each one does: the README's names may be wrong
+
 In memory mode:
 
 - [ ] Short **1**–**9** type a channel number (amber on screen); Enter
