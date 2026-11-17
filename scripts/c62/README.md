@@ -474,6 +474,23 @@ radio would make (lines starting with `>>`). A recording holds a single
 carrier, so it shows the decisions, not what the radio would hear
 afterwards. Use `-n` for recordings not made with a C62.
 
+### TETRA settings
+
+**Menu** > **Settings** > **TETRA** switches parts of T mode on and off.
+Select a line, press **green**, then **Up** turns it on and **Down** off;
+**green** again or **red** to finish. Like the other settings they are
+kept at power off, and all are on at first.
+
+| Setting | On | Off |
+|---|---|---|
+| Follow calls | Follows a call to the carrier the network moves it to (Call following above) | Stays on the main carrier: calls on other carriers are shown but not heard |
+| Cell tracking | Moves between cells by itself (Cell tracking above) | Stays on the channel you picked. A long **0** still searches once |
+| Alarm beep | An alarm call beeps three times and turns the screen red | Red screen only |
+| Keep filter | Starts with the talkgroup filter of the last power off | Starts at `TG All` |
+
+Follow calls and Cell tracking only do something in a firmware built with
+them, which is the default (`C62_TETRA_FOLLOW`, `C62_TETRA_ROAM`).
+
 ### Receive log
 
 The radio writes a line for each thing the TETRA receiver decodes or

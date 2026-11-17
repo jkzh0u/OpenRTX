@@ -133,6 +133,10 @@ Options: `-DC62_TETRA_FOLLOW=ON`
 - [ ] `filtered out` calls are not followed when a filter is set (# / \*)
 - [ ] Still no `samples lost` lines during calls
 
+- [ ] **Settings** > **TETRA** > Follow calls OFF: the next call on
+      another carrier shows `following off` in the log and the radio stays
+      home. Back ON afterwards
+
 If following misbehaves, save the log around it: the `retune` lines and
 what came before them are what is needed to fix it.
 
@@ -152,6 +156,9 @@ Standing still:
 - [ ] Audio of a call in progress clicks at most during the search
 - [ ] **Field test** shows the measurement (`Measured …s ago`), the
       cell received in green with a `*`, and `Tracking: on the cell`
+
+- [ ] **Settings** > **TETRA** > Cell tracking OFF: no `roam:` lines while
+      standing still; a long **0** still searches once. Back ON afterwards
 
 Moving (a ride, with the laptop):
 
@@ -181,6 +188,12 @@ In memory mode:
 - [ ] Long **9** locks the keypad, long **9** again unlocks it
 - [ ] **Menu** > **Field test** scrolls with Up / Down, **green** searches,
       **red** goes back
+- [ ] **Settings** > **TETRA**: **green** on a line, then Up / Down switch
+      it on and off, **green** or **red** finishes
+- [ ] Keep filter: pick a filter with **#**, turn off and on: it starts on
+      that filter. With Keep filter OFF it starts at `TG All`
+- [ ] **Menu** > **About**: `C62 fork:`, `Jackson Zhou` and `jkzhou.ca`
+      first, then the OpenRTX authors
 - [ ] In T mode: short **0** opens the recent calls (on release), long
       **0** searches; short **#** / **\*** change the filter (on release),
       long **#** holds a talkgroup
