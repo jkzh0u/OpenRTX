@@ -25,8 +25,9 @@ just before.
       cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --read 0x0:0x400000:backup.bin
 
 - [ ] Copy `backup.bin` somewhere other than the laptop (cloud, USB stick)
-- [ ] A strong TTC cell you can test at, standing still (a station or near
-      one), and its frequency in the channel list
+- [ ] A strong TETRA cell you can test at, standing still, and its
+      frequency in your channel list (`OpenRTX/scripts/c62/channels/`:
+      `ttc_tetra.h` for Toronto, or your own from `example.h`)
 
 To go back to the stock firmware at any point, flash the backup at 0:
 
@@ -44,7 +45,12 @@ Each stage below gives the build options. Build, then flash:
 
     cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
         0x100000 OpenRTX/build_c62/zephyr/dsp_firmware.bin \
+        0x2c0000 OpenRTX/build_c62/zephyr/channels.bin \
         0x000000 OpenRTX/build_c62/zephyr/zephyr.bin
+
+`C62_CHANNELS` builds the channel list image `channels.bin` next to the
+firmware; use your own list in its place (README section 6). The list only
+needs flashing again when it changes.
 
 Then start the log and leave it running for the whole stage:
 
@@ -67,6 +73,8 @@ Boot and basics:
 
 T mode on the strong cell (memory mode, its channel):
 
+- [ ] `Channel list: N channels, N TETRA names` at boot, with your list's
+      numbers; memory mode shows its channels
 - [ ] `start on <frequency>, filter All` in the log
 - [ ] `sync locked` within a few seconds, and the screen shows the station
 - [ ] A `cell` line with MCC-MNC 302-2013 and the right location area
@@ -81,7 +89,7 @@ T mode on the strong cell (memory mode, its channel):
 - [ ] Speech heard for a clear call on the main carrier, without chopping
 - [ ] Leave it 15 minutes: no crash or reboot (a reboot shows the
       `TETRA log` line again)
-- [ ] Settings are kept: change the brightness, be on the TTC channel in T
+- [ ] Settings are kept: change the brightness, be on your TETRA channel in T
       mode, turn the knob off, wait 5 s, turn it on. Same brightness, and
       it starts on that frequency in T mode (in VFO mode). If it starts on
       430.000 M17 instead, the save failed: note any `nvmem:` line in the

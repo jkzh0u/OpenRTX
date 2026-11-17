@@ -16,7 +16,14 @@
  * above, which together match the eight frequencies RadioReference lists
  * for its underground site.
  *
- * Build the C62 firmware with -DC62_CHANNELS=scripts/c62/channels/ttc_tetra.h
+ * An example of a full list. Build its image and flash it next to the
+ * firmware (scripts/c62/README.md, section 6):
+ *
+ *     python3 scripts/chlist.py scripts/c62/channels/ttc_tetra.h \
+ *         -o channels.bin
+ *     cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
+ *         0x2c0000 channels.bin
+ *
  * Names show 12 characters on the main screen.
  *
  * Format: CPS_CHANNEL("Name", frequency in Hz, operating mode), then the

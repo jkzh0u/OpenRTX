@@ -11,9 +11,11 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
 - receives **FM** and **M17**, and **TETRA** downlinks ("T" mode): it decodes
   calls, plays clear speech, shows short messages, follows calls to other
   carriers and moves between cells of the network by itself (section 5);
-- can hold a **channel list** built into the firmware, with **talkgroup
-  names** and **filters** chosen on the radio (section 6). The list for the
-  Toronto Transit Commission network is included;
+- reads a **channel list** you flash next to the firmware, with TETRA
+  **talkgroup names** and **filters** chosen on the radio (section 6): one
+  firmware for everyone, each with their own list. An example list and a
+  full one for the Toronto Transit Commission network are included;
+- **saves its settings** and the channel in use at power off;
 - has a **recent calls** list with details, a **last heard** line, **talk
   time**, a talkgroup **hold**, **alarm** alerts, a decoding quality meter
   and colour in T mode, and plays one call at a time;
@@ -21,8 +23,33 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
 - builds with Docker (section 1), and its screens can be previewed on a
   computer (section 7).
 
-It is receive only in T mode, and cannot store settings yet: it starts in
-VFO mode on 430.000 MHz, M17, filter `TG All`, after every power on.
+It is receive only in T mode. The talkgroup filter starts at `TG All`
+after every power on.
+
+## Quick start
+
+1. **Get an FT232R programming cable** (USB ID `0403:6001`) with a 2-pin
+   Kenwood plug, and install
+   [`cskburn`](https://github.com/LISTENAI/cskburn/releases) (section 2).
+2. **Back up your radio's flash** before anything else (section 2). It holds
+   calibration unique to your radio, and is the only way back to the stock
+   firmware.
+3. **Build the firmware** with Docker (section 1). It is the same for
+   everyone.
+4. **Write your channel list**: copy
+   [`channels/example.h`](channels/example.h), put in your channels and
+   talkgroups, and build its image with
+   `python3 scripts/chlist.py my_channels.h -o channels.bin` (section 6).
+   [`channels/ttc_tetra.h`](channels/ttc_tetra.h) is a full example for
+   Toronto.
+5. **Flash** the firmware, the DSP image and your list (section 2). For a
+   first flash, follow [FIRST_FLASH.md](FIRST_FLASH.md), which turns the
+   features on in stages.
+6. **Watch the log** with `scripts/c62_log.py` over the same cable
+   (section 5, Receive log) to see what the receiver does.
+
+Later, a new list only needs step 4 and flashing `channels.bin`; settings
+you change on the radio are kept across power off.
 
 ## Quick reference: buttons
 
@@ -30,7 +57,7 @@ On the main screen, in any mode:
 
 | Button | Does |
 |---|---|
-| **Menu** (Enter) | Open the menu. The **Channels** entry lists the built-in channels |
+| **Menu** (Enter) | Open the menu. The **Channels** entry lists the channels of your channel list |
 | **ESC** | Switch between VFO mode (a frequency) and memory mode (the channel list) |
 | **Up** / **Down** | VFO: step the frequency. Memory: next / previous channel |
 | **0** to **9** | VFO: type a frequency, then **Enter**. Memory: type a channel number, see below |
@@ -122,6 +149,7 @@ The outputs are:
 |---|---|
 | `OpenRTX/build_c62/zephyr/zephyr.bin` | `0x000000` |
 | `OpenRTX/build_c62/zephyr/dsp_firmware.bin` (downloaded, hash-checked) | `0x100000` |
+| `OpenRTX/build_c62/zephyr/channels.bin`, with `-DC62_CHANNELS=` (section 6) | `0x2c0000` |
 
 Run the same `docker run` command after each code change. The build is
 incremental.
@@ -146,7 +174,7 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | `C62_TETRA_ROAM` | `ON` | Move to the best TETRA cell as the radio moves, search when the signal is lost (section 5) |
 | `C62_TETRA_LOG` | `ON` | TETRA receive log over the UART, and the last lines kept in PSRAM (section 5, Receive log) |
 | `C62_TETRA_LOG_HISTORY` | `262144` | Bytes of log kept in PSRAM |
-| `C62_CHANNELS` | empty | Channel list built into the firmware, for memory mode (section 6) |
+| `C62_CHANNELS` | empty | Also build the channel list image `channels.bin` from this list (section 6). The firmware itself holds no channels |
 | `C62_REG43_SWEEP` | `OFF` | Cycle `REG_43` through 7 test values in M17 RX |
 | `C62_REG43_SWEEP_MS` | `1400` | Recorded time per sweep value (one burst covers all 7 values) |
 
@@ -195,6 +223,9 @@ cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --read 0x0:0x400000:backup.bin
 cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
     0x100000 OpenRTX/build_c62/zephyr/dsp_firmware.bin \
     0x000000 OpenRTX/build_c62/zephyr/zephyr.bin
+
+# Your channel list, once and whenever it changes (section 6)
+cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all 0x2c0000 channels.bin
 ```
 
 ## 3. Capture the RX baseband
@@ -487,87 +518,135 @@ The kept lines are lost at power off. Zephyr and the DSP print on the same
 line, mostly at boot. `-DC62_TETRA_LOG=OFF` builds without the log, and
 `-DC62_TETRA_LOG_HISTORY=` sets how many bytes are kept.
 
-## 6. Memory channels
+## 6. Channels and settings
+
+### Saved settings
 
 The radio saves the menu settings (brightness, squelch, timers and so on)
 and the channel in use when you turn it off with the knob, and starts with
 them. The channel comes back in VFO mode: a memory channel you were on
-returns as its frequency and mode, so T mode on a TTC cell starts receiving
-again by itself. The talkgroup filter and hold start from `All`.
+returns as its frequency and mode, so T mode on a TETRA cell starts
+receiving again by itself. The talkgroup filter and hold start from `All`.
 
 The first start, or a firmware whose settings layout changed, uses the
 defaults: VFO mode on 430.000 MHz, M17. They are stored with Zephyr's NVS
-in the first 16 kB of the flash area at `0x2b0000`, which the stock
-firmware leaves empty; the calibration at `0x3b0000` is never written.
-Settings are written only at power off, and only what changed. Taking the
-battery out while on keeps the last saved ones.
+in the flash area at `0x2b0000`, which the stock firmware leaves empty; the
+calibration at `0x3b0000` is never written. Settings are written only at
+power off, and only what changed. Taking the battery out while on keeps the
+last saved ones.
 
-The C62 build cannot store channels: a channel list can be built into the
-firmware instead, read only:
+### Channel lists
 
-```bash
-docker run --rm -it --user "$(id -u):$(id -g)" -v "$PWD":/work openrtx-c62 \
-    c62-build -DC62_CHANNELS=scripts/c62/channels/ttc_tetra.h
-```
+Memory mode channels, and the names and filters of TETRA talkgroups, come
+from a **channel list** flashed on its own at `0x2c0000`, next to the
+firmware. The firmware holds none: everyone flashes the same firmware and
+their own list, and changing the list does not need a new firmware.
 
-CMake remembers the option, so later builds keep the list. In VFO mode
-press **ESC** for memory mode, then **Up** and **Down** to step through the
-channels, and **ESC** again to return to VFO mode. The **Channels** entry
-of the menu lists them too. Each channel sets its own mode, so a TETRA
-channel starts T mode directly.
-
-`scripts/c62/channels/ttc_tetra.h` holds the Toronto Transit Commission
-TETRA network: the three carriers RadioReference lists as control channels
-at each of its 10 surface sites, named after the site, then the control
-channels of the 13 underground subway zones (`Z1 Kipling` to `Z13 VMC`).
-Usually one carrier per surface site carries the control channel and
-synchronisation: that is the one where the radio locks, and line 2 then
-names the site, e.g. `T CN Tower`. The zones reuse four frequencies, so
-underground the one you receive depends on where you are. Any of them is a
-good start: cell tracking (section 5) moves the radio to the best cell and
-follows it from zone to zone, and searches all these channels when the
-signal is lost.
-
-To make a list of your own, copy that file and keep one entry per line:
+A list is a text file, one entry per line. Start from
+[`channels/example.h`](channels/example.h):
 
 ```c
-CPS_CHANNEL("Name", 422662500, OPMODE_TETRA)
+CPS_CHANNEL("NOAA WX 1", 162550000, OPMODE_FM)
+CPS_CHANNEL("TETRA Site 1", 390012500, OPMODE_TETRA)
 ```
 
-with the name (12 characters show on screen), the frequency in Hz and
-`OPMODE_FM`, `OPMODE_M17` or `OPMODE_TETRA`. Channels are receive only.
+with the name (ASCII, 12 characters show on screen), the frequency in Hz
+and `OPMODE_FM`, `OPMODE_M17` or `OPMODE_TETRA`. Channels are receive only.
+
+Turn the list into an image and check it, with Python 3 and nothing else:
+
+```bash
+python3 OpenRTX/scripts/chlist.py my_channels.h -o channels.bin
+python3 OpenRTX/scripts/chlist.py --show channels.bin
+```
+
+The script stops with the line number of anything it cannot read. Then
+flash the image, radio in burn mode (section 2):
+
+```bash
+cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all 0x2c0000 channels.bin
+```
+
+To flash it with the firmware, add `0x2c0000 channels.bin` to the firmware
+command. A build with `-DC62_CHANNELS=my_channels.h` (relative to the
+OpenRTX folder) also writes the image as `OpenRTX/build_c62/zephyr/
+channels.bin`.
+
+At power on the radio checks the image (a CRC over all of it) and prints
+`Channel list: N channels, N TETRA names` on the log line. With no list, or
+a damaged one, it has no memory channels and shows TETRA numbers instead
+of names; everything else works. To remove a list, flash an empty one: an
+image built from an empty file.
+
+In VFO mode press **ESC** for memory mode, then **Up** and **Down**, or
+type the channel number (quick reference), and **ESC** again to return to
+VFO mode. The **Channels** entry of the menu lists them too. Each channel
+sets its own mode, so a TETRA channel starts T mode directly.
 
 ### Talkgroups
 
-The same file can name TETRA talkgroups and radios, and sort them into
+The same list can name TETRA talkgroups and radios, and sort them into
 filters you choose on the radio:
 
 ```c
-TETRA_FILTER(SUBWAY, "Subway")
-TETRA_FILTER(LINE1, "Line 1")
+TETRA_FILTER(OPS, "Operations")
+TETRA_FILTER(MAINT, "Maintenance")
 
-TETRA_ID(100010, "Line1 Line Calls", TF(SUBWAY) | TF(LINE1))
-TETRA_ID(101011, "Transit Control", TF(CONTROL))
-TETRA_ID(60002, "Red Alarm", TF_EVERY | TF_ALARM)
+TETRA_ID(1001, "Dispatch", TF(OPS))
+TETRA_ID(2001, "Maint Crew", TF(MAINT))
+TETRA_ID(9999, "Emergency", TF_EVERY | TF_ALARM)
 ```
 
 `TETRA_FILTER` defines a filter, in the order the radio steps through
-them. `TETRA_ID` gives an SSI (the decimal ID), a name of up to 16
-characters and the filters it belongs to: `TF()` of each, `TF_EVERY` for
-all of them, `0` for none, plus `TF_ALARM` for an alarm talkgroup. The
-call screen, last heard line, recent calls and short messages show the
-names instead of numbers.
+them, up to 30. `TETRA_ID` gives an SSI (the decimal ID), a name of up to
+16 characters and the filters it belongs to: `TF()` of each, `TF_EVERY` for
+all of them, `0` for none, plus `TF_ALARM` for an alarm talkgroup, whose
+calls turn the screen red and sound three beeps. The call screen, last
+heard line, recent calls and short messages show the names instead of
+numbers.
 
 In T mode, **#** selects the next filter and **\*** the previous one. The
 top bar shows it: `TG All` in white lets every call through, any other
 filter is shown in yellow. A call gets through when its talkgroup, or for
 a call between two radios either radio, is in the filter. Its voice, call
-screen and call following go with it. The radio starts at `TG All` after
-power on. A long **#** holds one talkgroup instead, see the quick
-reference.
+screen and call following go with it. A long **#** holds one talkgroup
+instead, see the quick reference.
 
-`ttc_tetra.h` names the 137 TTC talkgroups and radios RadioReference lists
-and defines these filters:
+A range of identities can be named and filtered at once, for radios that
+follow a numbering plan. Entries of their own still come first:
+
+```c
+TETRA_ID_RANGE(500001, 500999, "Unit %u", 500000, TF(OPS))
+```
+
+names 500123 `Unit 123`: the name has one `%u`, which gets the SSI minus the
+base.
+
+Location areas can be named too, once you know them (the cell screen shows
+`LA <n>` until then):
+
+```c
+TETRA_LA(1, "Downtown")
+```
+
+### Example: Toronto Transit Commission
+
+[`channels/ttc_tetra.h`](channels/ttc_tetra.h) is a full list for the TTC's
+TETRA network (MCC 302, MNC 2013): the three carriers RadioReference lists
+as control channels at each of its 10 surface sites, named after the site,
+then the control channels of the 13 underground subway zones (`Z1 Kipling`
+to `Z13 VMC`). Usually one carrier per surface site carries the control
+channel and synchronisation: that is the one where the radio locks, and
+line 2 then names the site, e.g. `T CN Tower`. The zones reuse four
+frequencies, so underground the one you receive depends on where you are.
+Any of them is a good start: cell tracking (section 5) moves the radio to
+the best cell and follows it from zone to zone, and searches all these
+channels when the signal is lost.
+
+It names the 137 TTC talkgroups and radios RadioReference lists, every
+train run (`Run 253`, from the pattern of the runs RadioReference lists:
+100000 plus the run number, whose first digit is the line; Line 4 runs are
+assumed to follow it), and defines these filters:
 
 | Filter | Talkgroups |
 |---|---|
@@ -581,27 +660,7 @@ and defines these filters:
 | Maintenance | Signals, wayside, track, structures, radio techs, janitors, PRESTO, fire prevention |
 | Security | Transit Enforcement, Special Constables |
 
-`Red Alarm` and `911 Announce` come through every filter, and are alarms:
-their calls turn the screen red and sound three beeps.
-
-A range of identities can be named and filtered at once, for radios that
-follow a numbering plan. Entries of their own still come first:
-
-```c
-TETRA_ID_RANGE(100201, 100299, "Run %u", 100000, TF(SUBWAY) | TF(LINE2))
-```
-
-names 100253 `Run 253`: the format gets the SSI minus the base. The TTC
-list names every train run this way, from the pattern of the runs
-RadioReference lists (100000 plus the run number, whose first digit is the
-line). Line 4 runs are assumed to follow it.
-
-Location areas can be named too, once you know them (the cell screen shows
-`LA <n>` until then):
-
-```c
-TETRA_LA(39, "Eglinton east")
-```
+`Red Alarm` and `911 Announce` come through every filter, and are alarms.
 
 ## 7. Preview the screen
 
