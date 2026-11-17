@@ -14,6 +14,9 @@ just before.
 ## 0. Before you start
 
 - [ ] `cskburn` installed, `pyserial` installed (`pip install pyserial`)
+- [ ] The cable is an **FT232R** (USB ID `0403:6001`), not just "FTDI":
+      an FT231X (`0403:6015`, e.g. BTECH PC03) is reported to fail with
+      `E5003: Failed to load RAM burner`. How to check: README section 2
 - [ ] Programming cable works: `cskburn` in burn mode answers (README
       section 2: radio off, hold the lower side key, power on, release)
 - [ ] **Back up the radio's own flash**, before any flashing. It holds data
@@ -149,6 +152,9 @@ In VFO mode:
 
 ## If something goes wrong
 
+- **`cskburn` handshakes, then `E5003: Failed to load RAM burner`:** the
+  cable, not the firmware. Check it is an FT232R (`0403:6001`), see
+  README section 2.
 - **No log at all:** check the port and 115200 baud. If the radio works
   otherwise, build with `-DC62_TETRA_LOG=OFF`: if the radio now works
   better, the log is the problem.

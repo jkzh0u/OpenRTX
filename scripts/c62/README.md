@@ -173,6 +173,21 @@ main PTT while flashing: it shares the boot ROM's UART RX line. `cskburn`
 resets the radio after each command, so enter burn mode again before each
 one.
 
+**The cable must use an FTDI FT232R chip (USB ID `0403:6001`).** "Genuine
+FTDI" is not enough. A cable with an FT231X (`0403:6015`), such as the BTECH
+PC03, has been reported to pass the boot ROM handshake and then fail every
+flash operation with `ERROR [E5003]: Failed to load RAM burner`, while an
+FT232R cable (DTECH K1) worked first time. That error looks like a software
+problem, so check the cable's ID before debugging anything else:
+
+```bash
+system_profiler SPUSBDataType | grep -B4 "Vendor ID: 0x0403"  # macOS: Product ID: 0x6001
+lsusb | grep 0403                                           # Linux: 0403:6001
+```
+
+On Windows: Device Manager, the port's Properties, Details, Hardware Ids
+(`VID_0403&PID_6001`).
+
 ```bash
 # Once, before anything else: back up your radio's own flash (it is per-unit)
 cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --read 0x0:0x400000:backup.bin
