@@ -54,7 +54,8 @@ enum uiScreen
     SETTINGS_RESET2DEFAULTS,
     LOW_BAT,
     TETRA_RECENT,
-    TETRA_RECENT_DETAIL
+    TETRA_RECENT_DETAIL,
+    TETRA_FIELD_TEST
 };
 
 enum SetRxTx
@@ -75,6 +76,9 @@ enum menuItems
 #endif
     M_SETTINGS,
     M_INFO,
+#ifdef CONFIG_TETRA
+    M_FIELD_TEST,
+#endif
     M_ABOUT
 };
 

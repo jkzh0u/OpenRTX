@@ -122,6 +122,9 @@ const char *menu_items[] =
 #endif
     "Settings",
     "Info",
+#ifdef CONFIG_TETRA
+    "Field test",
+#endif
     "About"
 };
 
@@ -684,6 +687,7 @@ static void _ui_fsm_confirmVFOInput(bool *sync_rtx)
 /* In ui_main.c */
 extern void _ui_tetraToggleLine1(void);
 extern void _ui_drawTetraRecent(ui_state_t *ui_state);
+extern void _ui_drawTetraFieldTest(ui_state_t *ui_state);
 extern uint32_t _ui_tetraHoldCandidate(void);
 extern uint32_t _ui_tetraRecentSsi(uint8_t index);
 extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
@@ -2141,6 +2145,28 @@ void ui_updateFSM(bool *sync_rtx)
                     state.ui_screen = TETRA_RECENT;
                 }
                 break;
+            // TETRA field test: scrolls; Enter searches for the best signal
+            case TETRA_FIELD_TEST:
+                if(msg.long_press)
+                    break;
+                if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+                {
+                    if(ui_state.menu_selected > 0)
+                        ui_state.menu_selected--;
+                }
+                else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+                {
+                    ui_state.menu_selected++;
+                }
+                else if(msg.keys & KEY_ENTER)
+                {
+                    tetraStatus_requestSearch();
+                }
+                else if(msg.keys & KEY_ESC)
+                {
+                    _ui_menuBack(MENU_TOP);
+                }
+                break;
             #endif
             case MENU_TOP:
                 if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
@@ -2171,6 +2197,11 @@ void ui_updateFSM(bool *sync_rtx)
                         case M_INFO:
                             state.ui_screen = MENU_INFO;
                             break;
+#ifdef CONFIG_TETRA
+                        case M_FIELD_TEST:
+                            state.ui_screen = TETRA_FIELD_TEST;
+                            break;
+#endif
                         case M_ABOUT:
                             state.ui_screen = MENU_ABOUT;
                             break;
@@ -3042,6 +3073,9 @@ bool ui_updateGUI()
             break;
         case TETRA_RECENT_DETAIL:
             _ui_drawTetraRecentDetail(&ui_state);
+            break;
+        case TETRA_FIELD_TEST:
+            _ui_drawTetraFieldTest(&ui_state);
             break;
 #endif
         // Flash backup and restore screen

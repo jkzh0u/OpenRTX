@@ -7,6 +7,7 @@
 #include "interfaces/platform.h"
 #include "interfaces/cps_io.h"
 #include "interfaces/delays.h"
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "ui/ui_default.h"
@@ -16,6 +17,7 @@
 #include "ui/utils.h"
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraIds.h"
+#include "protocols/TETRA/TetraRoam.h"
 #include "protocols/TETRA/TetraStatus.h"
 
 /* An SDS text stays on the main screen this long */
@@ -902,6 +904,220 @@ void _ui_drawTetraRecentDetail(ui_state_t *ui_state)
     point_t hint = { 0, CONFIG_SCREEN_HEIGHT - 3 };
     gfx_print(hint, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, tetraText,
               "Enter: hold   ESC: back");
+}
+
+/* Lines of the field test screen, in a small font */
+#define FIELD_TEST_FONT FONT_SIZE_6PT
+#define FIELD_TEST_ROWS 36
+#define FIELD_TEST_TEXT 40
+
+struct fieldTestRow {
+    char text[FIELD_TEST_TEXT];
+    color_t color;
+};
+
+static struct fieldTestRow fieldTest[FIELD_TEST_ROWS];
+static uint8_t fieldTestRows;
+
+/** Add a line to the field test screen */
+static void _ui_fieldTestRow(color_t color, const char *fmt, ...)
+{
+    if (fieldTestRows >= FIELD_TEST_ROWS)
+        return;
+
+    struct fieldTestRow *r = &fieldTest[fieldTestRows++];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(r->text, sizeof(r->text), fmt, ap);
+    va_end(ap);
+    r->color = color;
+
+    /* Cut what does not fit the screen's width */
+    size_t n = strlen(r->text);
+    while (n > 0
+           && _ui_tetraTextWidth(FIELD_TEST_FONT, r->text)
+                  > CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad)
+        r->text[--n] = '\0';
+}
+
+/** A frequency in MHz, to 10 Hz */
+static const char *_ui_fieldTestMhz(char *buf, size_t len, uint32_t hz)
+{
+    snprintf(buf, len, "%lu.%05lu", (unsigned long)(hz / 1000000),
+             (unsigned long)(hz % 1000000 / 10));
+    return buf;
+}
+
+/** Cell load as a word */
+static const char *_ui_fieldTestLoad(uint8_t load)
+{
+    static const char *const names[] = { "", "low", "medium", "high" };
+    return names[load & 3];
+}
+
+/**
+ * The lines of the field test screen, from the TETRA status.
+ */
+static void _ui_fieldTestFill(const struct tetraStatus *ts, rssi_t rssi,
+                              long long now)
+{
+    char f[16], name[32], age[24];
+    uint16_t room = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad;
+
+    fieldTestRows = 0;
+
+    // Reception
+    if (ts->sync)
+        _ui_fieldTestRow(ts->phaseErr <= 10   ? tetraGood
+                         : ts->phaseErr < 45 ? tetraFair
+                                             : tetraPoor,
+                         "Locked, phase error %u%%", ts->phaseErr);
+    else
+        _ui_fieldTestRow(tetraPoor, "No lock");
+    unsigned slevel = rssiToSlevel(rssi);
+    _ui_fieldTestRow(_ui_tetraTraffic(slevel, 7, 4), "Signal %ld dBm",
+                     (long)rssi);
+    _ui_fieldTestRow(color_white, "Offset %d Hz", ts->carrierHz);
+    _ui_fieldTestRow(ts->overruns != 0 ? tetraWarn : color_white,
+                     "Resyncs %u, lost %u", ts->resyncs,
+                     ts->overruns);
+
+    // Serving cell
+    if (!ts->cell) {
+        _ui_fieldTestRow(tetraMuted, "No cell yet");
+    } else {
+        _ui_fieldTestRow(color_white, "Network %u-%u, CC %u", ts->mcc,
+                         ts->mnc, ts->colourCode);
+        if (ts->sysinfo) {
+            const char *place = tetraIds_laName(ts->la);
+            char prefix[16];
+            snprintf(prefix, sizeof(prefix), "LA %u%s", ts->la,
+                     place ? " " : "");
+            _ui_tetraFit(name, sizeof(name), FIELD_TEST_FONT, room, prefix,
+                         place ? place : "", "");
+            _ui_fieldTestRow(tetraPlace, "%s", name);
+            _ui_fieldTestRow(color_white, "Main %s",
+                             _ui_fieldTestMhz(f, sizeof(f), ts->dlFreq));
+        }
+        if (ts->load != 0)
+            _ui_fieldTestRow(color_white, "Load %s",
+                             _ui_fieldTestLoad(ts->load));
+        if (ts->airEncryption)
+            _ui_fieldTestRow(tetraWarn, "Air encryption");
+    }
+    if (ts->tunedHz != 0 && ts->tunedHz != ts->dlFreq)
+        _ui_fieldTestRow(color_white, "Tuned %s",
+                         _ui_fieldTestMhz(f, sizeof(f), ts->tunedHz));
+    if (ts->followHz != 0)
+        _ui_fieldTestRow(tetraVoice, "Following %s",
+                         _ui_fieldTestMhz(f, sizeof(f), ts->followHz));
+
+    // Cell tracking
+    if (ts->roamState != TETRA_STATUS_NO_ROAM) {
+        static const char *const states[] = {
+            "on the cell", "checking neighbours", "measuring all",
+            "trying a carrier", "nothing found, waiting",
+        };
+        _ui_fieldTestRow(ts->roamState == TETRA_ROAM_LOCKED ? color_white
+                                                            : tetraWarn,
+                         "Tracking: %s",
+                         ts->roamState < sizeof(states) / sizeof(states[0])
+                             ? states[ts->roamState]
+                             : "?");
+    }
+
+    // Network time
+    if (ts->time) {
+        uint32_t t = (uint32_t)((ts->timeOfDay + (now - ts->timeTick) / 1000)
+                                % 86400);
+        _ui_fieldTestRow(color_white, "Time %02lu:%02lu:%02lu%s",
+                         (unsigned long)(t / 3600),
+                         (unsigned long)(t / 60 % 60),
+                         (unsigned long)(t % 60),
+                         ts->timeLocal ? "" : " UTC");
+    }
+
+    // Neighbour cells
+    if (ts->nNeighbours != 0) {
+        _ui_fieldTestRow(tetraMuted, "Neighbours: %u", ts->nNeighbours);
+        for (uint8_t i = 0; i < ts->nNeighbours; i++) {
+            const struct tetraStatusNeighbour *nb = &ts->neighbour[i];
+            char prefix[32];
+            const char *place = NULL;
+
+            if (nb->freq != 0)
+                _ui_fieldTestMhz(f, sizeof(f), nb->freq);
+            else
+                snprintf(f, sizeof(f), "carrier %u", nb->carrier);
+            if (nb->other)
+                place = "other net";
+            else if (nb->la != 0xffff)
+                place = tetraIds_laName(nb->la);
+            if (place == NULL && nb->la != 0xffff) {
+                snprintf(prefix, sizeof(prefix), "%s LA %u", f, nb->la);
+                _ui_fieldTestRow(color_white, "%s", prefix);
+                continue;
+            }
+            snprintf(prefix, sizeof(prefix), "%s%s", f, place ? " " : "");
+            _ui_tetraFit(name, sizeof(name), FIELD_TEST_FONT, room, prefix,
+                         place ? place : "", "");
+            _ui_fieldTestRow(nb->other ? tetraMuted : color_white, "%s",
+                             name);
+        }
+    }
+
+    // Last measurement by cell tracking
+    if (ts->nMeasured != 0) {
+        _ui_tetraAge(age, sizeof(age), now - ts->measuredTime);
+        _ui_fieldTestRow(tetraMuted, "Measured %s ago", age);
+        for (uint8_t i = 0; i < ts->nMeasured; i++) {
+            const struct tetraStatusMeasured *m = &ts->measured[i];
+            bool serving = m->freq == ts->tunedHz;
+            _ui_fieldTestRow(serving ? tetraGood : color_white, "%s %d dBm%s",
+                             _ui_fieldTestMhz(f, sizeof(f), m->freq), m->rssi,
+                             serving ? " *" : "");
+        }
+    } else if (ts->roamState != TETRA_STATUS_NO_ROAM) {
+        _ui_fieldTestRow(tetraMuted, "Not measured yet");
+    }
+}
+
+/**
+ * Field test: what the receiver knows about the cell, its neighbours and
+ * the signal, for checking reception. Scrolls; Enter searches for the best
+ * signal, as long 0 does.
+ */
+void _ui_drawTetraFieldTest(ui_state_t *ui_state)
+{
+    struct tetraStatus ts;
+
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Field test");
+    if (last_state.channel.mode != OPMODE_TETRA) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  tetraMuted, "Not in T mode");
+        return;
+    }
+
+    tetra_getStatus(&ts);
+    _ui_fieldTestFill(&ts, last_state.rssi, getTick());
+
+    // Rows that fit, scrolled without going past the last one
+    uint16_t rowH = gfx_getFontHeight(FIELD_TEST_FONT) + 3;
+    point_t pos = { layout.horizontal_pad,
+                    (uint16_t)(layout.top_h + rowH + 1) };
+    uint8_t rows = (CONFIG_SCREEN_HEIGHT - 1 - pos.y) / rowH + 1;
+    uint8_t maxFirst = fieldTestRows > rows ? fieldTestRows - rows : 0;
+    if (ui_state->menu_selected > maxFirst)
+        ui_state->menu_selected = maxFirst;
+
+    for (uint8_t i = ui_state->menu_selected;
+         i < fieldTestRows && pos.y < CONFIG_SCREEN_HEIGHT; i++) {
+        gfx_print(pos, FIELD_TEST_FONT, TEXT_ALIGN_LEFT, fieldTest[i].color,
+                  "%s", fieldTest[i].text);
+        pos.y += rowH;
+    }
 }
 
 /**
