@@ -85,8 +85,17 @@ static int battery_init(void)
     return 0;
 }
 
+#ifdef CONFIG_TETRA_LOG
+/* tetra_log_c62.c */
+extern void c62_tetraLogInit(void);
+#endif
+
 void platform_init_csk6()
 {
+#ifdef CONFIG_TETRA_LOG
+    c62_tetraLogInit();
+#endif
+
     // Configure the PTT key as input with pull-up
     gpio_pin_configure_dt(&button_ptt, GPIO_INPUT);
 

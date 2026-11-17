@@ -50,7 +50,7 @@ target_sources(app
 #   C62_REG43_SWEEP_MS. Use it with the dump to measure each setting.
 #
 option(C62_WIDE_RX "Widest BK4819 RX filter in M17 mode" ON)
-option(C62_BASEBAND_DUMP "Stream raw RX baseband over UART" ON)
+option(C62_BASEBAND_DUMP "Stream raw RX baseband over UART" OFF)
 # The C62 programming cables top out at 115200 baud (11.5 kB/s), far below
 # the 96 kB/s of a 48 kHz s16 stream: use burst mode there. Streaming needs
 # at least 1500000 baud for s16 or 921600 for 12-bit samples.
@@ -77,6 +77,15 @@ option(C62_TETRA_FOLLOW "TETRA call following" ON)
 #   (openrtx/include/protocols/TETRA/TetraRoam.h), and search the network's
 #   carriers when the signal is lost. OFF to stay on the tuned frequency.
 option(C62_TETRA_ROAM "TETRA cell tracking" ON)
+# C62_TETRA_LOG: a text line for each thing the TETRA receiver decodes or
+#   decides (lock, cell, calls, retunes, cell moves) on the console UART,
+#   at 115200 baud, and the last C62_TETRA_LOG_HISTORY bytes of them kept in
+#   PSRAM, sent with side key + 0. See openrtx/include/protocols/TETRA/
+#   TetraLog.h and scripts/c62_log.py. It uses the same UART as
+#   C62_BASEBAND_DUMP: build with one or the other.
+option(C62_TETRA_LOG "TETRA receive log over UART" ON)
+set(C62_TETRA_LOG_HISTORY 262144 CACHE STRING
+    "TETRA log kept in PSRAM, bytes")
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
 # C62_CHANNELS: channel list built into the firmware, for memory mode (the
 #   C62 has no codeplug storage yet): a header of CPS_CHANNEL() entries,
@@ -139,6 +148,19 @@ if(C62_TETRA)
   endif()
   if(C62_TETRA_ROAM)
     target_compile_definitions(app PRIVATE CONFIG_TETRA_ROAM)
+  endif()
+  if(C62_TETRA_LOG)
+    if(C62_BASEBAND_DUMP)
+      message(FATAL_ERROR "C62_TETRA_LOG and C62_BASEBAND_DUMP both use the "
+                          "console UART: build with -DC62_BASEBAND_DUMP=OFF "
+                          "for the log or -DC62_TETRA_LOG=OFF for the dump")
+    endif()
+    target_sources(app PRIVATE
+      ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraLog.c
+      ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraLogEvents.c
+      ${OPENRTX_ROOT}/platform/targets/c62/tetra_log_c62.c)
+    target_compile_definitions(app PRIVATE CONFIG_TETRA_LOG
+      C62_TETRA_LOG_HISTORY=${C62_TETRA_LOG_HISTORY})
   endif()
 
   if(C62_TETRA_SPEECH)
