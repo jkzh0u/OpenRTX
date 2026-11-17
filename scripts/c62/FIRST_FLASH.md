@@ -11,6 +11,11 @@ On a Mac the cable shows up as `/dev/tty.usbserial-…` or similar
 Tick each box. When one fails, stop, save the log, and note what you did
 just before.
 
+Keys are named as in the README: **green** = Enter, **red** = ESC, the
+round key = Up / Down, **side key** = the button below the PTT. Stage 4
+checks that these names are right; until then, if a key does something
+else, note it and carry on.
+
 ## 0. Before you start
 
 - [ ] `cskburn` installed, `pyserial` installed (`pip install pyserial`)
@@ -25,11 +30,18 @@ just before.
       cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --read 0x0:0x400000:backup.bin
 
 - [ ] Copy `backup.bin` somewhere other than the laptop (cloud, USB stick)
-- [ ] A strong TETRA cell you can test at, standing still, and its
-      frequency in your channel list (`OpenRTX/scripts/c62/channels/`:
-      `ttc_tetra.h` for Toronto, or your own from `example.h`)
+- [ ] Your channel list, with the frequency of a strong TETRA cell you can
+      test at standing still: `OpenRTX/scripts/c62/channels/ttc_tetra.h`
+      for Toronto, or your own made from `example.h` (README section 6).
+      Check it builds and holds what you expect:
 
-To go back to the stock firmware at any point, flash the backup at 0:
+      python3 OpenRTX/scripts/chlist.py my_channels.h -o channels.bin
+      python3 OpenRTX/scripts/chlist.py --show channels.bin
+
+
+To go back to the stock firmware at any point, flash the backup at 0. It
+covers the whole flash, so it also removes the channel list and the saved
+settings:
 
     cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all 0x000000 backup.bin
 
@@ -43,14 +55,18 @@ Each stage below gives the build options. Build, then flash:
         openrtx-c62 c62-build -DC62_CHANNELS=scripts/c62/channels/ttc_tetra.h \
         <stage options>
 
+(put your own list after `-DC62_CHANNELS=`, relative to the `OpenRTX`
+folder.)
+
     cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
         0x100000 OpenRTX/build_c62/zephyr/dsp_firmware.bin \
         0x2c0000 OpenRTX/build_c62/zephyr/channels.bin \
         0x000000 OpenRTX/build_c62/zephyr/zephyr.bin
 
 `C62_CHANNELS` builds the channel list image `channels.bin` next to the
-firmware; use your own list in its place (README section 6). The list only
-needs flashing again when it changes.
+firmware. The list only needs flashing the first time and when it
+changes: from stage 2 on, the `0x2c0000` line can be left out. Enter burn
+mode again before every `cskburn` command.
 
 Then start the log and leave it running for the whole stage:
 
@@ -69,15 +85,21 @@ Boot and basics:
 - [ ] Keys respond; volume knob works
 - [ ] The log shows `TETRA log, 256 kB kept, side key + 0 sends them`
       (if nothing at all appears, see "No log" below)
-- [ ] FM: a known FM signal is heard (side key + 5 to change mode)
+- [ ] FM: a known FM signal is heard (side key + 5 changes mode)
+
+Channel list (printed at boot, near the `TETRA log` line):
+
+- [ ] `Channel list: N channels, N TETRA names` at boot, with the numbers
+      `--show` gave. `none flashed` or `not used` means the image is
+      missing or damaged: see below
+- [ ] **Red** switches to memory mode, which shows your channels; **Up** /
+      **Down** step through them
 
 T mode on the strong cell (memory mode, its channel):
-
-- [ ] `Channel list: N channels, N TETRA names` at boot, with your list's
-      numbers; memory mode shows its channels
 - [ ] `start on <frequency>, filter All` in the log
 - [ ] `sync locked` within a few seconds, and the screen shows the station
-- [ ] A `cell` line with MCC-MNC 302-2013 and the right location area
+- [ ] A `cell` line with your network's MCC-MNC (302-2013 for the TTC) and
+      a location area
 - [ ] A `signal` line every 10 s: `locked`, phase error mostly 10% or
       less (above 45% the meter shows no decoding)
 - [ ] **No `samples lost: resync` lines**, or only a rare one. Many of them
@@ -85,15 +107,18 @@ T mode on the strong cell (memory mode, its channel):
 - [ ] **Menu** > **Field test**: the same network, location area and main
       carrier as the log; neighbours listed after a few seconds; the
       network time matches the clock
-- [ ] `call … setup` lines when the network is busy, with talkgroup names
+- [ ] `call … setup` lines when the network is busy, with the talkgroup
+      names of your list
 - [ ] Speech heard for a clear call on the main carrier, without chopping
 - [ ] Leave it 15 minutes: no crash or reboot (a reboot shows the
       `TETRA log` line again)
-- [ ] Settings are kept: change the brightness, be on your TETRA channel in T
-      mode, turn the knob off, wait 5 s, turn it on. Same brightness, and
-      it starts on that frequency in T mode (in VFO mode). If it starts on
-      430.000 M17 instead, the save failed: note any `nvmem:` line in the
-      log
+- [ ] Settings are kept: change the brightness (side key + 7 / 8), be on
+      your TETRA channel in T mode, turn the knob off, wait 5 s, turn it
+      on. Same brightness, and it starts on that frequency in T mode (in
+      VFO mode). If it starts on 430.000 M17 instead, the save failed: note
+      any `nvmem:` line in the log
+- [ ] Turn off and on twice more, changing the brightness each time: the
+      last one is kept each time
 
 ## 2. Call following
 
@@ -138,19 +163,24 @@ Moving (a ride, with the laptop):
 
 ## 4. Keys
 
-- [ ] Which key is which: green = Enter (opens the menu), red = ESC (back,
-      and switches VFO / memory mode), round key = Up / Down. If not, note
-      what each one does: the README's names may be wrong
+- [ ] Which key is which: **green** opens the menu (Enter), **red** goes
+      back and switches VFO / memory mode (ESC), the round key steps Up /
+      Down, the **side key** below the PTT works the shortcuts (side key +
+      number). If not, note what each key does instead, including **P1**
+      and **P2**: the README's names, and maybe the key handling, need
+      fixing
 
 In memory mode:
 
-- [ ] Short **1**–**9** type a channel number (amber on screen); Enter
-      jumps, ESC cancels, it jumps on its own after 2 s
+- [ ] Short **1**–**9** type a channel number (amber on screen); **green**
+      jumps, **red** cancels, it jumps on its own after 2 s
 - [ ] Channel 10, 20…: in T mode the **0** works once a number is started
 - [ ] A number that is not a channel: nothing changes
 - [ ] Long **5** changes mode; long **6** power; long **7** / **8**
       brightness
 - [ ] Long **9** locks the keypad, long **9** again unlocks it
+- [ ] **Menu** > **Field test** scrolls with Up / Down, **green** searches,
+      **red** goes back
 - [ ] In T mode: short **0** opens the recent calls (on release), long
       **0** searches; short **#** / **\*** change the filter (on release),
       long **#** holds a talkgroup
@@ -172,6 +202,15 @@ In VFO mode:
 - **`cskburn` handshakes, then `E5003: Failed to load RAM burner`:** the
   cable, not the firmware. Check it is an FT232R (`0403:6001`), see
   README section 2.
+- **`Channel list: none flashed`:** nothing valid at `0x2c0000`; flash
+  `channels.bin` there. **`not used, damaged or other version (-N)`:** the
+  image was cut short or made by another version of `chlist.py`: build it
+  again with the `chlist.py` of this firmware and flash it again. The radio
+  works without a list, with no memory channels and numbers instead of
+  names.
+- **`nvmem: mount failed …, erasing the settings area`:** once, at the
+  first start, is normal if that flash area held something else. Every
+  start means settings cannot be saved: note it.
 - **No log at all:** check the port and 115200 baud. If the radio works
   otherwise, build with `-DC62_TETRA_LOG=OFF`: if the radio now works
   better, the log is the problem.
