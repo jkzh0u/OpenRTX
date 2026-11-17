@@ -9,6 +9,7 @@
 #include <string.h>
 #include <tetra/tetra.h>
 #include "interfaces/delays.h"
+#include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraFocus.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraSpeech.h"
@@ -161,7 +162,8 @@ static void onCall(const struct tetra_call *c)
     /* An alarm: sound the alert once per call */
     if (alarm && !status.callAlarm) {
         status.callAlarm = true;
-        tetraSpeech_alert();
+        if (tetraConfig_alarmBeep())
+            tetraSpeech_alert();
     }
 }
 

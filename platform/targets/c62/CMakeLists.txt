@@ -139,6 +139,7 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraIds.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraRoam.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraStatus.c
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraConfig.c
     ${OPENRTX_ROOT}/openrtx/src/rtx/OpMode_TETRA.cpp)
   target_compile_definitions(app PRIVATE CONFIG_TETRA)
   if(C62_TETRA_IF_DC_FILTER)
