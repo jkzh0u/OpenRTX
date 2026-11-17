@@ -66,6 +66,7 @@
 #include "core/voicePromptUtils.h"
 #include "core/beeps.h"
 #ifdef CONFIG_TETRA
+#include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
 #ifdef CONFIG_TETRA_LOG
@@ -142,6 +143,9 @@ const char *settings_items[] =
     "M17",
 #endif
     "FM",
+#ifdef CONFIG_TETRA
+    "TETRA",
+#endif
     "Accessibility",
     "Default Settings"
 };
@@ -189,6 +193,16 @@ const char* settings_fm_items[] =
     "CTCSS Tone",
     "CTCSS En."
 };
+
+#ifdef CONFIG_TETRA
+const char *settings_tetra_items[] =
+{
+    "Follow calls",
+    "Cell tracking",
+    "Alarm beep",
+    "Keep filter"
+};
+#endif
 
 const char * settings_accessibility_items[] =
 {
@@ -276,6 +290,9 @@ const uint8_t settings_m17_num = sizeof(settings_m17_items)/sizeof(settings_m17_
 #endif
 const uint8_t settings_fm_num = sizeof(settings_fm_items) / sizeof(settings_fm_items[0]);
 const uint8_t settings_accessibility_num = sizeof(settings_accessibility_items)/sizeof(settings_accessibility_items[0]);
+#ifdef CONFIG_TETRA
+const uint8_t settings_tetra_num = sizeof(settings_tetra_items)/sizeof(settings_tetra_items[0]);
+#endif
 const uint8_t backup_restore_num = sizeof(backup_restore_items)/sizeof(backup_restore_items[0]);
 const uint8_t info_num = sizeof(info_items)/sizeof(info_items[0]);
 const uint8_t author_num = sizeof(authors)/sizeof(authors[0]);
@@ -688,10 +705,59 @@ static void _ui_fsm_confirmVFOInput(bool *sync_rtx)
 extern void _ui_tetraToggleLine1(void);
 extern void _ui_drawTetraRecent(ui_state_t *ui_state);
 extern void _ui_drawTetraFieldTest(ui_state_t *ui_state);
+extern void _ui_drawSettingsTetra(ui_state_t *ui_state);
 extern uint32_t _ui_tetraHoldCandidate(void);
 extern uint32_t _ui_tetraRecentSsi(uint8_t index);
 extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 extern bool _ui_tetraCallActive(void);
+
+/**
+ * Hand the TETRA settings (Settings > TETRA) to the receiver.
+ */
+static void _ui_tetraApplySettings(void)
+{
+    tetraConfig_set(state.settings.tetraFollow, state.settings.tetraRoam,
+                    state.settings.tetraAlarmBeep);
+}
+
+/**
+ * Remember the talkgroup filter for the next power on. A held talkgroup
+ * is not kept: the filter before it is.
+ */
+static void _ui_tetraRememberFilter(void)
+{
+    size_t filter = tetraIds_selectedFilter();
+
+    if (filter < tetraIds_filterCount())
+        state.settings.tetraFilter = (uint8_t)filter;
+}
+
+/**
+ * Change a TETRA setting.
+ *
+ * @param item: enum settingsTetraItems.
+ * @param on: new value.
+ */
+static void _ui_changeTetraSetting(uint8_t item, bool on)
+{
+    switch (item) {
+        case T_FOLLOW:
+            state.settings.tetraFollow = on;
+            break;
+        case T_ROAM:
+            state.settings.tetraRoam = on;
+            break;
+        case T_ALARM_BEEP:
+            state.settings.tetraAlarmBeep = on;
+            break;
+        case T_KEEP_FILTER:
+            state.settings.tetraKeepFilter = on;
+            break;
+        default:
+            return;
+    }
+    _ui_tetraApplySettings();
+}
 
 /*
  * #, * or 0 pressed: its short action waits for the key to be released, so
@@ -715,6 +781,8 @@ static void _ui_tetraShortKey(keyboard_t key)
         tetraIds_release();
     else if(tetraIds_filterCount() > 1)
         tetraIds_stepFilter((key == KEY_HASH) ? 1 : -1);
+
+    _ui_tetraRememberFilter();
 }
 
 /**
@@ -1549,6 +1617,16 @@ void ui_init()
     // This syntax is called compound literal
     // https://stackoverflow.com/questions/6891720/initialize-reset-struct-to-zero-null
     ui_state = (const struct ui_state_t){ 0 };
+
+#ifdef CONFIG_TETRA
+    // TETRA settings, and the talkgroup filter of the last power off
+    _ui_tetraApplySettings();
+    if (state.settings.tetraKeepFilter
+        && state.settings.tetraFilter < tetraIds_filterCount()) {
+        for (uint8_t i = 0; i < state.settings.tetraFilter; i++)
+            tetraIds_stepFilter(1);
+    }
+#endif
 }
 
 void ui_drawSplashScreen()
@@ -2334,6 +2412,11 @@ void ui_updateFSM(bool *sync_rtx)
                         case S_FM:
                             state.ui_screen = SETTINGS_FM;
                             break;
+#ifdef CONFIG_TETRA
+                        case S_TETRA:
+                            state.ui_screen = SETTINGS_TETRA;
+                            break;
+#endif
                         case S_ACCESSIBILITY:
                             state.ui_screen = SETTINGS_ACCESSIBILITY;
                             break;
@@ -2917,6 +3000,26 @@ void ui_updateFSM(bool *sync_rtx)
                 else if(msg.keys & KEY_ESC)
                     _ui_menuBack(MENU_SETTINGS);
                 break;
+#ifdef CONFIG_TETRA
+            // TETRA settings: Enter, then Up / Down switch on and off
+            case SETTINGS_TETRA:
+                if(ui_state.edit_mode &&
+                   (msg.keys & (KEY_UP | KEY_DOWN | KNOB_LEFT | KNOB_RIGHT |
+                                KEY_LEFT | KEY_RIGHT)))
+                {
+                    bool on = (msg.keys & (KEY_UP | KNOB_RIGHT | KEY_RIGHT)) != 0;
+                    _ui_changeTetraSetting(ui_state.menu_selected, on);
+                }
+                else if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+                    _ui_menuUp(settings_tetra_num);
+                else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+                    _ui_menuDown(settings_tetra_num);
+                else if(msg.keys & KEY_ENTER)
+                    ui_state.edit_mode = !ui_state.edit_mode;
+                else if(msg.keys & KEY_ESC)
+                    _ui_menuBack(MENU_SETTINGS);
+                break;
+#endif
             case SETTINGS_RESET2DEFAULTS:
                 if(! ui_state.edit_mode){
                     //require a confirmation ENTER, then another
@@ -2934,6 +3037,9 @@ void ui_updateFSM(bool *sync_rtx)
                     {
                         ui_state.edit_mode = false;
                         state_resetSettingsAndVfo();
+#ifdef CONFIG_TETRA
+                        _ui_tetraApplySettings();
+#endif
                         _ui_menuBack(MENU_SETTINGS);
                     }
                     else if(msg.keys & KEY_ESC)
@@ -3128,6 +3234,12 @@ bool ui_updateGUI()
         case SETTINGS_FM:
             _ui_drawSettingsFM(&ui_state);
             break;
+#ifdef CONFIG_TETRA
+        // TETRA settings screen
+        case SETTINGS_TETRA:
+            _ui_drawSettingsTetra(&ui_state);
+            break;
+#endif
         case SETTINGS_ACCESSIBILITY:
             _ui_drawSettingsAccessibility(&ui_state);
             break;

@@ -522,6 +522,39 @@ int _ui_getAccessibilityValueName(char *buf, uint8_t max_len, uint8_t index)
     return 0;
 }
 
+#ifdef CONFIG_TETRA
+int _ui_getTetraEntryName(char *buf, uint8_t max_len, uint8_t index)
+{
+    if(index >= settings_tetra_num) return -1;
+    sniprintf(buf, max_len, "%s", settings_tetra_items[index]);
+    return 0;
+}
+
+int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
+{
+    bool on;
+
+    if(index >= settings_tetra_num) return -1;
+    switch(index)
+    {
+        case T_FOLLOW:
+            on = last_state.settings.tetraFollow;
+            break;
+        case T_ROAM:
+            on = last_state.settings.tetraRoam;
+            break;
+        case T_ALARM_BEEP:
+            on = last_state.settings.tetraAlarmBeep;
+            break;
+        default:
+            on = last_state.settings.tetraKeepFilter;
+            break;
+    }
+    sniprintf(buf, max_len, "%s", on ? currentLanguage->on : currentLanguage->off);
+    return 0;
+}
+#endif
+
 int _ui_getBackupRestoreEntryName(char *buf, uint8_t max_len, uint8_t index)
 {
     if(index >= backup_restore_num) return -1;
@@ -1066,6 +1099,17 @@ void _ui_drawSettingsAccessibility(ui_state_t* ui_state)
     _ui_drawMenuListValue(ui_state, ui_state->menu_selected, _ui_getAccessibilityEntryName,
                            _ui_getAccessibilityValueName);
 }
+
+#ifdef CONFIG_TETRA
+void _ui_drawSettingsTetra(ui_state_t* ui_state)
+{
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+              color_white, "TETRA");
+    _ui_drawMenuListValue(ui_state, ui_state->menu_selected,
+                          _ui_getTetraEntryName, _ui_getTetraValueName);
+}
+#endif
 
 void _ui_drawSettingsReset2Defaults(ui_state_t* ui_state)
 {

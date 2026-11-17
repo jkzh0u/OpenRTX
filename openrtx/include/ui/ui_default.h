@@ -55,7 +55,8 @@ enum uiScreen
     LOW_BAT,
     TETRA_RECENT,
     TETRA_RECENT_DETAIL,
-    TETRA_FIELD_TEST
+    TETRA_FIELD_TEST,
+    SETTINGS_TETRA
 };
 
 enum SetRxTx
@@ -96,6 +97,9 @@ enum settingsItems
     S_M17,
 #endif
     S_FM,
+#ifdef CONFIG_TETRA
+    S_TETRA,
+#endif
     S_ACCESSIBILITY,
     S_RESET2DEFAULTS,
 };
@@ -135,6 +139,16 @@ enum settingsAccessibilityItems
     A_LEVEL,
     A_PHONETIC,
 };
+
+#ifdef CONFIG_TETRA
+enum settingsTetraItems
+{
+    T_FOLLOW = 0,
+    T_ROAM,
+    T_ALARM_BEEP,
+    T_KEEP_FILTER,
+};
+#endif
 
 enum settingsRadioItems
 {
@@ -258,6 +272,10 @@ extern const char *settings_radio_items[];
 extern const char *settings_m17_items[];
 extern const char *settings_fm_items[];
 extern const char * settings_accessibility_items[];
+#ifdef CONFIG_TETRA
+extern const char *settings_tetra_items[];
+extern const uint8_t settings_tetra_num;
+#endif
 extern const char *backup_restore_items[];
 extern const char *info_items[];
 extern const char *authors[];
