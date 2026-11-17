@@ -1305,6 +1305,55 @@ tetra_filter_test = executable('tetra_filter_test',
                                    'c_args' : linux_c_args +
                                        ['-DTETRA_ID_LIST="' + tetra_ids_list + '"']})
 
+# The same tests again on channel list images (core/chlist.h) built by
+# scripts/chlist.py from the same lists: the image must give the same
+# channels, names and filters as the list built in
+chlist_py = find_program('scripts/chlist.py')
+tetra_ids_image = custom_target('tetra_ids_image',
+                                input   : tetra_ids_list,
+                                output  : 'tetra_ids_list.bin',
+                                command : [chlist_py, '@INPUT@', '-o', '@OUTPUT@'])
+cps_builtin_image = custom_target('cps_builtin_image',
+                                  input   : cps_builtin_list,
+                                  output  : 'cps_builtin_list.bin',
+                                  command : [chlist_py, '@INPUT@', '-o', '@OUTPUT@'])
+chlist_c_args = linux_c_args + ['-DCONFIG_CHLIST']
+ids_image_args = linux_cpp_args + ['-DCONFIG_CHLIST',
+                 '-DCHLIST_IMAGE="' + tetra_ids_image.full_path() + '"']
+cps_image_args = linux_cpp_args + ['-DCONFIG_CHLIST',
+                 '-DCHLIST_IMAGE="' + cps_builtin_image.full_path() + '"']
+
+chlist_test = executable('chlist_test',
+                         sources : ['openrtx/src/core/chlist.c',
+                                    'tests/unit/chlist.cpp'],
+                         kwargs  : unit_test_opts + {
+                             'cpp_args' : ids_image_args})
+
+tetra_ids_image_test = executable('tetra_ids_image_test',
+                                  sources : ['openrtx/src/protocols/TETRA/TetraIds.c',
+                                             'openrtx/src/core/chlist.c',
+                                             'tests/unit/tetra_ids.cpp'],
+                                  kwargs  : unit_test_opts + {
+                                      'c_args'   : chlist_c_args,
+                                      'cpp_args' : ids_image_args})
+
+tetra_filter_image_test = executable('tetra_filter_image_test',
+                                     sources : ['openrtx/src/protocols/TETRA/TetraFilter.c',
+                                                'openrtx/src/protocols/TETRA/TetraIds.c',
+                                                'openrtx/src/core/chlist.c',
+                                                'tests/unit/tetra_filter.cpp'],
+                                     kwargs  : unit_test_opts + {
+                                         'c_args'   : chlist_c_args,
+                                         'cpp_args' : ids_image_args})
+
+cps_builtin_image_test = executable('cps_builtin_image_test',
+                                    sources : ['platform/drivers/CPS/cps_io_builtin.c',
+                                               'openrtx/src/core/chlist.c',
+                                               'tests/unit/cps_builtin.cpp'],
+                                    kwargs  : unit_test_opts + {
+                                        'c_args'   : chlist_c_args,
+                                        'cpp_args' : cps_image_args})
+
 tetra_calls_test = executable('tetra_calls_test',
                               sources : ['openrtx/src/protocols/TETRA/TetraCalls.c',
                                          'tests/unit/tetra_calls.cpp'],
@@ -1363,6 +1412,12 @@ test('TETRA Follow Test',    tetra_follow_test)
 test('CPS Builtin Test',     cps_builtin_test)
 test('TETRA IDs Test',       tetra_ids_test)
 test('TETRA Filter Test',    tetra_filter_test)
+test('Channel List Test',    chlist_test, depends : tetra_ids_image)
+test('TETRA IDs Image Test', tetra_ids_image_test, depends : tetra_ids_image)
+test('TETRA Filter Image Test', tetra_filter_image_test,
+     depends : tetra_ids_image)
+test('CPS Builtin Image Test', cps_builtin_image_test,
+     depends : cps_builtin_image)
 test('TETRA Calls Test',     tetra_calls_test)
 test('TETRA Roam Test',      tetra_roam_test)
 test('TETRA Log Test',       tetra_log_test)

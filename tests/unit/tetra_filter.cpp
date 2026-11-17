@@ -6,6 +6,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include "protocols/TETRA/TetraFilter.h"
+#include "chlist_load.h"
 
 /* Filters and identities of tests/unit/tetra_ids_list.h */
 static const size_t ALL = 0, SUBWAY = 1, LINE1 = 2, CONTROL = 3;

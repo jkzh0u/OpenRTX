@@ -8,6 +8,7 @@
 #include <cstring>
 #include "interfaces/cps_io.h"
 #include "rtx/rtx.h"
+#include "chlist_load.h"
 
 TEST_CASE("Built-in codeplug reads its channel list", "[cps][builtin]")
 {

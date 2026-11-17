@@ -7,6 +7,7 @@
 #include <catch2/catch_test_macros.hpp>
 #include <cstring>
 #include "protocols/TETRA/TetraIds.h"
+#include "chlist_load.h"
 
 /* The selection is global: start each test that uses it from "All" */
 static void selectAll()
