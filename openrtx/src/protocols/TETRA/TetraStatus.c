@@ -76,6 +76,40 @@ static void onSds(const struct tetra_sds *s)
     status.sdsTime = getTick();
 }
 
+/** Neighbour cells, load and time, for the field test screen */
+static void onNetwork(const struct tetra_network *nw)
+{
+    uint8_t n = 0;
+
+    status.load = nw->load;
+    for (unsigned i = 0;
+         i < nw->nneighbours && n < TETRA_STATUS_NEIGHBOURS; i++) {
+        const struct tetra_neighbour *nb = &nw->neighbour[i];
+        struct tetraStatusNeighbour *d = &status.neighbour[n++];
+        d->freq = nb->dl_freq_hz;
+        d->carrier = nb->main_carrier;
+        d->la = nb->la;
+        d->load = nb->load;
+        d->other = (nb->mcc != 0xffff && nb->mcc != status.mcc)
+                || (nb->mnc != 0xffff && nb->mnc != status.mnc);
+    }
+    if (n != 0)
+        status.nNeighbours = n;
+
+    if (nw->has_time && nw->time_valid) {
+        long s = (long)(nw->utc_s % 86400);
+        if (nw->offset_valid)
+            s += (long)nw->offset_min * 60;
+        s %= 86400;
+        if (s < 0)
+            s += 86400;
+        status.time = true;
+        status.timeLocal = nw->offset_valid;
+        status.timeOfDay = (uint32_t)s;
+        status.timeTick = getTick();
+    }
+}
+
 static void onCall(const struct tetra_call *c)
 {
     long long now = getTick();
@@ -218,6 +252,10 @@ void tetraStatus_onEvent(void *user, const struct tetra_event *ev)
             onSds(&ev->u.sds);
             break;
 
+        case TETRA_EV_NETWORK:
+            onNetwork(ev->u.network);
+            break;
+
         default:
             break;
     }
@@ -235,6 +273,7 @@ void tetraStatus_reset(void)
     struct tetraCalls recent = status.recent;
     memset(&status, 0, sizeof(status));
     status.recent = recent;
+    status.roamState = TETRA_STATUS_NO_ROAM;
     tetraFocus_init(&focus);
     pthread_mutex_unlock(&statusMutex);
 }
@@ -285,6 +324,25 @@ void tetraStatus_setFollow(uint32_t freq)
 {
     pthread_mutex_lock(&statusMutex);
     status.followHz = freq;
+    pthread_mutex_unlock(&statusMutex);
+}
+
+void tetraStatus_setRoamState(uint8_t state)
+{
+    pthread_mutex_lock(&statusMutex);
+    status.roamState = state;
+    pthread_mutex_unlock(&statusMutex);
+}
+
+void tetraStatus_setMeasured(const struct tetraStatusMeasured *m, unsigned n)
+{
+    if (n > TETRA_STATUS_MEASURED)
+        n = TETRA_STATUS_MEASURED;
+
+    pthread_mutex_lock(&statusMutex);
+    memcpy(status.measured, m, n * sizeof(m[0]));
+    status.nMeasured = (uint8_t)n;
+    status.measuredTime = getTick();
     pthread_mutex_unlock(&statusMutex);
 }
 

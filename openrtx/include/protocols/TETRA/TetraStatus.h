@@ -15,6 +15,28 @@
 extern "C" {
 #endif
 
+/** Neighbour cells kept for the field test screen */
+#define TETRA_STATUS_NEIGHBOURS 7
+/** Carriers of the last signal measurement kept, strongest first */
+#define TETRA_STATUS_MEASURED 6
+/** roamState without cell tracking */
+#define TETRA_STATUS_NO_ROAM 0xff
+
+/** A neighbour cell broadcast by the serving cell */
+struct tetraStatusNeighbour {
+    uint32_t freq;    /**< Downlink frequency, Hz, 0 if not known */
+    uint16_t carrier; /**< Main carrier number */
+    uint16_t la;      /**< Location area, 0xffff if the same as the cell's */
+    uint8_t load;     /**< Cell load: 0 unknown, 1 low .. 3 high */
+    bool other;       /**< Belongs to another network */
+};
+
+/** A carrier measured by cell tracking */
+struct tetraStatusMeasured {
+    uint32_t freq; /**< Hz */
+    int16_t rssi;  /**< dBm */
+};
+
 /*
  * What the TETRA receive mode has decoded, for the UI. Written by the rtx
  * thread, read with tetra_getStatus().
@@ -57,6 +79,19 @@ struct tetraStatus {
     uint16_t overruns;  /**< Sample blocks lost: the radio was too slow */
     uint16_t resyncs;   /**< Burst synchronisation restarts */
     int16_t carrierHz;  /**< Carrier offset estimate */
+
+    /* Field test */
+    uint8_t load;        /**< Serving cell load: 0 unknown, 1 low .. 3 high */
+    uint8_t nNeighbours; /**< Neighbour cells broadcast */
+    struct tetraStatusNeighbour neighbour[TETRA_STATUS_NEIGHBOURS];
+    bool time;           /**< Network time known */
+    bool timeLocal;      /**< Local time, else UTC */
+    uint32_t timeOfDay;  /**< Network time at timeTick, s since midnight */
+    long long timeTick;  /**< Tick the network time was received */
+    uint8_t roamState;   /**< enum tetraRoamState, TETRA_STATUS_NO_ROAM */
+    uint8_t nMeasured;   /**< Carriers of the last measurement */
+    struct tetraStatusMeasured measured[TETRA_STATUS_MEASURED];
+    long long measuredTime; /**< Tick of the last measurement */
 };
 
 /**
@@ -104,6 +139,19 @@ void tetraStatus_setTuned(uint32_t freq);
  * @param searching: true while looking for a cell on other frequencies.
  */
 void tetraStatus_setSearching(bool searching);
+
+/**
+ * @param state: cell tracking state, enum tetraRoamState.
+ */
+void tetraStatus_setRoamState(uint8_t state);
+
+/**
+ * Set the result of a signal measurement of cell tracking.
+ *
+ * @param m: carriers measured, strongest first.
+ * @param n: number of carriers, at most TETRA_STATUS_MEASURED are kept.
+ */
+void tetraStatus_setMeasured(const struct tetraStatusMeasured *m, unsigned n);
 
 /**
  * Stop showing the current call, for example when a new filter excludes it.
