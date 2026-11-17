@@ -159,40 +159,64 @@ static void onNeighbours(const struct tetra_network *nw)
     tetraRoam_setNeighbours(&roam, freq, n);
 }
 
-#ifdef CONFIG_TETRA_LOG
-/** The strongest carriers of the last measurement */
-static void roamLogMeasured(void)
+/**
+ * The strongest carriers of the last measurement.
+ *
+ * @param out: carriers, strongest first.
+ * @param max: room in out.
+ * @return number of carriers in out; *total: number measured.
+ */
+static unsigned roamStrongest(struct tetraStatusMeasured *out, unsigned max,
+                              unsigned *total)
 {
-    char line[120];
-    size_t len = 0;
-    bool shown[TETRA_ROAM_MAX_CANDIDATES] = { false };
-    unsigned measured = 0, nShown = 0;
+    bool taken[TETRA_ROAM_MAX_CANDIDATES] = { false };
+    unsigned measured = 0, n = 0;
 
-    line[0] = '\0';
     for (unsigned i = 0; i < roam.nCand; i++) {
         if (roam.cand[i].rssi > -32768)
             measured++;
     }
 
-    while (nShown < 4 && nShown < measured) {
+    while (n < max && n < measured) {
         int best = -1;
         for (unsigned i = 0; i < roam.nCand; i++) {
-            if (!shown[i] && roam.cand[i].rssi > -32768
+            if (!taken[i] && roam.cand[i].rssi > -32768
                 && (best < 0 || roam.cand[i].rssi > roam.cand[best].rssi))
                 best = (int)i;
         }
-        shown[best] = true;
-        nShown++;
+        taken[best] = true;
+        out[n].freq = roam.cand[best].freq;
+        out[n].rssi = roam.cand[best].rssi;
+        n++;
+    }
+
+    *total = measured;
+    return n;
+}
+
+#ifdef CONFIG_TETRA_LOG
+/** Shown in the log of a measurement */
+#define LOG_MEASURED 4
+
+/** The strongest carriers of the last measurement */
+static void roamLogMeasured(const struct tetraStatusMeasured *m, unsigned n,
+                            unsigned measured)
+{
+    char line[120];
+    size_t len = 0;
+    unsigned shown = 0;
+
+    line[0] = '\0';
+    for (; shown < n && shown < LOG_MEASURED; shown++) {
         int w = snprintf(line + len, sizeof(line) - len, "%s%s %d",
-                         len ? ", " : "", mhz(roam.cand[best].freq),
-                         roam.cand[best].rssi);
+                         len ? ", " : "", mhz(m[shown].freq), m[shown].rssi);
         if (w < 0 || (size_t)w >= sizeof(line) - len)
             break;
         len += (size_t)w;
     }
 
     TLOG("roam: measured %u: %s%s", measured, line,
-         measured > nShown ? ", ..." : "");
+         measured > shown ? ", ..." : "");
 }
 
 /** Signal strength measured for a carrier, or 0 */
@@ -271,11 +295,16 @@ static void roamStep()
     bool measuring = roam.state == TETRA_ROAM_CHECK
                   || roam.state == TETRA_ROAM_SWEEP;
     bool measuredAll = measuring && roam.next >= roam.nCand;
-#ifdef CONFIG_TETRA_LOG
     /* This step decides on the measurement: show it, all of it */
-    if (measuredAll)
-        roamLogMeasured();
+    if (measuredAll) {
+        struct tetraStatusMeasured m[TETRA_STATUS_MEASURED];
+        unsigned measured;
+        unsigned n = roamStrongest(m, TETRA_STATUS_MEASURED, &measured);
+        tetraStatus_setMeasured(m, n);
+#ifdef CONFIG_TETRA_LOG
+        roamLogMeasured(m, n, measured);
 #endif
+    }
     struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync, busy,
                                             rssi);
 
@@ -307,6 +336,7 @@ static void roamStep()
     roamLog(before, measuredAll, &s, rssi);
 #endif
     tetraStatus_setSearching(tetraRoam_searching(&roam));
+    tetraStatus_setRoamState((uint8_t)roam.state);
 }
 
 /**
