@@ -17,6 +17,8 @@
 #include "protocols/TETRA/TetraFilter.h"
 #include "protocols/TETRA/TetraFollow.h"
 #include "protocols/TETRA/TetraIds.h"
+#include "protocols/TETRA/TetraLog.h"
+#include "protocols/TETRA/TetraLogEvents.h"
 #include "protocols/TETRA/TetraRoam.h"
 #include "protocols/TETRA/TetraSpeech.h"
 #include "protocols/TETRA/TetraStatus.h"
@@ -28,6 +30,17 @@
 /* Time on another carrier to read its signal strength, ms */
 #define ROAM_PROBE_MS 5
 
+/* Signal summary in the log this often, ms */
+#define LOG_SIGNAL_MS 10000
+
+#ifdef CONFIG_TETRA_LOG
+#define TLOG(...) tetraLog_printf(getTick(), __VA_ARGS__)
+#else
+#define TLOG(...) \
+    do {          \
+    } while (0)
+#endif
+
 /* Large state: static, there is only one TETRA mode */
 static int16_t baseband[2 * HALF_SAMPLES];
 static int8_t soft[HALF_SAMPLES * 3 / 4 + 8];
@@ -38,8 +51,21 @@ static struct tetraFilter filter;
 static uint8_t filterSelection; // tetraIds_selection() applied to filter
 static struct tetraRoam roam;
 static uint8_t searchRequests; // tetraStatus_searchRequests() handled
+static long long lastSignalLog;
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
+
+#ifdef CONFIG_TETRA_LOG
+/** A frequency for a log line; two can be used in one line */
+static const char *mhz(uint32_t hz)
+{
+    static char buf[2][16];
+    static unsigned next;
+
+    next = (next + 1) % 2;
+    return tetraLog_freq(buf[next], sizeof(buf[next]), hz);
+}
+#endif
 
 /**
  * Listen where the follower says, on the serving cell or a followed call's
@@ -133,6 +159,91 @@ static void onNeighbours(const struct tetra_network *nw)
     tetraRoam_setNeighbours(&roam, freq, n);
 }
 
+#ifdef CONFIG_TETRA_LOG
+/** The strongest carriers of the last measurement */
+static void roamLogMeasured(void)
+{
+    char line[120];
+    size_t len = 0;
+    bool shown[TETRA_ROAM_MAX_CANDIDATES] = { false };
+    unsigned measured = 0, nShown = 0;
+
+    line[0] = '\0';
+    for (unsigned i = 0; i < roam.nCand; i++) {
+        if (roam.cand[i].rssi > -32768)
+            measured++;
+    }
+
+    while (nShown < 4 && nShown < measured) {
+        int best = -1;
+        for (unsigned i = 0; i < roam.nCand; i++) {
+            if (!shown[i] && roam.cand[i].rssi > -32768
+                && (best < 0 || roam.cand[i].rssi > roam.cand[best].rssi))
+                best = (int)i;
+        }
+        shown[best] = true;
+        nShown++;
+        int w = snprintf(line + len, sizeof(line) - len, "%s%s %d",
+                         len ? ", " : "", mhz(roam.cand[best].freq),
+                         roam.cand[best].rssi);
+        if (w < 0 || (size_t)w >= sizeof(line) - len)
+            break;
+        len += (size_t)w;
+    }
+
+    TLOG("roam: measured %u: %s%s", measured, line,
+         measured > nShown ? ", ..." : "");
+}
+
+/** Signal strength measured for a carrier, or 0 */
+static int roamRssi(uint32_t freq)
+{
+    for (unsigned i = 0; i < roam.nCand; i++) {
+        if (roam.cand[i].freq == freq && roam.cand[i].rssi > -32768)
+            return roam.cand[i].rssi;
+    }
+
+    return 0;
+}
+
+/**
+ * What cell tracking just did, from its state before and after a step.
+ */
+static void roamLog(enum tetraRoamState before, bool measuredAll,
+                    const struct tetraRoamStep *s, int rssi)
+{
+    enum tetraRoamState after = roam.state;
+
+    if ((before == TETRA_ROAM_CHECK || before == TETRA_ROAM_SWEEP)
+        && after != before && !measuredAll)
+        TLOG("roam: measuring stopped (%s)",
+             before == TETRA_ROAM_SWEEP ? "lock back" : "call or no lock");
+
+    if (after == TETRA_ROAM_CHECK && before != TETRA_ROAM_CHECK)
+        TLOG("roam: weak cell (%d dBm), measuring %u neighbours", rssi,
+             roam.nCand);
+    if (after == TETRA_ROAM_SWEEP && before != TETRA_ROAM_SWEEP)
+        TLOG("roam: no lock, measuring %u carriers", roam.nCand);
+
+    if (s->action == TETRA_ROAM_TUNE) {
+        int level = roamRssi(s->freq);
+        if (before == TETRA_ROAM_CHECK)
+            TLOG("roam: move to a stronger neighbour >> %s (%d dBm)",
+                 mhz(s->freq), level);
+        else
+            TLOG("roam: try >> %s (%d dBm)", mhz(s->freq), level);
+    }
+
+    if (after == TETRA_ROAM_PAUSE && before != TETRA_ROAM_PAUSE)
+        TLOG("roam: nothing above %d dBm, waiting", TETRA_ROAM_FLOOR_DBM);
+    if (before == TETRA_ROAM_TRY && after == TETRA_ROAM_LOCKED)
+        TLOG("roam: locked on %s", mhz(roam.serving));
+    if (before == TETRA_ROAM_SWEEP && after == TETRA_ROAM_LOCKED
+        && measuredAll)
+        TLOG("roam: staying on %s", mhz(roam.serving));
+}
+#endif
+
 /**
  * One step of cell tracking: measure another carrier for a few
  * milliseconds, or move to another cell and synchronise there.
@@ -146,15 +257,27 @@ static void roamStep()
     struct tetraStatus ts;
     tetra_getStatus(&ts);
     bool busy = ts.call || follower.selected;
+    enum tetraRoamState before = roam.state;
 
     /* Search for the best signal, asked for on the keypad */
     if (tetraStatus_searchRequests() != searchRequests) {
         searchRequests = tetraStatus_searchRequests();
         tetraRoam_search(&roam, getTick());
+        TLOG("roam: search asked, measuring %u carriers", roam.nCand);
+        before = roam.state;
     }
 
+    int rssi = radio_getRssi();
+    bool measuring = roam.state == TETRA_ROAM_CHECK
+                  || roam.state == TETRA_ROAM_SWEEP;
+    bool measuredAll = measuring && roam.next >= roam.nCand;
+#ifdef CONFIG_TETRA_LOG
+    /* This step decides on the measurement: show it, all of it */
+    if (measuredAll)
+        roamLogMeasured();
+#endif
     struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync, busy,
-                                            radio_getRssi());
+                                            rssi);
 
     switch (s.action) {
         case TETRA_ROAM_PROBE: {
@@ -162,10 +285,10 @@ static void roamStep()
             rtxCfg->rxFrequency = s.freq;
             radio_updateConfiguration();
             delayMs(ROAM_PROBE_MS);
-            int rssi = radio_getRssi();
+            int level = radio_getRssi();
             rtxCfg->rxFrequency = back;
             radio_updateConfiguration();
-            tetraRoam_probed(&roam, s.freq, rssi);
+            tetraRoam_probed(&roam, s.freq, level);
             break;
         }
 
@@ -180,6 +303,9 @@ static void roamStep()
             break;
     }
 
+#ifdef CONFIG_TETRA_LOG
+    roamLog(before, measuredAll, &s, rssi);
+#endif
     tetraStatus_setSearching(tetraRoam_searching(&roam));
 }
 
@@ -206,7 +332,12 @@ static void roamInit(uint32_t home)
  */
 static void onEvent(void *user, const struct tetra_event *ev)
 {
-    if (!filterEvent(ev))
+    bool passed = filterEvent(ev);
+
+#ifdef CONFIG_TETRA_LOG
+    tetraLogEvents_event(getTick(), ev, passed);
+#endif
+    if (!passed)
         return;
 
     tetraStatus_onEvent(user, ev);
@@ -270,8 +401,11 @@ static bool onRetune(void *user, const struct tetra_retune *r)
 
     /* Calls the talkgroup filter holds back are not followed */
     if (r->reason == TETRA_RETUNE_CALL
-        && !tetraFilter_passes(&filter, r->call_id))
+        && !tetraFilter_passes(&filter, r->call_id)) {
+        TLOG("retune: call %u to carrier %u: filtered out", r->call_id,
+             r->carrier);
         return false;
+    }
 
     fr.main = r->reason == TETRA_RETUNE_MAIN;
     fr.callId = r->call_id;
@@ -280,10 +414,24 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     fr.mainFreq = (cell != NULL && cell->have_sysinfo) ? cell->dl_freq_hz : 0;
     fr.slots = r->timeslots;
 
-    if (!tetraFollow_retune(&follower, &fr, getTick()))
+    if (!tetraFollow_retune(&follower, &fr, getTick())) {
+        if (fr.main)
+            TLOG("retune: main carrier: declined");
+        else
+            TLOG("retune: call %u to carrier %u = %s slots 0x%x: declined",
+                 r->call_id, r->carrier, mhz(r->freq_hz), r->timeslots);
         return false;
+    }
 
     tune();
+#ifdef CONFIG_TETRA_LOG
+    struct tetraFollowTarget t = tetraFollow_target(&follower);
+    if (fr.main)
+        TLOG("retune: main carrier >> %s", mhz(t.freq));
+    else
+        TLOG("retune: call %u to carrier %u slots 0x%x >> %s%s", r->call_id,
+             r->carrier, t.slots, mhz(t.freq), t.away ? "" : " (main)");
+#endif
     return true;
 }
 #endif
@@ -322,6 +470,13 @@ void OpMode_TETRA::reset()
 #ifdef CONFIG_TETRA_ROAM
     roamInit(homeFreq);
 #endif
+#ifdef CONFIG_TETRA_LOG
+    tetraLogEvents_reset();
+    if (homeFreq != 0)
+        TLOG("start on %s, filter %s", mhz(homeFreq),
+             tetraIds_filterName(tetraIds_selectedFilter()));
+    lastSignalLog = getTick();
+#endif
 }
 
 /*
@@ -345,6 +500,8 @@ void OpMode_TETRA::resync(bool overrun)
     /* A new receiver knows nothing of the followed call: go home */
     tetraFollow_home(&follower);
     tetraStatus_lostSync(overrun);
+    if (overrun)
+        TLOG("samples lost: resync");
     tune();
 }
 
@@ -470,6 +627,10 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
 
         filterSelection = tetraIds_selection();
         tetraFilter_select(&filter, tetraIds_selectedFilter());
+        if (tetraIds_held() != 0)
+            TLOG("filter: hold %lu", (unsigned long)tetraIds_held());
+        else
+            TLOG("filter: %s", tetraIds_filterName(tetraIds_selectedFilter()));
         tetra_getStatus(&ts);
         if (ts.call && !tetraFilter_passes(&filter, ts.callId))
             tetraStatus_endCall();
@@ -485,14 +646,27 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
      * libtetra still thinks it is there, so restart its synchronisation on
      * the main carrier. tune() selects all timeslots again.
      */
-    if (tetraFollow_tick(&follower, getTick()))
+    if (tetraFollow_tick(&follower, getTick())) {
         tetra_tmo_resync(&tmo);
+        TLOG("follow: back to the main carrier >> %s",
+             mhz(tetraFollow_target(&follower).freq));
+    }
 #endif
     /* Also undoes a configuration update that tuned back home meanwhile */
     tune();
 
 #ifdef CONFIG_TETRA_ROAM
     roamStep();
+#endif
+
+#ifdef CONFIG_TETRA_LOG
+    if (getTick() - lastSignalLog >= LOG_SIGNAL_MS) {
+        lastSignalLog = getTick();
+        TLOG("signal %d dBm on %s, %s, phase error %u%%, offset %+d Hz",
+             radio_getRssi(), mhz(rtxCfg->rxFrequency),
+             tetraStatus_sync() ? "locked" : "no lock",
+             tetraDemod_phaseError(&demod), tetraDemod_carrierOffset(&demod));
+    }
 #endif
 
     tetraStatus_setDemod(tetraDemod_phaseError(&demod),
