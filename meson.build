@@ -1315,6 +1315,11 @@ tetra_roam_test = executable('tetra_roam_test',
                                         'tests/unit/tetra_roam.cpp'],
                              kwargs  : unit_test_opts)
 
+tetra_log_test = executable('tetra_log_test',
+                            sources : ['openrtx/src/protocols/TETRA/TetraLog.c',
+                                       'tests/unit/tetra_log.cpp'],
+                            kwargs  : unit_test_opts)
+
 tetra_focus_test = executable('tetra_focus_test',
                               sources : ['openrtx/src/protocols/TETRA/TetraFocus.c',
                                          'tests/unit/tetra_focus.cpp'],
@@ -1360,5 +1365,6 @@ test('TETRA IDs Test',       tetra_ids_test)
 test('TETRA Filter Test',    tetra_filter_test)
 test('TETRA Calls Test',     tetra_calls_test)
 test('TETRA Roam Test',      tetra_roam_test)
+test('TETRA Log Test',       tetra_log_test)
 test('TETRA Focus Test',     tetra_focus_test)
 test('M17 Baseband Replay Test', m17_replay_test, timeout : 120) # ~40 s in CI with coverage
