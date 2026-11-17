@@ -16,6 +16,7 @@
 #include "protocols/TETRA/TetraDemod.h"
 #include "protocols/TETRA/TetraFilter.h"
 #include "protocols/TETRA/TetraFollow.h"
+#include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraLog.h"
 #include "protocols/TETRA/TetraLogEvents.h"
@@ -437,6 +438,13 @@ static bool onRetune(void *user, const struct tetra_retune *r)
         return false;
     }
 
+    /* Following switched off in the settings */
+    if (r->reason == TETRA_RETUNE_CALL && !tetraConfig_follow()) {
+        TLOG("retune: call %u to carrier %u: following off", r->call_id,
+             r->carrier);
+        return false;
+    }
+
     fr.main = r->reason == TETRA_RETUNE_MAIN;
     fr.callId = r->call_id;
     fr.carrier = r->carrier;
@@ -671,6 +679,10 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     }
 
 #ifdef CONFIG_TETRA_FOLLOW
+    /* Following switched off while on a call's carrier: back home */
+    if (!tetraConfig_follow() && follower.selected)
+        tetraFollow_drop(&follower);
+
     /*
      * The follower left the call's carrier on its own (silence, encryption):
      * libtetra still thinks it is there, so restart its synchronisation on
@@ -686,7 +698,13 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     tune();
 
 #ifdef CONFIG_TETRA_ROAM
-    roamStep();
+    /*
+     * With cell tracking off, only a search asked for on the keypad runs,
+     * until it ends
+     */
+    if (tetraConfig_roam() || tetraRoam_searching(&roam)
+        || tetraStatus_searchRequests() != searchRequests)
+        roamStep();
 #endif
 
 #ifdef CONFIG_TETRA_LOG
