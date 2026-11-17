@@ -198,12 +198,17 @@ void display_renderRows(uint8_t startRow, uint8_t endRow, void *fb)
 
 enum screen { SCREEN_VFO, SCREEN_MEM, SCREEN_RECENT, SCREEN_DETAIL };
 
+/* Memory channel number being typed, drawn on the next scene */
+static uint16_t chEntry;
+
 static void draw(const char *name, enum screen screen)
 {
     static ui_state_t ui;
 
     snprintf(outPath, sizeof(outPath), "%s/%s.png", outDir, name);
     memset(&ui, 0, sizeof(ui));
+    ui.ch_entry = chEntry;
+    ui.ch_entry_digits = (chEntry > 0) ? 1 : 0;
     if (screen == SCREEN_MEM)
         _ui_drawMainMEM(&ui);
     else if (screen == SCREEN_RECENT)
@@ -274,6 +279,16 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.carrierHz = -234;
     scene("tetra-2-cell", false);
     scene("tetra-2b-cell-memory", true);
+
+    /* A memory channel number being typed */
+    chEntry = 12;
+    scene("tetra-2c-channel-entry", true);
+    chEntry = 0;
+
+    /* Searching for the best signal (long 0), still on the cell */
+    tetra.searching = true;
+    scene("tetra-2d-best-signal", false);
+    tetra.searching = false;
 
     /* Last SDS text, from the example talker */
     tetra.sdsSrc = talker;
