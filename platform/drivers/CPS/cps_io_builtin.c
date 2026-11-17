@@ -14,15 +14,23 @@
  * Channels are receive only, 25 kHz, with the same frequency for TX and RX.
  * There are no contacts and no banks, and every write fails. The TETRA_
  * entries in the same header are for TetraIds.c and are ignored here.
+ *
+ * With CONFIG_CHLIST the channels come instead from the channel list image
+ * (core/chlist.h), kept apart from the firmware, with their own transmit
+ * frequency, bandwidth and tones.
  */
 
 #include <string.h>
 #include "interfaces/cps_io.h"
 #include "rtx/rtx.h"
 
-#ifndef CPS_BUILTIN_LIST
+#ifdef CONFIG_CHLIST
+#include "core/chlist.h"
+#elif !defined(CPS_BUILTIN_LIST)
 #error "CPS_BUILTIN_LIST must name the channel list header"
 #endif
+
+#ifndef CONFIG_CHLIST
 
 struct builtinChannel {
     const char *name;
@@ -47,6 +55,7 @@ static const struct builtinChannel channels[] = {
 };
 
 #define NUM_CHANNELS (sizeof(channels) / sizeof(channels[0]) - 1)
+#endif
 
 int cps_open(char *cps_name)
 {
@@ -71,6 +80,33 @@ int cps_readContact(contact_t *contact, uint16_t pos)
     return -1;
 }
 
+#ifdef CONFIG_CHLIST
+
+int cps_readChannel(channel_t *channel, uint16_t pos)
+{
+    struct chlistChannel c;
+
+    if (!chlist_channel(pos, &c))
+        return -1;
+
+    memset(channel, 0, sizeof(*channel));
+    channel->mode = c.mode;
+    channel->bandwidth = c.bandwidth & 1;
+    channel->rx_only = (c.flags & CHLIST_RX_ONLY) ? 1 : 0;
+    channel->rx_frequency = c.rxHz;
+    channel->tx_frequency = c.txHz;
+    if (c.mode == OPMODE_FM) {
+        channel->fm.rxToneEn = (c.rxTone >> 7) & 1;
+        channel->fm.rxTone = c.rxTone & 0x7f;
+        channel->fm.txToneEn = (c.txTone >> 7) & 1;
+        channel->fm.txTone = c.txTone & 0x7f;
+    }
+    strncpy(channel->name, c.name, sizeof(channel->name) - 1);
+    return 0;
+}
+
+#else
+
 int cps_readChannel(channel_t *channel, uint16_t pos)
 {
     if (pos >= NUM_CHANNELS)
@@ -87,6 +123,8 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
     strncpy(channel->name, c->name, sizeof(channel->name) - 1);
     return 0;
 }
+
+#endif
 
 int cps_readBankHeader(bankHdr_t *b_header, uint16_t pos)
 {
