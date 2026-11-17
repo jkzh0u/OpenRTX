@@ -180,3 +180,99 @@ TEST_CASE("TETRA roaming searches when the lock is lost", "[tetra][roam]")
         REQUIRE(radio.tunes.empty());
     }
 }
+
+TEST_CASE("TETRA roaming searches for the best signal on request",
+          "[tetra][roam]")
+{
+    tetraRoam r;
+    Radio radio = start(r, A);
+    uint32_t nb[] = { B };
+    tetraRoam_setNeighbours(&r, nb, 1);
+    tetraRoam_addScan(&r, C);
+    tetraRoam_addScan(&r, D);
+    radio.lockable = { A, B, C, D };
+
+    // Strong enough that cell tracking alone would stay
+    radio.run(r, 1000);
+    REQUIRE(radio.probes.empty());
+
+    SECTION("a clearly stronger carrier: move to it")
+    {
+        radio.rssi = { { A, -80 }, { B, -90 }, { C, -70 }, { D, -100 } };
+        tetraRoam_search(&r, radio.now);
+        REQUIRE(tetraRoam_searching(&r));
+
+        // Measures every carrier while still locked, then moves
+        radio.run(r, 500);
+        REQUIRE(radio.probes == std::vector<uint32_t>({ B, C, D, A }));
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ C }));
+
+        radio.run(r, 1000);
+        REQUIRE(radio.locked());
+        REQUIRE_FALSE(tetraRoam_searching(&r));
+        REQUIRE(r.serving == C);
+
+        // And stays there
+        radio.run(r, 10000);
+        REQUIRE(radio.tunes.size() == 1);
+    }
+
+    SECTION("the serving cell is about as strong: stay")
+    {
+        radio.rssi = { { A, -80 }, { B, -90 },
+                       { C, -80 + TETRA_ROAM_SEARCH_MARGIN_DB - 1 } };
+        tetraRoam_search(&r, radio.now);
+        radio.run(r, 1000);
+        REQUIRE(radio.probes.size() == 4);
+        REQUIRE(radio.tunes.empty());
+        REQUIRE_FALSE(tetraRoam_searching(&r));
+        REQUIRE(r.serving == A);
+    }
+
+    SECTION("the serving cell is the strongest: stay")
+    {
+        radio.rssi = { { A, -60 }, { B, -90 }, { C, -70 } };
+        tetraRoam_search(&r, radio.now);
+        radio.run(r, 1000);
+        REQUIRE(radio.tunes.empty());
+        REQUIRE_FALSE(tetraRoam_searching(&r));
+    }
+
+    SECTION("the strongest does not lock: the next one is tried")
+    {
+        radio.rssi = { { A, -90 }, { B, -75 }, { C, -70 } };
+        radio.lockable = { A, B };
+        tetraRoam_search(&r, radio.now);
+        radio.run(r, 500);
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ C }));
+
+        radio.run(r, TETRA_ROAM_TRY_MS + 1000);
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ C, B }));
+        REQUIRE(radio.locked());
+        REQUIRE(r.serving == B);
+        REQUIRE_FALSE(tetraRoam_searching(&r));
+    }
+
+    SECTION("asked twice: one search")
+    {
+        radio.rssi = { { A, -80 }, { C, -70 } };
+        tetraRoam_search(&r, radio.now);
+        radio.run(r, 60);
+        tetraRoam_search(&r, radio.now);
+        radio.run(r, 500);
+        REQUIRE(radio.probes == std::vector<uint32_t>({ B, C, D, A }));
+    }
+
+    SECTION("asked while lost: searches at once")
+    {
+        radio.lockable = { C };
+        radio.rssi = { { C, -90 } };
+        radio.run(r, 500);
+        REQUIRE_FALSE(tetraRoam_searching(&r));
+
+        tetraRoam_search(&r, radio.now);
+        radio.run(r, 1000);
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ C }));
+        REQUIRE(radio.locked());
+    }
+}

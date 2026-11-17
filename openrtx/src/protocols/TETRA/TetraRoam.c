@@ -79,6 +79,16 @@ static void startSweep(struct tetraRoam *r, long long now)
     r->next = 0;
     r->state = TETRA_ROAM_SWEEP;
     r->since = now;
+    r->requested = false;
+}
+
+void tetraRoam_search(struct tetraRoam *r, long long now)
+{
+    if (r->requested)
+        return;
+
+    startSweep(r, now);
+    r->requested = true;
 }
 
 static struct tetraRoamStep step(enum tetraRoamAction action, uint32_t freq)
@@ -144,6 +154,35 @@ static struct tetraRoamStep checkDone(struct tetraRoam *r, long long now)
     return tune(r, best->freq);
 }
 
+/**
+ * A requested search while locked, candidates sorted: is the serving cell
+ * about as strong as the best one?
+ */
+static bool keepServing(const struct tetraRoam *r)
+{
+    int serving = NOT_MEASURED;
+
+    if (r->nCand == 0 || r->cand[0].freq == r->serving)
+        return true;
+
+    for (unsigned i = 0; i < r->nCand; i++) {
+        if (r->cand[i].freq == r->serving)
+            serving = r->cand[i].rssi;
+    }
+
+    return serving != NOT_MEASURED
+        && r->cand[0].rssi < serving + TETRA_ROAM_SEARCH_MARGIN_DB;
+}
+
+/** Back on the cell, the search over */
+static void settle(struct tetraRoam *r, long long now)
+{
+    r->state = TETRA_ROAM_LOCKED;
+    r->requested = false;
+    r->confirmed = 0;
+    r->lastCheck = now;
+}
+
 /** Measuring the neighbours of a weak cell: next probe, or the verdict */
 static struct tetraRoamStep checkStep(struct tetraRoam *r, long long now,
                                       bool locked, bool busy)
@@ -196,7 +235,8 @@ struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
             return checkStep(r, now, locked, busy);
 
         case TETRA_ROAM_SWEEP: {
-            if (locked) {
+            /* A lost lock that returns ends the search, a requested one not */
+            if (locked && !r->requested) {
                 r->state = TETRA_ROAM_LOCKED;
                 break;
             }
@@ -204,12 +244,21 @@ struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
                 return step(TETRA_ROAM_PROBE, r->cand[r->next].freq);
 
             sortCandidates(r);
+            if (locked && keepServing(r)) {
+                settle(r, now);
+                break;
+            }
+
             unsigned usable = 0;
             while (usable < r->nCand
                    && r->cand[usable].rssi > TETRA_ROAM_FLOOR_DBM)
                 usable++;
 
             if (usable == 0) {
+                if (locked) {
+                    settle(r, now);
+                    break;
+                }
                 r->state = TETRA_ROAM_PAUSE;
                 r->since = now;
                 break;
@@ -224,8 +273,7 @@ struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
 
         case TETRA_ROAM_TRY:
             if (locked) {
-                r->state = TETRA_ROAM_LOCKED;
-                r->lastCheck = now;
+                settle(r, now);
                 break;
             }
             if (now - r->since < TETRA_ROAM_TRY_MS)

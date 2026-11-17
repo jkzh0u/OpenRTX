@@ -26,6 +26,9 @@ extern "C" {
  * - When the lock is lost, it measures every known carrier (neighbours
  *   first, then the frequencies of the built-in channel list), and tries
  *   the strongest ones in turn until one locks.
+ * - On request (tetraRoam_search()), it does the same while still locked,
+ *   and moves to the strongest carrier unless the serving cell is about as
+ *   strong.
  *
  * The caller carries out the steps: a probe is a short retune to read the
  * signal strength, then back; a tune is a move to another cell, after which
@@ -56,6 +59,8 @@ extern "C" {
 #define TETRA_ROAM_TRY_MS 2500
 /** Pause after a search found nothing, ms */
 #define TETRA_ROAM_PAUSE_MS 2000
+/** A requested search leaves a locked cell for one this much stronger, dB */
+#define TETRA_ROAM_SEARCH_MARGIN_DB 3
 
 enum tetraRoamAction {
     TETRA_ROAM_NONE,  /**< Nothing to do */
@@ -71,8 +76,8 @@ struct tetraRoamStep {
 enum tetraRoamState {
     TETRA_ROAM_LOCKED, /**< On a cell, or waiting for the lock to return */
     TETRA_ROAM_CHECK,  /**< Measuring the neighbours of a weak cell */
-    TETRA_ROAM_SWEEP,  /**< Lost: measuring every known carrier */
-    TETRA_ROAM_TRY,    /**< Lost: trying candidates for a lock */
+    TETRA_ROAM_SWEEP,  /**< Lost or asked: measuring every known carrier */
+    TETRA_ROAM_TRY,    /**< Lost or asked: trying candidates for a lock */
     TETRA_ROAM_PAUSE,  /**< Lost: nothing found, waiting to search again */
 };
 
@@ -99,6 +104,7 @@ struct tetraRoam {
     uint8_t next;  /**< Next candidate to probe or try */
     uint32_t best; /**< Stronger neighbour of the last check */
     uint8_t confirmed;
+    bool requested; /**< The search was asked for: not stopped by a lock */
 };
 
 /**
@@ -130,6 +136,18 @@ void tetraRoam_setNeighbours(struct tetraRoam *r, const uint32_t *freq,
                              unsigned n);
 
 /**
+ * Search for the best signal now, even while locked: measure every known
+ * carrier (neighbours, the channel list, the serving cell), then move to
+ * the strongest one that locks. A locked serving cell is kept unless
+ * another carrier is TETRA_ROAM_SEARCH_MARGIN_DB stronger. If none of the
+ * carriers tried locks, the search goes on as for a lost lock.
+ *
+ * @param r: tracker.
+ * @param now: current time, ms.
+ */
+void tetraRoam_search(struct tetraRoam *r, long long now);
+
+/**
  * Next step. Call periodically.
  *
  * @param r: tracker.
@@ -153,7 +171,8 @@ void tetraRoam_probed(struct tetraRoam *r, uint32_t freq, int rssi);
 
 /**
  * @param r: tracker.
- * @return true while searching for a cell after losing the lock.
+ * @return true while searching for a cell, after losing the lock or on
+ * request.
  */
 bool tetraRoam_searching(const struct tetraRoam *r);
 
