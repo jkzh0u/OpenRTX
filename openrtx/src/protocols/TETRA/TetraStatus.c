@@ -288,6 +288,19 @@ void tetraStatus_setFollow(uint32_t freq)
     pthread_mutex_unlock(&statusMutex);
 }
 
+/* Written by the UI, read by the receiver */
+static volatile uint8_t searchRequests;
+
+void tetraStatus_requestSearch(void)
+{
+    searchRequests++;
+}
+
+uint8_t tetraStatus_searchRequests(void)
+{
+    return searchRequests;
+}
+
 bool tetraStatus_sync(void)
 {
     pthread_mutex_lock(&statusMutex);

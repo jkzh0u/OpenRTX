@@ -118,6 +118,18 @@ void tetraStatus_endCall(void);
 void tetraStatus_setFollow(uint32_t freq);
 
 /**
+ * Ask the receiver to search for the best signal among the known carriers.
+ * Called by the UI.
+ */
+void tetraStatus_requestSearch(void);
+
+/**
+ * @return a number that changes with every search request, for the
+ * receiver to notice a new one.
+ */
+uint8_t tetraStatus_searchRequests(void);
+
+/**
  * @return true while locked to a TMO downlink.
  */
 bool tetraStatus_sync(void);
