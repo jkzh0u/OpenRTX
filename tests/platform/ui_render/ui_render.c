@@ -41,6 +41,10 @@
 #include "protocols/TETRA/TetraCalls.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
+#include "core/settings.h"
+#include "core/voicePrompts.h"
+#include "core/voicePromptUtils.h"
+#include "interfaces/platform.h"
 
 /* Defined in ui.c, which is not built here */
 const color_t color_black = { 0, 0, 0, 255 };
@@ -53,11 +57,27 @@ state_t last_state;
 /* _ui_calculateLayout(), copied from ui.c by scripts/c62/ui_render.sh */
 #include "ui_layout.inc"
 
+/* The menu entries, copied from ui.c by scripts/c62/ui_render.sh */
+#include "ui_items.inc"
+
 void _ui_drawMainVFO(ui_state_t *ui_state);
 void _ui_drawMainMEM(ui_state_t *ui_state);
 void _ui_drawTetraRecent(ui_state_t *ui_state);
 void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 void _ui_drawTetraFieldTest(ui_state_t *ui_state);
+
+/* Menus, ui_menu.c */
+void _ui_drawMenuTop(ui_state_t *ui_state);
+void _ui_drawMenuSettings(ui_state_t *ui_state);
+void _ui_drawSettingsDisplay(ui_state_t *ui_state);
+void _ui_drawSettingsRadio(ui_state_t *ui_state);
+void _ui_drawSettingsM17(ui_state_t *ui_state);
+void _ui_drawSettingsFM(ui_state_t *ui_state);
+void _ui_drawSettingsAccessibility(ui_state_t *ui_state);
+void _ui_drawSettingsReset2Defaults(ui_state_t *ui_state);
+void _ui_drawMenuInfo(ui_state_t *ui_state);
+void _ui_drawMenuAbout(ui_state_t *ui_state);
+bool _ui_drawMacroMenu(ui_state_t *ui_state);
 
 static struct tetraStatus tetra;
 static const long long now = 100000;
@@ -66,6 +86,56 @@ static char outPath[512];
 static int scale = 4;
 
 /* ---- Stubs for the radio ---- */
+
+/* Defined elsewhere in the firmware, not built here */
+state_t state;
+bool macro_latched;
+const uint32_t freq_steps[] = { 1000,  5000,  6250,   10000,  12500,
+                                15000, 20000, 25000,  50000,  100000 };
+
+unsigned int getHeapSize()
+{
+    return 0;
+}
+
+unsigned int getCurrentFreeHeap()
+{
+    return 0;
+}
+
+const hwInfo_t *platform_getHwInfo()
+{
+    static const hwInfo_t info = { .name = "c62", .uhf_band = 1,
+                                   .vhf_band = 1, .uhf_maxFreq = 480,
+                                   .uhf_minFreq = 400, .vhf_maxFreq = 174,
+                                   .vhf_minFreq = 137 };
+    return &info;
+}
+
+/* No voice prompts */
+void vp_flush()
+{
+}
+
+void vp_play()
+{
+}
+
+void vp_queuePrompt(const uint16_t prompt)
+{
+    (void)prompt;
+}
+
+void vp_queueStringTableEntry(const char *const *stringTableStringPtr)
+{
+    (void)stringTableStringPtr;
+}
+
+void vp_announceText(const char *text, const enum vpQueueFlags flags)
+{
+    (void)text;
+    (void)flags;
+}
 
 void tetra_getStatus(struct tetraStatus *out)
 {
@@ -434,6 +504,58 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
 }
 
 
+/* ---- Menus ---- */
+
+typedef void (*menuDraw)(ui_state_t *ui_state);
+
+static void menu(const char *name, menuDraw fn, uint8_t selected)
+{
+    static ui_state_t ui;
+
+    snprintf(outPath, sizeof(outPath), "%s/%s.png", outDir, name);
+    memset(&ui, 0, sizeof(ui));
+    ui.menu_selected = selected;
+    fn(&ui);
+    gfx_render();
+    printf("%s\n", outPath);
+}
+
+/**
+ * Side key shortcuts: ui.c covers the screen in black (_ui_drawDarkOverlay)
+ * and draws them on top
+ */
+static void macroMenu(ui_state_t *ui_state)
+{
+    gfx_clearScreen();
+    _ui_drawMacroMenu(ui_state);
+}
+
+/**
+ * The menu and the settings pages, with the default settings (the values
+ * after the first power on).
+ */
+static void menuScenes(void)
+{
+    state.settings = default_settings;
+    last_state.settings = default_settings;
+    state.channel = last_state.channel;
+    last_state.v_bat = 7600;
+    state.step_index = last_state.step_index = 4; /* 12.5 kHz, as at start */
+
+    menu("menu-01-top", _ui_drawMenuTop, 0);
+    menu("menu-02-top-field-test", _ui_drawMenuTop, 5);
+    menu("menu-03-settings", _ui_drawMenuSettings, 0);
+    menu("menu-04-display", _ui_drawSettingsDisplay, 0);
+    menu("menu-05-radio", _ui_drawSettingsRadio, 0);
+    menu("menu-06-m17", _ui_drawSettingsM17, 0);
+    menu("menu-07-fm", _ui_drawSettingsFM, 0);
+    menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
+    menu("menu-09-reset", _ui_drawSettingsReset2Defaults, 0);
+    menu("menu-10-info", _ui_drawMenuInfo, 0);
+    menu("menu-11-about", _ui_drawMenuAbout, 0);
+    menu("menu-12-shortcuts", macroMenu, 0);
+}
+
 /**
  * The locked screen with each talkgroup filter of the list selected, as #
  * steps through them.
@@ -535,6 +657,7 @@ int main(int argc, char *argv[])
     last_state.settings.showBatteryIcon = false;
 
     tetraScenes(mcc, mnc, (uint32_t)group, (uint32_t)talker);
+    menuScenes();
     if (tetraIds_filterCount() > 1)
         filterScenes();
 #ifdef CPS_BUILTIN_LIST

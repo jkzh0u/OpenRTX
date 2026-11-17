@@ -50,16 +50,26 @@ if [ ! -s "$BUILD/ui_layout.inc" ]; then
     exit 1
 fi
 
+# The menu entries ui_menu.c draws are defined in ui.c too
+awk '/^const char \*menu_items\[\]/,/^const uint8_t author_num/' \
+    "$ROOT/openrtx/src/ui/default/ui.c" > "$BUILD/ui_items.inc"
+if [ ! -s "$BUILD/ui_items.inc" ]; then
+    echo "menu entries not found in ui.c" >&2
+    exit 1
+fi
+
 # newlib's sniprintf() is the firmware's; the host has snprintf()
 set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
     -DPLATFORM_LINUX -DFONT_UBUNTU_REGULAR -D_GNU_SOURCE \
     -Dsniprintf=snprintf -Dvsniprintf=vsnprintf \
+    -DGIT_VERSION="\"$(git -C "$ROOT" describe --always --dirty 2>/dev/null || echo unknown)\"" \
     -I"$ROOT/tests/platform/ui_render" -I"$BUILD" \
     -I"$ROOT/openrtx/include" -I"$ROOT/lib/QRCode/include" \
     "$ROOT/tests/platform/ui_render/ui_render.c" \
     "$ROOT/openrtx/src/core/graphics.c" \
     "$ROOT/openrtx/src/core/utils.c" \
     "$ROOT/openrtx/src/ui/default/ui_main.c" \
+    "$ROOT/openrtx/src/ui/default/ui_menu.c" \
     "$ROOT/openrtx/src/ui/default/ui_strings.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraIds.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraCalls.c" \
