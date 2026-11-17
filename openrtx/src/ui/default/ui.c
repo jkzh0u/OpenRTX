@@ -67,6 +67,7 @@
 #include "core/beeps.h"
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraIds.h"
+#include "protocols/TETRA/TetraStatus.h"
 #endif
 
 /* UI main screen functions, their implementation is in "ui_main.c" */
@@ -686,18 +687,24 @@ extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 extern bool _ui_tetraCallActive(void);
 
 /*
- * # or * pressed: its short action waits for the key to be released, so
+ * #, * or 0 pressed: its short action waits for the key to be released, so
  * that holding it for the long action does not do the short one first.
  */
 static keyboard_t tetraPendingKey;
 
 /**
  * Short press of # or *: next / previous talkgroup filter, or release a
- * held talkgroup.
+ * held talkgroup. Of 0: recent calls.
  */
 static void _ui_tetraShortKey(keyboard_t key)
 {
-    if(tetraIds_held() != 0)
+    if(key == KEY_0)
+    {
+        ui_state.last_main_state = state.ui_screen;
+        ui_state.menu_selected = 0;
+        state.ui_screen = TETRA_RECENT;
+    }
+    else if(tetraIds_held() != 0)
         tetraIds_release();
     else if(tetraIds_filterCount() > 1)
         tetraIds_stepFilter((key == KEY_HASH) ? 1 : -1);
@@ -709,7 +716,8 @@ static void _ui_tetraShortKey(keyboard_t key)
  *   talkgroup;
  * - long #: hold the current or last heard talkgroup, or release it;
  * - long *: switch line 1 between the last call heard and the signal;
- * - 0: recent calls.
+ * - 0, on release: recent calls;
+ * - long 0: search the known carriers for the best signal.
  *
  * @return true if the key was used.
  */
@@ -747,24 +755,25 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
             _ui_tetraToggleLine1();
             return true;
         }
-        return (msg.keys & KEY_0) != 0;
+        if(msg.keys & KEY_0)
+        {
+            tetraPendingKey = 0;
+            tetraStatus_requestSearch();
+            return true;
+        }
+        return false;
     }
 
-    if(msg.keys & (KEY_HASH | KEY_STAR))
-    {
-        tetraPendingKey = (msg.keys & KEY_HASH) ? KEY_HASH : KEY_STAR;
-        return true;
-    }
+    if(msg.keys & KEY_HASH)
+        tetraPendingKey = KEY_HASH;
+    else if(msg.keys & KEY_STAR)
+        tetraPendingKey = KEY_STAR;
+    else if(msg.keys & KEY_0)
+        tetraPendingKey = KEY_0;
+    else
+        return false;
 
-    if(msg.keys & KEY_0)
-    {
-        ui_state.last_main_state = state.ui_screen;
-        ui_state.menu_selected = 0;
-        state.ui_screen = TETRA_RECENT;
-        return true;
-    }
-
-    return false;
+    return true;
 }
 #endif
 

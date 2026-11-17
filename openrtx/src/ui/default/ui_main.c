@@ -497,6 +497,14 @@ static void _ui_drawTetraIdle(const struct tetraStatus *ts, bool memory)
                          tetraStation);
         snprintf(text, sizeof(text), "%s%s", channel, freqStr);
     }
+
+    // Looking for a better signal (long 0), still on this cell meanwhile
+    if (ts->searching && !moved) {
+        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraWarn,
+                  "scanning");
+        return;
+    }
+
     gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, tetraMuted,
               "%s", text);
 
