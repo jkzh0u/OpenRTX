@@ -236,6 +236,12 @@ const char *info_items[] =
 
 const char *authors[] =
 {
+#ifdef CONFIG_TETRA
+    "C62 fork:",
+    "Jackson Zhou",
+    "jkzhou.ca",
+    "OpenRTX by:",
+#endif
     "Niccolo' IU2KIN",
     "Silvano IU2KWO",
     "Federico IU2NUO",
