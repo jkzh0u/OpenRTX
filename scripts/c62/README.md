@@ -78,6 +78,23 @@ holds that talkgroup and **ESC** goes back to the list.
 A short press of **#**, **\*** or **0** acts when you let go of the key, so
 that holding it does only the long press.
 
+**Menu** > **Field test** shows what the receiver knows, like the service
+screen of a TETRA radio. **Up** / **Down** to scroll, **Enter** to search
+for the best signal (as long **0**), **ESC** to go back:
+
+- the lock and phase error, signal in dBm, carrier offset, resyncs and
+  samples lost (orange when any were lost);
+- the cell: network, colour code, location area with its name, main
+  carrier, load, air encryption;
+- the frequency tuned, if not the main carrier, and a call's carrier while
+  following it;
+- what cell tracking is doing (on the cell, checking neighbours, measuring
+  all, trying a carrier, waiting);
+- the network's clock time;
+- the neighbour cells the cell broadcasts, with their location areas;
+- the strongest carriers of the last measurement by cell tracking, with
+  their levels and how long ago; the cell received is green with a `*`.
+
 ## 1. Build with Docker
 
 You only need Docker and git. The image holds the toolchain (Zephyr SDK
@@ -119,7 +136,7 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | Option | Default | Effect |
 |---|---|---|
 | `C62_WIDE_RX` | `ON` | M17-mode RX uses BK4819 `REG_43 = 0x7e28`, the widest documented filter (see section 4) |
-| `C62_BASEBAND_DUMP` | `ON` | Send raw 48 kHz RX audio over the UART. The console log is muted after audio starts |
+| `C62_BASEBAND_DUMP` | `OFF` | Send raw 48 kHz RX audio over the UART. The console log is muted after audio starts. Needs `C62_TETRA_LOG=OFF` (section 3) |
 | `C62_BASEBAND_DUMP_BAUD` | `115200` | UART baud rate during the dump |
 | `C62_BASEBAND_DUMP_BURST` | `ON` | Record 1 MiB (10.4 s) to PSRAM, send it, repeat |
 | `C62_BASEBAND_DUMP_FORMAT` | `1` | `1` = 16-bit samples, `2` = 12-bit packed (13.9 s per burst) |
@@ -127,6 +144,8 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | `C62_TETRA_SPEECH` | `ON` | Play clear TETRA speech, with OpenACELP (section 5) |
 | `C62_TETRA_FOLLOW` | `ON` | Follow TETRA calls to the other carriers of a cell (section 5) |
 | `C62_TETRA_ROAM` | `ON` | Move to the best TETRA cell as the radio moves, search when the signal is lost (section 5) |
+| `C62_TETRA_LOG` | `ON` | TETRA receive log over the UART, and the last lines kept in PSRAM (section 5, Receive log) |
+| `C62_TETRA_LOG_HISTORY` | `262144` | Bytes of log kept in PSRAM |
 | `C62_CHANNELS` | empty | Channel list built into the firmware, for memory mode (section 6) |
 | `C62_REG43_SWEEP` | `OFF` | Cycle `REG_43` through 7 test values in M17 RX |
 | `C62_REG43_SWEEP_MS` | `1400` | Recorded time per sweep value (one burst covers all 7 values) |
@@ -143,6 +162,9 @@ Notes:
   `dtc` and `meson`, then follow the script.
 
 ## 2. Flash
+
+Flashing a new build for the first time: follow
+[FIRST_FLASH.md](FIRST_FLASH.md), which turns the features on in stages.
 
 Use [`cskburn`](https://github.com/LISTENAI/cskburn/releases) over the
 Kenwood programming cable. To enter burn mode: radio off, hold the lower
