@@ -51,6 +51,14 @@ typedef struct
     bool    showBatteryIcon;      // Battery display true: icon, false: percentage
     bool    gpsSetTime;           // Use GPS to ajust RTC time
     char    M17_meta_text[53];    // M17 Meta Text to send
+#ifdef CONFIG_TETRA
+    uint8_t tetraFollow     : 1,  // Follow calls to other carriers
+            tetraRoam       : 1,  // Move between cells by itself
+            tetraAlarmBeep  : 1,  // Beep at the start of an alarm call
+            tetraKeepFilter : 1,  // Start with the filter of the last power off
+            _tetraReserved  : 4;
+    uint8_t tetraFilter;          // Talkgroup filter at power off
+#endif
 }
 __attribute__((packed)) settings_t;
 
@@ -79,6 +87,14 @@ static const settings_t default_settings =
     false,                        // Display battery icon
     false,                        // Update RTC with GPS
     "OpenRTX",                    // Default M17 meta text
+#ifdef CONFIG_TETRA
+    1,                            // Follow calls
+    1,                            // Cell tracking
+    1,                            // Alarm beep
+    1,                            // Keep the talkgroup filter
+    0,                            // not used
+    0,                            // Talkgroup filter: All
+#endif
 };
 
 #endif /* SETTINGS_H */
