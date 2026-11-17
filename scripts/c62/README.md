@@ -33,12 +33,22 @@ On the main screen, in any mode:
 | **Menu** (Enter) | Open the menu. The **Channels** entry lists the built-in channels |
 | **ESC** | Switch between VFO mode (a frequency) and memory mode (the channel list) |
 | **Up** / **Down** | VFO: step the frequency. Memory: next / previous channel |
-| **1** to **9** | VFO: type a frequency, then **Enter** (in T mode **0** opens the recent calls instead) |
+| **0** to **9** | VFO: type a frequency, then **Enter**. Memory: type a channel number, see below |
+| Long **1** to **9** | Memory: the side key shortcut of that number, without the side key. Long **9** also unlocks the keypad |
+| Long **5** | VFO: change mode, if 5 is the first digit typed (it is then dropped) |
 | Side key + number | Shortcut, see below |
+
+In memory mode a short press of a number types a channel number, shown
+large in amber, and acts when you let go, so that holding the key does only
+its shortcut. **Enter** jumps to the channel, **ESC** cancels, and after
+2 s without a key, or at four digits, it jumps by itself. Any other key
+drops the number. In T mode **0** on its own still opens the recent calls;
+it is a digit once a number is started (for channel 10, 20...).
 
 Shortcuts: hold the **side key** and press a number. Long-press the side key
 on its own to latch shortcut mode, so the numbers work without holding it;
-press it again to unlatch.
+press it again to unlatch. In memory mode a long press of the number on its
+own does the same, without the side key.
 
 | Side key + | Does |
 |---|---|
@@ -55,7 +65,7 @@ In T mode, on the main screen:
 |---|---|---|
 | **#** | Next talkgroup filter, or release a held talkgroup | Hold the current call's talkgroup, or the last one heard. Again to release |
 | **\*** | Previous talkgroup filter, or release a held talkgroup | Line 1: switch between the last call heard and the signal figures |
-| **0** | Recent calls | |
+| **0** | Recent calls | Search the known carriers for the best signal |
 
 The recent calls list shows how long ago each call was on the right,
 alarms in red and a lock before encrypted calls. **Up** / **Down** to
@@ -64,8 +74,8 @@ selected call in detail (who talked last, how many times it was heard, when
 it was first heard), **ESC** or **0** to go back. In the detail, **Enter**
 holds that talkgroup and **ESC** goes back to the list.
 
-A short press of **#** or **\*** acts when you let go of the key, so that
-holding it does only the long press.
+A short press of **#**, **\*** or **0** acts when you let go of the key, so
+that holding it does only the long press.
 
 ## 1. Build with Docker
 
@@ -346,6 +356,13 @@ does:
   TETRA channel of the channel list, then tries the strongest in turn,
   2.5 s each, until one locks. The screen shows `T scanning` meanwhile,
   and below it the channel being tried.
+- A long **0** searches for the best signal straight away, without
+  waiting for the cell to get weak or the lock to be lost: it measures the
+  neighbours, every TETRA channel of the channel list and the cell itself,
+  then moves to the strongest, unless the cell received is within 3 dB of
+  it. If the strongest does not lock, the next ones are tried, as when the
+  lock is lost. The line under the station shows `scanning` meanwhile;
+  measuring takes about 30 ms per carrier, and may click in a call.
 - The grey frequency shows the cell received. The talkgroup filter and the
   hold stay as they are.
 
@@ -476,7 +493,8 @@ TETRA_LA(39, "Eglinton east")
 
 `scripts/c62/ui_render.sh` draws the main screen on your computer with the
 firmware's own UI code, at the C62's 160x128, and writes PNG files: TETRA
-searching, locked, SDS, a call, a followed call and an encrypted call.
+searching, locked, a channel number being typed, the best signal search,
+SDS, a call, a followed call and an encrypted call.
 With `-c` it also draws memory mode for each channel of a list and uses
 its talkgroup names; `-t` sets the group and talker of the example calls:
 
