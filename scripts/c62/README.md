@@ -58,6 +58,7 @@ own does the same, without the side key.
 | **6** | Transmit power |
 | **7** / **8** | Brightness down / up |
 | **9** | Lock or unlock the keypad |
+| **0** | Send the TETRA log kept by the radio over the cable (see 5, Receive log) |
 
 In T mode, on the main screen:
 
@@ -160,6 +161,11 @@ cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
 ```
 
 ## 3. Capture the RX baseband
+
+The dump is off by default, as it shares the cable with the TETRA receive
+log: build with `-DC62_BASEBAND_DUMP=ON -DC62_TETRA_LOG=OFF` to use it.
+A build folder made before keeps its own setting; if the build then stops
+saying both use the console UART, add `-DC62_BASEBAND_DUMP=OFF` once.
 
 The dump uses the UART TX line on the Kenwood connector, which is the line
 your programming cable receives on. Put the radio in **M17 mode** on the
@@ -384,6 +390,65 @@ libtetra's retune requests with the radio's answer, and each retune the
 radio would make (lines starting with `>>`). A recording holds a single
 carrier, so it shows the decisions, not what the radio would hear
 afterwards. Use `-n` for recordings not made with a C62.
+
+### Receive log
+
+The radio writes a line for each thing the TETRA receiver decodes or
+decides on the programming cable, at 115200 baud, so you can watch call
+following and cell tracking on a real network. It also keeps the last
+256 kB of lines, an hour or several depending on how busy the network is,
+so you can ride with nothing connected and read them afterwards. A raw baseband dump needs bursts or a fast adapter;
+the log is about 100 bytes a second at most.
+
+```bash
+pip install pyserial
+python3 OpenRTX/scripts/c62_log.py -p /dev/ttyUSB0 -o ride.log
+```
+
+The script prints each line and appends it to the file, after the
+computer's clock time. On the radio, **side key + 0** sends the kept lines,
+between `--- stored log` and `--- end of stored log` (256 kB take about
+25 s). Any serial terminal at 115200 baud works too, and so does a phone
+with a USB OTG serial app.
+
+Each line starts with the seconds since power on:
+
+```
+  12.345  sync locked
+  12.890  cell 302-2013 LA 12 (Eglinton east) CC 5, main carrier 1234 = 392.51250
+  13.100  network time 2026-11-16 08:12:33 local
+  13.100  neighbours: 392.61250, 392.71250
+  15.020  call 7 setup to G 101011 (Transit Control) from 100112 (Run 112), carrier 1236 = 392.56250 slots 2
+  15.021  retune: call 7 to carrier 1236 slots 0x2 >> 392.56250
+  15.100  voice call 7 from 100112 (Run 112)
+  31.400  follow: back to the main carrier >> 392.51250
+  40.100  roam: weak cell (-97 dBm), measuring 2 neighbours
+  40.160  roam: measured 2: 392.61250 -88, 392.71250 -101
+  46.200  roam: move to a stronger neighbour >> 392.61250 (-88 dBm)
+  50.000  signal -85 dBm on 392.61250, locked, phase error 12%, offset -234 Hz
+```
+
+- `sync`, `cell`, `neighbours`, `network time`: the lock and the cell. A
+  cell or neighbour line comes again only when it changes; the network
+  time every 10 minutes, to match the log to a clock.
+- `call`: every call control event, with the talkgroup and radio names of
+  the channel list, the allocated carrier and timeslots, and `filtered
+  out` for calls the talkgroup filter holds back. `voice call` marks the
+  start of each transmission heard, `sds` a short message or status.
+- `retune`: libtetra asking to follow a call to another carrier or back,
+  and the radio's answer (`>>` where it tuned, or `declined` / `filtered
+  out`). `follow:` is the radio going back on its own (silence,
+  encryption, a filter change).
+- `roam:`: cell tracking and the long **0** search: what was measured,
+  the moves and tries, and `staying on` when the cell received is best.
+- `filter`, `start on`, `samples lost`, and every 10 s `signal`: signal
+  strength, frequency, lock, decoding quality.
+- `--- N lines not sent` if the cable could not keep up; those lines are
+  still in the kept log.
+
+The kept lines are lost at power off. Zephyr and the DSP print on the same
+line, mostly at boot. `-DC62_TETRA_LOG=OFF` builds without the log, and
+`-DC62_TETRA_LOG_HISTORY=` sets how many bytes are kept.
 
 ## 6. Memory channels
 
