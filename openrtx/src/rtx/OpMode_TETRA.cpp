@@ -37,6 +37,7 @@ static struct tetraFollow follower;
 static struct tetraFilter filter;
 static uint8_t filterSelection; // tetraIds_selection() applied to filter
 static struct tetraRoam roam;
+static uint8_t searchRequests; // tetraStatus_searchRequests() handled
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
@@ -146,6 +147,12 @@ static void roamStep()
     tetra_getStatus(&ts);
     bool busy = ts.call || follower.selected;
 
+    /* Search for the best signal, asked for on the keypad */
+    if (tetraStatus_searchRequests() != searchRequests) {
+        searchRequests = tetraStatus_searchRequests();
+        tetraRoam_search(&roam, getTick());
+    }
+
     struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync, busy,
                                             radio_getRssi());
 
@@ -185,6 +192,7 @@ static void roamInit(uint32_t home)
     channel_t ch;
 
     tetraRoam_init(&roam, home, getTick());
+    searchRequests = tetraStatus_searchRequests();
     for (uint16_t i = 0; cps_readChannel(&ch, i) == 0; i++) {
         if (ch.mode == OPMODE_TETRA)
             tetraRoam_addScan(&roam, ch.rx_frequency);
