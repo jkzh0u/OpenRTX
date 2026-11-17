@@ -74,6 +74,7 @@ void _ui_drawSettingsRadio(ui_state_t *ui_state);
 void _ui_drawSettingsM17(ui_state_t *ui_state);
 void _ui_drawSettingsFM(ui_state_t *ui_state);
 void _ui_drawSettingsAccessibility(ui_state_t *ui_state);
+void _ui_drawSettingsTetra(ui_state_t *ui_state);
 void _ui_drawSettingsReset2Defaults(ui_state_t *ui_state);
 void _ui_drawMenuInfo(ui_state_t *ui_state);
 void _ui_drawMenuAbout(ui_state_t *ui_state);
@@ -550,6 +551,7 @@ static void menuScenes(void)
     menu("menu-06-m17", _ui_drawSettingsM17, 0);
     menu("menu-07-fm", _ui_drawSettingsFM, 0);
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
+    menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);
     menu("menu-09-reset", _ui_drawSettingsReset2Defaults, 0);
     menu("menu-10-info", _ui_drawMenuInfo, 0);
     menu("menu-11-about", _ui_drawMenuAbout, 0);
