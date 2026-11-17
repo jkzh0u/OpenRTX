@@ -68,6 +68,9 @@
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
+#ifdef CONFIG_TETRA_LOG
+#include "protocols/TETRA/TetraLog.h"
+#endif
 #endif
 
 /* UI main screen functions, their implementation is in "ui_main.c" */
@@ -1289,6 +1292,12 @@ static void _ui_fsm_menuMacro(kbd_msg_t msg, bool *sync_rtx)
                 ui_state.input_locked = false;
             break;
     }
+
+#ifdef CONFIG_TETRA_LOG
+    // Side key + 0: send the stored TETRA log over the cable
+    if((msg.keys & KEY_0) && !msg.long_press)
+        tetraLog_requestHistory();
+#endif
 
 #if defined(PLATFORM_TTWRPLUS)
     if(msg.keys & KEY_VOLDOWN)
