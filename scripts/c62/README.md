@@ -489,8 +489,20 @@ line, mostly at boot. `-DC62_TETRA_LOG=OFF` builds without the log, and
 
 ## 6. Memory channels
 
-The C62 build cannot store channels or settings yet: after power on it is
-in VFO mode on 430.000 MHz, M17. A channel list can be built into the
+The radio saves the menu settings (brightness, squelch, timers and so on)
+and the channel in use when you turn it off with the knob, and starts with
+them. The channel comes back in VFO mode: a memory channel you were on
+returns as its frequency and mode, so T mode on a TTC cell starts receiving
+again by itself. The talkgroup filter and hold start from `All`.
+
+The first start, or a firmware whose settings layout changed, uses the
+defaults: VFO mode on 430.000 MHz, M17. They are stored with Zephyr's NVS
+in the first 16 kB of the flash area at `0x2b0000`, which the stock
+firmware leaves empty; the calibration at `0x3b0000` is never written.
+Settings are written only at power off, and only what changed. Taking the
+battery out while on keeps the last saved ones.
+
+The C62 build cannot store channels: a channel list can be built into the
 firmware instead, read only:
 
 ```bash

@@ -81,6 +81,11 @@ T mode on the strong cell (memory mode, its channel):
 - [ ] Speech heard for a clear call on the main carrier, without chopping
 - [ ] Leave it 15 minutes: no crash or reboot (a reboot shows the
       `TETRA log` line again)
+- [ ] Settings are kept: change the brightness, be on the TTC channel in T
+      mode, turn the knob off, wait 5 s, turn it on. Same brightness, and
+      it starts on that frequency in T mode (in VFO mode). If it starts on
+      430.000 M17 instead, the save failed: note any `nvmem:` line in the
+      log
 
 ## 2. Call following
 
