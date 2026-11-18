@@ -23,8 +23,7 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
 - builds with Docker (section 1), and its screens can be previewed on a
   computer (section 7).
 
-It is receive only in T mode. The talkgroup filter starts at `TG All`
-after every power on.
+It is receive only in T mode.
 
 ## Quick start
 
@@ -558,7 +557,8 @@ The radio saves the menu settings (brightness, squelch, timers and so on)
 and the channel in use when you turn it off with the knob, and starts with
 them. The channel comes back in VFO mode: a memory channel you were on
 returns as its frequency and mode, so T mode on a TETRA cell starts
-receiving again by itself. The talkgroup filter and hold start from `All`.
+receiving again by itself. The talkgroup filter comes back too, unless
+Keep filter is off (TETRA settings); a held talkgroup does not.
 
 The first start, or a firmware whose settings layout changed, uses the
 defaults: VFO mode on 430.000 MHz, M17. They are stored with Zephyr's NVS
