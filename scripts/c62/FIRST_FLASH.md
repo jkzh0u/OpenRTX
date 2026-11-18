@@ -5,8 +5,10 @@ only been built and unit tested, never run on a C62, so turn it on in
 stages: if something breaks, you know which stage did it.
 
 Run the commands from the workspace folder (the one that holds `OpenRTX`).
-On a Mac the cable shows up as `/dev/tty.usbserial-…` or similar
-(`ls /dev/tty.*`); the examples use `/dev/ttyUSB0`.
+The examples use `/dev/ttyUSB0`: put your cable's port in its place
+(`/dev/cu.…` on a Mac, `COM3` or similar on Windows, with `.\cskburn.exe`).
+[FLASHING.md](FLASHING.md) has how to install `cskburn`, find the port and
+enter burn mode on each system: do its steps 1 to 5 first.
 
 Tick each box. When one fails, stop, save the log, and note what you did
 just before.
@@ -19,8 +21,9 @@ else, note it and carry on.
 ## 0. Before you start
 
 - [ ] `cskburn` installed, `pyserial` installed (`pip install pyserial`)
-- [ ] Programming cable works: `cskburn` in burn mode answers (README
-      section 2: radio off, hold the lower side key, power on, release)
+- [ ] Programming cable works: `cskburn` in burn mode answers
+      (FLASHING.md, step 4: radio off, hold the lower side key, power on,
+      release)
 - [ ] **Back up the radio's own flash**, before any flashing. It holds data
       for this unit only:
 

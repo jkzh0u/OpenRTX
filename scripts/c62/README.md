@@ -28,8 +28,9 @@ It is receive only in T mode.
 ## Quick start
 
 1. **Get a USB programming cable** with a 2-pin Kenwood plug, and install
-   [`cskburn`](https://github.com/LISTENAI/cskburn/releases) (section 2).
-2. **Back up your radio's flash** before anything else (section 2). It holds
+   [`cskburn`](https://github.com/LISTENAI/cskburn/releases)
+   ([FLASHING.md](FLASHING.md)).
+2. **Back up your radio's flash** before anything else (FLASHING.md). It holds
    calibration unique to your radio, and is the only way back to the stock
    firmware.
 3. **Build the firmware** with Docker (section 1). It is the same for
@@ -40,7 +41,7 @@ It is receive only in T mode.
    `python3 scripts/chlist.py my_channels.h -o channels.bin` (section 6).
    [`channels/ttc_tetra.h`](channels/ttc_tetra.h) is a full example for
    Toronto.
-5. **Flash** the firmware, the DSP image and your list (section 2). For a
+5. **Flash** the firmware, the DSP image and your list (FLASHING.md). For a
    first flash, follow [FIRST_FLASH.md](FIRST_FLASH.md), which turns the
    features on in stages.
 6. **Watch the log** with `scripts/c62_log.py` over the same cable
@@ -204,15 +205,19 @@ Notes:
 
 ## 2. Flash
 
-Flashing a new build for the first time: follow
-[FIRST_FLASH.md](FIRST_FLASH.md), which turns the features on in stages.
+**[FLASHING.md](FLASHING.md) has the full steps for macOS, Linux and
+Windows**: installing `cskburn`, finding the cable's port, burn mode, the
+backup, flashing and what to do when it fails. For a first flash, follow it
+and then [FIRST_FLASH.md](FIRST_FLASH.md), which turns the features on in
+stages.
 
-Use [`cskburn`](https://github.com/LISTENAI/cskburn/releases) over the
-Kenwood programming cable. To enter burn mode: radio off, hold the lower
-side key, power on, release the key. The screen stays dark. Don't press the
-main PTT while flashing: it shares the boot ROM's UART RX line. `cskburn`
-resets the radio after each command, so enter burn mode again before each
-one.
+In short: use [`cskburn`](https://github.com/LISTENAI/cskburn/releases)
+over a programming cable with a Kenwood plug. To enter burn mode: radio
+off, hold the lower side key, power on, release the key. The screen stays
+dark. Don't press the main PTT while flashing: it shares the boot ROM's
+UART RX line. The radio leaves burn mode after each command, so enter it
+again before each one. The commands, with your port in place of
+`/dev/ttyUSB0` (`/dev/cu.…` on a Mac, `COM3` or similar on Windows):
 
 ```bash
 # Once, before anything else: back up your radio's own flash (it is per-unit)
@@ -577,7 +582,7 @@ python3 OpenRTX/scripts/chlist.py --show channels.bin
 ```
 
 The script stops with the line number of anything it cannot read. Then
-flash the image, radio in burn mode (section 2):
+flash the image, radio in burn mode (FLASHING.md, step 4):
 
 ```bash
 cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all 0x2c0000 channels.bin
