@@ -27,8 +27,7 @@ It is receive only in T mode.
 
 ## Quick start
 
-1. **Get an FT232R programming cable** (USB ID `0403:6001`) with a 2-pin
-   Kenwood plug, and install
+1. **Get a USB programming cable** with a 2-pin Kenwood plug, and install
    [`cskburn`](https://github.com/LISTENAI/cskburn/releases) (section 2).
 2. **Back up your radio's flash** before anything else (section 2). It holds
    calibration unique to your radio, and is the only way back to the stock
@@ -214,21 +213,6 @@ side key, power on, release the key. The screen stays dark. Don't press the
 main PTT while flashing: it shares the boot ROM's UART RX line. `cskburn`
 resets the radio after each command, so enter burn mode again before each
 one.
-
-**The cable must use an FTDI FT232R chip (USB ID `0403:6001`).** "Genuine
-FTDI" is not enough. A cable with an FT231X (`0403:6015`), such as the BTECH
-PC03, has been reported to pass the boot ROM handshake and then fail every
-flash operation with `ERROR [E5003]: Failed to load RAM burner`, while an
-FT232R cable (DTECH K1) worked first time. That error looks like a software
-problem, so check the cable's ID before debugging anything else:
-
-```bash
-system_profiler SPUSBDataType | grep -B4 "Vendor ID: 0x0403"  # macOS: Product ID: 0x6001
-lsusb | grep 0403                                           # Linux: 0403:6001
-```
-
-On Windows: Device Manager, the port's Properties, Details, Hardware Ids
-(`VID_0403&PID_6001`).
 
 ```bash
 # Once, before anything else: back up your radio's own flash (it is per-unit)

@@ -19,9 +19,6 @@ else, note it and carry on.
 ## 0. Before you start
 
 - [ ] `cskburn` installed, `pyserial` installed (`pip install pyserial`)
-- [ ] The cable is an **FT232R** (USB ID `0403:6001`), not just "FTDI":
-      an FT231X (`0403:6015`, e.g. BTECH PC03) is reported to fail with
-      `E5003: Failed to load RAM burner`. How to check: README section 2
 - [ ] Programming cable works: `cskburn` in burn mode answers (README
       section 2: radio off, hold the lower side key, power on, release)
 - [ ] **Back up the radio's own flash**, before any flashing. It holds data
@@ -212,9 +209,8 @@ In VFO mode:
 
 ## If something goes wrong
 
-- **`cskburn` handshakes, then `E5003: Failed to load RAM burner`:** the
-  cable, not the firmware. Check it is an FT232R (`0403:6001`), see
-  README section 2.
+- **`cskburn` fails before writing anything:** check the cable and burn
+  mode first. Note the cable's make and its chip, and the exact error.
 - **`Channel list: none flashed`:** nothing valid at `0x2c0000`; flash
   `channels.bin` there. **`not used, damaged or other version (-N)`:** the
   image was cut short or made by another version of `chlist.py`: build it
