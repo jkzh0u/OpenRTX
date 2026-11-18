@@ -1215,8 +1215,206 @@ void _ui_drawMacroTop()
     }
 }
 
+#ifdef CONFIG_UI_MACRO_GRID
+/*
+ * Shortcut menu laid out like the keypad: a 3 x 4 grid with, in each box,
+ * the key, what it does and the current value. Keys that do nothing in the
+ * current mode are dimmed. Pairs of keys (tone down / up, brightness down /
+ * up) share one box, their keys at either end. Up / Down change the
+ * squelch while the menu is open.
+ */
+
+#define MACRO_ROWS 4
+#define MACRO_COLS 3
+
+static const color_t macro_line  = {45, 45, 45, 255};
+static const color_t macro_label = {150, 150, 150, 255};
+static const color_t macro_dim   = {80, 80, 80, 255};
+
+typedef struct
+{
+    uint8_t     col;
+    uint8_t     row;
+    uint8_t     span;       // Boxes wide
+    const char *key;        // Key on the left, NULL for none
+    const char *keyRight;   // Second key on the right, NULL for none
+    const char *label;
+    const char *value;      // NULL for none
+    bool        active;
+    int8_t      selected;   // Index in macro_menu_selected, -1 for none
+}
+macroCell_t;
+
+static uint16_t macroColX(uint8_t col)
+{
+    return (uint16_t) ((CONFIG_SCREEN_WIDTH * col) / MACRO_COLS);
+}
+
+static uint16_t macroRowY(uint8_t row)
+{
+    return (uint16_t) ((CONFIG_SCREEN_HEIGHT * row) / MACRO_ROWS);
+}
+
+static void _ui_drawMacroCell(const ui_state_t *ui_state, const macroCell_t *c)
+{
+    uint16_t x = macroColX(c->col);
+    uint16_t w = macroColX(c->col + c->span) - x;
+    uint16_t y = macroRowY(c->row);
+    uint16_t h = macroRowY(c->row + 1) - y;
+    const uint16_t pad = 3;
+
+    // Lines between the boxes, as on a keypad
+    if((c->col + c->span) < MACRO_COLS)
+    {
+        point_t a = {(int16_t) (x + w - 1), (int16_t) y};
+        point_t b = {(int16_t) (x + w - 1), (int16_t) (y + h - 1)};
+        gfx_drawLine(a, b, macro_line);
+    }
+    if((c->row + 1) < MACRO_ROWS)
+    {
+        point_t a = {(int16_t) x, (int16_t) (y + h - 1)};
+        point_t b = {(int16_t) (x + w - 1), (int16_t) (y + h - 1)};
+        gfx_drawLine(a, b, macro_line);
+    }
+
+#if defined(CONFIG_UI_NO_KEYBOARD)
+    if((c->selected >= 0) && (c->selected == ui_state->macro_menu_selected))
+    {
+        point_t o = {(int16_t) x, (int16_t) y};
+        gfx_drawRect(o, w - 1, h - 1, yellow_fab413, false);
+    }
+#else
+    (void) ui_state;
+#endif
+
+    const fontSize_t small = FONT_SIZE_6PT;
+    const fontSize_t large = FONT_SIZE_8PT;
+    int16_t labelY = (int16_t) (y + pad + gfx_getFontHeight(small));
+    int16_t valueY = (int16_t) (y + h - pad - 2);
+    color_t keyColor   = c->active ? yellow_fab413 : macro_dim;
+    color_t labelColor = c->active ? macro_label : macro_dim;
+
+    uint16_t labelLeft  = x + pad;
+    uint16_t labelRight = x + w - pad;
+    if(c->key != NULL)
+    {
+        point_t p = {(int16_t) (x + pad), labelY};
+        gfx_print(p, small, TEXT_ALIGN_LEFT, keyColor, "%s", c->key);
+        labelLeft += gfx_getTextWidth(small, c->key) + pad;
+    }
+    if(c->keyRight != NULL)
+    {
+        uint16_t kw = gfx_getTextWidth(small, c->keyRight);
+        point_t p = {(int16_t) (x + w - pad - kw), labelY};
+        gfx_print(p, small, TEXT_ALIGN_LEFT, keyColor, "%s", c->keyRight);
+        labelRight -= kw + pad;
+    }
+
+    // A box with two keys centres its label between them
+    uint16_t lw = gfx_getTextWidth(small, c->label);
+    uint16_t lx = labelLeft;
+    if((c->keyRight != NULL) && ((labelRight - labelLeft) > lw))
+        lx = labelLeft + ((labelRight - labelLeft) - lw) / 2;
+    point_t lp = {(int16_t) lx, labelY};
+    gfx_print(lp, small, TEXT_ALIGN_LEFT, labelColor, "%s", c->label);
+
+    if(c->active && (c->value != NULL))
+    {
+        uint16_t vw = gfx_getTextWidth(large, c->value);
+        uint16_t vx = x + ((w > vw) ? (w - vw) / 2 : 0);
+        point_t vp = {(int16_t) vx, valueY};
+        gfx_print(vp, large, TEXT_ALIGN_LEFT, color_white, "%s", c->value);
+    }
+}
+
+static bool _ui_drawMacroGrid(ui_state_t *ui_state)
+{
+    // No title: the grid takes the whole screen, and the last box says
+    // whether the side key is held or latched
+    const channel_t *ch = &last_state.channel;
+    bool fm = (ch->mode == OPMODE_FM);
+    bool tx = true;
+#ifdef CONFIG_TETRA
+    // T mode is receive only
+    tx = (ch->mode != OPMODE_TETRA);
+#endif
+
+    char tone[12]  = "";
+    char width[8]  = "";
+    char power[8]  = "-";
+    char light[8]  = "";
+    char sql[8]    = "";
+    const char *mode = "";
+
+    uint16_t t = ctcss_tone[ch->fm.txTone];
+    sniprintf(tone, sizeof(tone), "%u.%u", t / 10, t % 10);
+    sniprintf(width, sizeof(width), "%s",
+              (ch->bandwidth == BW_25) ? "25k" : "12.5k");
+    sniprintf(sql, sizeof(sql), "%u", last_state.settings.sqlLevel);
+
+    if(ch->power > 0)
+    {
+        unsigned int w = ch->power / 1000;
+        unsigned int d = (ch->power % 1000) / 100;
+        if(d == 0)
+            sniprintf(power, sizeof(power), "%uW", w);
+        else
+            sniprintf(power, sizeof(power), "%u.%uW", w, d);
+    }
+
+    switch(ch->mode)
+    {
+        case OPMODE_FM:    mode = "FM";    break;
+        case OPMODE_DMR:   mode = "DMR";   break;
+#ifdef CONFIG_M17
+        case OPMODE_M17:   mode = "M17";   break;
+#endif
+#ifdef CONFIG_TETRA
+        case OPMODE_TETRA: mode = "TETRA"; break;
+#endif
+        default: break;
+    }
+
+    bool hasLight = false;
+#ifdef CONFIG_SCREEN_BRIGHTNESS
+    hasLight = true;
+    sniprintf(light, sizeof(light), "%u%%", state.settings.brightness);
+#endif
+
+    const macroCell_t cells[] =
+    {
+        {0, 0, 1, "1", NULL, "tone",
+         _ui_getToneEnabledString(ch->fm.txToneEn, ch->fm.rxToneEn, false),
+         fm, 0},
+        {1, 0, 2, "2-", "+3", "tone", tone, fm, 1},
+        {0, 1, 1, "4", NULL, "width", width, fm, 3},
+        {1, 1, 1, "5", NULL, "mode", mode, true, 4},
+        {2, 1, 1, "6", NULL, "power", power, tx, 5},
+        {0, 2, 2, "7-", "+8", "light", light, hasLight, 6},
+        {2, 2, 1, "9", NULL, "keypad",
+         ui_state->input_locked ? "unlock" : "lock", true, 8},
+        {0, 3, 1, NULL, NULL, "squelch", sql, fm, -1},
+#ifdef CONFIG_TETRA_LOG
+        {1, 3, 1, "0", NULL, "log", "send", true, -1},
+#else
+        {1, 3, 1, NULL, NULL, "", NULL, false, -1},
+#endif
+        {2, 3, 1, NULL, NULL, "side key",
+         macro_latched ? "latched" : "held", true, -1},
+    };
+
+    for(size_t i = 0; i < sizeof(cells) / sizeof(cells[0]); i++)
+        _ui_drawMacroCell(ui_state, &cells[i]);
+
+    return true;
+}
+#endif // CONFIG_UI_MACRO_GRID
+
 bool _ui_drawMacroMenu(ui_state_t* ui_state)
 {
+#ifdef CONFIG_UI_MACRO_GRID
+    return _ui_drawMacroGrid(ui_state);
+#endif
     // Header
     _ui_drawMacroTop();
     // First row

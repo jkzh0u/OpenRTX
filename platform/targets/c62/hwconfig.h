@@ -32,6 +32,8 @@ extern "C" {
 
 /* Screen has adjustable brightness */
 #define CONFIG_SCREEN_BRIGHTNESS
+/* Shortcut menu drawn as a grid shaped like the keypad */
+#define CONFIG_UI_MACRO_GRID
 
 /* Battery type */
 #define CONFIG_BAT_LIION
