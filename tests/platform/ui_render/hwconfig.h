@@ -16,6 +16,9 @@
 #define CONFIG_SCREEN_HEIGHT 128
 #define CONFIG_PIX_FMT_RGB565
 #define CONFIG_SCREEN_BRIGHTNESS
+/* Shortcut menu drawn as a grid shaped like the keypad */
+#define CONFIG_UI_MACRO_GRID
+#define CONFIG_TETRA_LOG
 #define CONFIG_BAT_LIION
 #define CONFIG_BAT_NCELLS 2
 #define CONFIG_M17

@@ -556,6 +556,17 @@ static void menuScenes(void)
     menu("menu-10-info", _ui_drawMenuInfo, 0);
     menu("menu-11-about", _ui_drawMenuAbout, 0);
     menu("menu-12-shortcuts", macroMenu, 0);
+
+    /* The same in FM, where the tone, width and squelch keys work */
+    channel_t saved = last_state.channel;
+    last_state.channel.mode = OPMODE_FM;
+    last_state.channel.bandwidth = BW_12_5;
+    last_state.channel.power = 5000;
+    last_state.channel.fm.txToneEn = 1;
+    last_state.channel.fm.rxToneEn = 1;
+    last_state.channel.fm.txTone = 0; /* the only tone of this file */
+    menu("menu-12b-shortcuts-fm", macroMenu, 0);
+    last_state.channel = saved;
 }
 
 /**
