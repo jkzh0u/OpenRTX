@@ -12,12 +12,14 @@ openrtx/include/protocols/TETRA/TetraIds.h:
 
     CPS_CHANNEL("Name", frequency_hz, OPMODE_FM | OPMODE_M17 | OPMODE_TETRA)
     TETRA_FILTER(ID, "Name")
-    TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY; | TF_ALARM,
-                                                   # TF_PRIORITY
+    TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY; also
+                                                   # | TF_ALARM, TF_PRIORITY(n)
     TETRA_LA(la, "Name")
     TETRA_ID_RANGE(first, last, "Run %u", base, TF(ID))
 
-with C comments. The image (openrtx/include/core/chlist.h) is flashed apart
+with C comments. TF_PRIORITY(n), n from 1 (lowest) to 15, gives a
+talkgroup's calls priority over others; alarm talkgroups have 15 unless
+given another. The image (openrtx/include/core/chlist.h) is flashed apart
 from the firmware, so one firmware serves everyone:
 
     python3 scripts/chlist.py my_channels.h -o channels.bin
@@ -31,7 +33,8 @@ import struct
 import sys
 import zlib
 
-VERSION = 1
+VERSION = 2
+READ_VERSIONS = (1, 2)  # 1: no priorities
 HEADER_SIZE = 32
 MAX_FILTERS = 30
 OPMODES = {"OPMODE_FM": 1, "OPMODE_M17": 3, "OPMODE_TETRA": 4}
@@ -39,7 +42,8 @@ MODE_NAMES = {v: k[7:] for k, v in OPMODES.items()}
 BW_25 = 1
 RX_ONLY = 0x01
 TF_ALARM = 1
-TF_PRIORITY = 0x80000000
+MAX_PRIORITY = 15
+SSI_MASK = 0xFFFFFF  # SSIs are 24-bit: priority in bits 24-31
 TF_EVERY = 0x7FFFFFFE
 MACROS = ("CPS_CHANNEL", "TETRA_FILTER", "TETRA_ID", "TETRA_LA",
           "TETRA_ID_RANGE")
@@ -153,15 +157,26 @@ def string(arg, line):
 
 def number(arg, line, filters=None):
     """An integer expression: numbers, OPMODE_x, TF(x), TF_EVERY,
-    TF_ALARM, TF_PRIORITY, with | + - * << and parentheses."""
+    TF_ALARM, TF_PRIORITY(n), with | + - * << and parentheses.
+    TF_PRIORITY(n) gives n << 32, above the 32-bit filter mask."""
     def tf(m):
         if filters is None or m.group(1) not in filters:
             raise ListError(f"line {line}: unknown filter {m.group(1)}")
         return str(1 << filters[m.group(1)])
 
-    expr = re.sub(r"\bTF\s*\(\s*([A-Za-z_]\w*)\s*\)", tf, arg)
-    names = dict(OPMODES, TF_EVERY=TF_EVERY, TF_ALARM=TF_ALARM,
-                 TF_PRIORITY=TF_PRIORITY)
+    def prio(m):
+        n = int(m.group(1), 0)
+        if not 1 <= n <= MAX_PRIORITY:
+            raise ListError(f"line {line}: TF_PRIORITY({m.group(1)}): "
+                            f"priority 1 to {MAX_PRIORITY}")
+        return str(n << 32)
+
+    expr = re.sub(r"\bTF_PRIORITY\s*\(\s*(\w+)\s*\)", prio, arg)
+    if re.search(r"\bTF_PRIORITY\b", expr):
+        raise ListError(f"line {line}: TF_PRIORITY needs a number, "
+                        f"TF_PRIORITY(1) to TF_PRIORITY({MAX_PRIORITY})")
+    expr = re.sub(r"\bTF\s*\(\s*([A-Za-z_]\w*)\s*\)", tf, expr)
+    names = dict(OPMODES, TF_EVERY=TF_EVERY, TF_ALARM=TF_ALARM)
     expr = re.sub(r"\b(\d+|0[xX][0-9a-fA-F]+)[uUlL]*\b", r"\1", expr)
     try:
         tree = ast.parse(expr, mode="eval")
@@ -184,6 +199,14 @@ def number(arg, line, filters=None):
         raise ListError(f"line {line}: cannot read {arg}")
 
     return ev(tree)
+
+
+def ssi(arg, line):
+    """An SSI: 24 bits, the image keeps a priority above them."""
+    v = number(arg, line)
+    if not 0 <= v <= SSI_MASK:
+        raise ListError(f"line {line}: {arg}: an SSI is 0 to {SSI_MASK}")
+    return v
 
 
 def parse(text):
@@ -217,8 +240,9 @@ def parse(text):
             channels.append((freq, freq, string(args[0], line), mode, BW_25,
                              RX_ONLY, 0, 0))
         elif name == "TETRA_ID":
-            ids.append((number(args[0], line), string(args[1], line),
-                        number(args[2], line, filters) & 0xFFFFFFFF))
+            v = number(args[2], line, filters)
+            ids.append((ssi(args[0], line), string(args[1], line),
+                        v & 0xFFFFFFFF, v >> 32))
         elif name == "TETRA_LA":
             las.append((number(args[0], line) & 0xFFFF,
                         string(args[1], line)))
@@ -230,9 +254,9 @@ def parse(text):
                     or sum(c.endswith("u") for c in conv) != 1:
                 raise ListError(f"line {line}: the name needs exactly one "
                                 "%u, e.g. \"Run %u\"")
-            ranges.append((number(args[0], line), number(args[1], line), fmt,
-                           number(args[3], line),
-                           number(args[4], line, filters) & 0xFFFFFFFF))
+            v = number(args[4], line, filters)
+            ranges.append((ssi(args[0], line), ssi(args[1], line), fmt,
+                           number(args[3], line), v & 0xFFFFFFFF, v >> 32))
 
     return channels, filter_names, ids, las, ranges
 
@@ -253,12 +277,13 @@ def build(lists):
                             rxt, txt)
     for name in filter_names:
         body += struct.pack("<I", ref(name))
-    for ssi, name, mask in ids:
-        body += struct.pack("<III", ssi, ref(name), mask)
+    for ident, name, mask, prio in ids:
+        body += struct.pack("<III", ident | prio << 24, ref(name), mask)
     for la, name in las:
         body += struct.pack("<HxxI", la, ref(name))
-    for first, last, fmt, base, mask in ranges:
-        body += struct.pack("<IIIII", first, last, ref(fmt), base, mask)
+    for first, last, fmt, base, mask, prio in ranges:
+        body += struct.pack("<IIIII", first | prio << 24, last, ref(fmt),
+                            base, mask)
     if not strings:
         strings += b"\0"
 
@@ -277,8 +302,9 @@ def show(data):
         raise ListError("not a channel list image (no OCHL at the start)")
     (_, ver, hsize, size, crc, nc, nf, ni, nl, nr, _,
      str_at) = struct.unpack_from("<4sHHII6HI", data)
-    if ver != VERSION or hsize != HEADER_SIZE:
-        raise ListError(f"version {ver}, this script reads {VERSION}")
+    if ver not in READ_VERSIONS or hsize != HEADER_SIZE:
+        raise ListError(f"version {ver}, this script reads "
+                        f"{', '.join(map(str, READ_VERSIONS))}")
     if zlib.crc32(data[HEADER_SIZE:size]) & 0xFFFFFFFF != crc:
         raise ListError("bad CRC: the image is damaged")
 
@@ -301,15 +327,16 @@ def show(data):
         at += 4
     print("  filters: " + ", ".join(fnames))
 
-    def masks(m):
+    def masks(m, prio):
         names = [fnames[b] for b in range(1, len(fnames)) if m >> b & 1]
         return ", ".join(names + (["alarm"] if m & 1 else [])
-                         + (["priority"] if m & TF_PRIORITY else []))
+                         + ([f"priority {prio}"] if prio else []))
 
     for _ in range(ni):
-        ssi, name, mask = struct.unpack_from("<III", data, at)
+        ident, name, mask = struct.unpack_from("<III", data, at)
         at += 12
-        print(f"  {ssi:>9} {s(name):24} {masks(mask)}")
+        print(f"  {ident & SSI_MASK:>9} {s(name):24} "
+              f"{masks(mask, ident >> 24)}")
     for _ in range(nl):
         la, name = struct.unpack_from("<HxxI", data, at)
         at += 8
@@ -317,7 +344,8 @@ def show(data):
     for _ in range(nr):
         first, last, fmt, base, mask = struct.unpack_from("<IIIII", data, at)
         at += 20
-        print(f"  {first}-{last} {s(fmt)!r} - {base}  {masks(mask)}")
+        print(f"  {first & SSI_MASK}-{last} {s(fmt)!r} - {base}  "
+              f"{masks(mask, first >> 24)}")
 
 
 def main():

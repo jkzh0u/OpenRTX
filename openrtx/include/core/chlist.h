@@ -30,7 +30,7 @@ extern "C" {
  *
  *   header, 32 bytes:
  *     0  magic "OCHL"
- *     4  u16 version (1)
+ *     4  u16 version (2; 1 is read too, it has no priorities)
  *     6  u16 header size (32)
  *     8  u32 image size, header included
  *    12  u32 CRC-32 (IEEE) of the bytes after the header
@@ -42,18 +42,23 @@ extern "C" {
  *       bandwidth (enum bandwidth), u8 flags (bit 0: receive only), u8 rx
  *       tone, u8 tx tone (bit 7: enabled, bits 6-0: CTCSS index), 3 x u8 0
  *     filter 4 bytes: u32 name (filter 1 onwards; 0 is "All")
- *     identity 12 bytes: u32 SSI, u32 name, u32 filter mask
+ *     identity 12 bytes: u32 SSI (bits 0-23) and priority (bits 24-31),
+ *       u32 name, u32 filter mask
  *     location area 8 bytes: u16 LA, u16 0, u32 name
- *     identity range 20 bytes: u32 first, u32 last, u32 name format, u32
- *       base, u32 filter mask
+ *     identity range 20 bytes: u32 first SSI (bits 0-23) and priority
+ *       (bits 24-31), u32 last SSI, u32 name format, u32 base, u32 filter
+ *       mask
  *   then the strings, each ending with a NUL; names are offsets into them.
  *
- * Filter masks: bit n for filter n, bit 0 for an alarm talkgroup. A range's
+ * Filter masks: bit n for filter n, bit 0 for an alarm talkgroup, bit 31
+ * unused. Priorities: 0 none, 1 (lowest) to 15. A range's
  * name format has exactly one %u (with optional flags and width), given
  * the SSI minus the base.
  */
 
-#define CHLIST_VERSION 1
+#define CHLIST_VERSION 2
+/** Oldest version read: version 1 has no priorities (bits 24-31 zero) */
+#define CHLIST_VERSION_MIN 1
 #define CHLIST_HEADER_SIZE 32
 /** Filters an image can define, besides "All" */
 #define CHLIST_MAX_FILTERS 30
@@ -75,6 +80,7 @@ struct chlistId {
     uint32_t ssi;
     const char *name;
     uint32_t filters;
+    uint8_t priority; /**< 0 none, 1 to 15 */
 };
 
 struct chlistLa {
@@ -88,6 +94,7 @@ struct chlistRange {
     const char *format;
     uint32_t base;
     uint32_t filters;
+    uint8_t priority; /**< 0 none, 1 to 15 */
 };
 
 /**

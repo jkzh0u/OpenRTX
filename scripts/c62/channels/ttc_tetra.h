@@ -134,7 +134,7 @@ TETRA_FILTER(SECURITY, "Security")
 /* Systemwide: alarms come through every filter, with an alert */
 TETRA_ID(60002, "Red Alarm", TF_EVERY | TF_ALARM)
 TETRA_ID(60101, "911 Announce", TF_EVERY | TF_ALARM)
-TETRA_ID(101011, "Transit Control", TF(RIDING) | TF(CONTROL) | TF_PRIORITY)
+TETRA_ID(101011, "Transit Control", TF(RIDING) | TF(CONTROL) | TF_PRIORITY(5))
 TETRA_ID(101117, "Janitor", TF(MAINT))
 TETRA_ID(102716, "Transit Enforce1", TF(SECURITY))
 TETRA_ID(102740, "SpecialConstable", TF(SECURITY))

@@ -87,7 +87,8 @@ int chlist_open(const void *image, size_t maxSize)
         return -1;
     if (memcmp(p, "OCHL", 4) != 0)
         return -1;
-    if (rd16(p + 4) != CHLIST_VERSION || rd16(p + 6) != CHLIST_HEADER_SIZE)
+    if (rd16(p + 4) < CHLIST_VERSION_MIN || rd16(p + 4) > CHLIST_VERSION
+        || rd16(p + 6) != CHLIST_HEADER_SIZE)
         return -2;
 
     uint32_t size = rd32(p + 8);
@@ -220,7 +221,9 @@ bool chlist_id(size_t i, struct chlistId *out)
         return false;
 
     const uint8_t *r = img + idsAt + i * ID_SIZE;
-    out->ssi = rd32(r);
+    uint32_t ssi = rd32(r);
+    out->ssi = ssi & 0xffffff;
+    out->priority = (uint8_t)(ssi >> 24);
     out->name = str(rd32(r + 4));
     out->filters = rd32(r + 8);
     return true;
@@ -243,8 +246,10 @@ bool chlist_range(size_t i, struct chlistRange *out)
         return false;
 
     const uint8_t *r = img + rangesAt + i * RANGE_SIZE;
-    out->first = rd32(r);
-    out->last = rd32(r + 4);
+    uint32_t first = rd32(r);
+    out->first = first & 0xffffff;
+    out->priority = (uint8_t)(first >> 24);
+    out->last = rd32(r + 4) & 0xffffff;
     out->format = str(rd32(r + 8));
     out->base = rd32(r + 12);
     out->filters = rd32(r + 16);

@@ -79,10 +79,14 @@ TEST_CASE("Damaged channel list images are refused", "[chlist]")
     REQUIRE(chlist_open(good.data(), 16) == -1);
     REQUIRE(chlist_open(nullptr, 0) == -1);
 
-    // Another version
+    // Another version; version 1, without priorities, is still read
     image = good;
-    image[4] = 2;
+    image[4] = CHLIST_VERSION + 1;
     REQUIRE(chlist_open(image.data(), image.size()) == -2);
+    image[4] = 0;
+    REQUIRE(chlist_open(image.data(), image.size()) == -2);
+    image[4] = 1;
+    REQUIRE(chlist_open(image.data(), image.size()) == 0);
 
     // Cut short
     REQUIRE(chlist_open(good.data(), good.size() - 1) == -3);
