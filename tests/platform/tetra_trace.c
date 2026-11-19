@@ -31,7 +31,8 @@
  *     -f  frequency the radio was tuned to, MHz (default: the main carrier
  *         frequency the cell broadcasts)
  *     -n  start the equalizer from scratch instead of the C62 taps: for
- *         recordings not made on a C62 (an SDR's FM output, synthetic
+ *         recordings not made on a C62 (an SDR recording through
+ *         scripts/c62_airspy_iq.py and scripts/c62_tetra_sim.py, synthetic
  *         signals), which the C62 taps make undecodable
  *     -v  also print every traffic slot
  */
@@ -370,6 +371,8 @@ int main(int argc, char *argv[])
     static int16_t in[BLOCK];
     static int8_t soft[BLOCK * 3 / 4 + 8];
     uint32_t jumps = 0;
+    uint32_t crcBase = 0; /* CRC passes before the last resync */
+    uint32_t lastCrc = 0;
     unsigned long samples = 0;
     size_t n;
 
@@ -383,17 +386,27 @@ int main(int argc, char *argv[])
         if (tetraDemod_reacquisitions(&demod) != jumps) {
             jumps = tetraDemod_reacquisitions(&demod);
             printf("%8.3f  demodulator jump, resync\n", now);
+            crcBase += tetra_tmo_crc_ok(&tmo);
             resync();
         }
 
         tetra_tmo_push_soft(&tmo, soft, bits);
+
+        /* As the radio: blocks decode, so the demodulator keeps its lock */
+        uint32_t crc = crcBase + tetra_tmo_crc_ok(&tmo);
+        if (crc != lastCrc) {
+            lastCrc = crc;
+            tetraDemod_signalOk(&demod);
+        }
+
         reportTarget();
     }
     fclose(f);
 
-    printf("%8.3f  end: %u traffic slots, phase error %u%%, carrier offset "
-           "%d Hz, clock %d ppm\n",
-           (double)samples / TETRA_DEMOD_IN_RATE, trafficSlots,
+    printf("%8.3f  end: %lu blocks passed the CRC, %u traffic slots, phase "
+           "error %u%%, carrier offset %d Hz, clock %d ppm\n",
+           (double)samples / TETRA_DEMOD_IN_RATE,
+           (unsigned long)(crcBase + tetra_tmo_crc_ok(&tmo)), trafficSlots,
            tetraDemod_phaseError(&demod), tetraDemod_carrierOffset(&demod),
            tetraDemod_clockOffset(&demod));
     return 0;

@@ -763,3 +763,57 @@ begun and the output streams started.
 loops. For offline work, `tests/platform/c62_tetra_host.c` runs the same
 demodulator and libtetra on a capture or on `scripts/c62_tetra_sim.py`
 output.
+
+## 9. Test the receiver on an SDR recording
+
+Before a radio is at hand, a recording of the real network from an SDR
+(an Airspy, say) shows how the C62's receiver would do there: whether it
+locks, how well it decodes, which calls it would follow. It runs the same
+demodulator, libtetra and call follower on a computer, behind an
+approximation of the C62's receive filters.
+
+1. **Record.** Stop any program using the SDR first (a trunking decoder
+   holds it). With the Airspy tools (`brew install airspy`, or
+   `sudo apt install airspy`), tune about 200 kHz beside the carrier, so
+   the SDR's centre spike stays out of it, and record 16-bit I/Q for a
+   minute or two while calls are going on:
+
+   ```bash
+   airspy_rx -f 392.3 -t 2 -r ttc.raw -n 300000000
+   ```
+
+   `-f` is the centre in MHz, `-t 2` 16-bit I/Q, `-n` the number of
+   samples (120 s at 2.5 MHz; about 1.2 GB). Check `airspy_rx -h` for the
+   sample rate option and gains on your model, and note the rate used.
+   The cell's other carriers in the same 2.5 MHz can be cut out of the
+   same file later.
+
+2. **Cut out the carrier** and turn it into what the C62 would hear
+   (Python with numpy and scipy):
+
+   ```bash
+   python3 OpenRTX/scripts/c62_airspy_iq.py ttc.raw ttc_250k.wav \
+       --rate 2500000 --centre 392.3 --carrier 392.5125
+   python3 OpenRTX/scripts/c62_tetra_sim.py ttc_250k.wav ttc_c62.s16
+   ```
+
+   `c62_airspy_iq.py` reads the rate itself from a WAV recording.
+   `c62_tetra_sim.py --esn0 15` adds noise, to try a weaker signal.
+
+3. **Run the receiver.** Build the two tools as their files say
+   (`tests/platform/c62_tetra_host.c`, `tests/platform/tetra_trace.c`),
+   then:
+
+   ```bash
+   ./c62_tetra_host -e ttc_c62.s16    # decoding figures
+   ./tetra_trace -n ttc_c62.wav       # cell, calls, call following
+   ```
+
+   `tetra_trace` reads a WAV: wrap the `.s16` file as 48 kHz mono 16-bit.
+   `-e` and `-n` start the equalizer from scratch: the C62's measured
+   taps fit the radio's filters, not the approximation, and make such
+   recordings undecodable.
+
+On a clean synthetic cell this gives about 100 blocks per second passing
+the CRC, 8 to 9% phase error, and every speech frame good. A real network
+will do worse: compare carriers and places rather than against that.
