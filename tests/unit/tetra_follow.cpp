@@ -23,6 +23,19 @@ static tetraFollowCall makeCall(tetraFollowEvent event, uint16_t callId,
     c.slots = slots;
     c.speech = true;
     c.encrypted = false;
+    c.freq = 0;
+    c.mainFreq = 0;
+    return c;
+}
+
+/** A call event with its carrier's frequency, as the receiver gives it */
+static tetraFollowCall makeCallAt(tetraFollowEvent event, uint16_t callId,
+                                  uint16_t carrier, uint32_t freq,
+                                  uint8_t slots)
+{
+    tetraFollowCall c = makeCall(event, callId, carrier, slots);
+    c.freq = freq;
+    c.mainFreq = HOME;
     return c;
 }
 
@@ -361,4 +374,103 @@ TEST_CASE("TETRA follower remembers a limited number of calls",
     tetraFollowRetune r = makeRetune(1, OTHER_CARRIER, OTHER, 0x2);
     REQUIRE(tetraFollow_retune(&f, &r, 0));
     requireAway(f, OTHER, 0x2);
+}
+
+static bool refuseAll(uint16_t callId)
+{
+    (void)callId;
+    return false;
+}
+
+TEST_CASE("TETRA follower joins late a call on another carrier",
+          "[tetra][follow]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+
+    // A call heard on the main carrier, then one allocated elsewhere
+    tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
+                                   HOME, 0x8);
+    tetraFollow_call(&f, &a, 0);
+    REQUIRE(f.selected);
+    tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200, OTHER_CARRIER,
+                                   OTHER, 0x1);
+    tetraFollow_call(&f, &b, 10);
+    REQUIRE(f.callId == 100);
+    REQUIRE_FALSE(tetraFollow_join(&f, NULL, 20));
+    requireHome(f);
+
+    SECTION("when the first call ends")
+    {
+        tetraFollowCall rel = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+        tetraFollow_call(&f, &rel, 30);
+        REQUIRE(tetraFollow_join(&f, NULL, 40));
+        REQUIRE(f.callId == 200);
+        requireAway(f, OTHER, 0x1);
+
+        // Its release brings the radio home, and it is not joined again
+        tetraFollowCall relB = makeCall(TETRA_FOLLOW_RELEASE, 200, 0xffff, 0);
+        tetraFollow_call(&f, &relB, 50);
+        REQUIRE(tetraFollow_tick(&f, 60));
+        requireHome(f);
+        REQUIRE_FALSE(tetraFollow_join(&f, NULL, 70));
+    }
+
+    SECTION("not when the talkgroup filter holds it back")
+    {
+        tetraFollowCall rel = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+        tetraFollow_call(&f, &rel, 30);
+        REQUIRE_FALSE(tetraFollow_join(&f, refuseAll, 40));
+        requireHome(f);
+    }
+
+    SECTION("not again after it went silent")
+    {
+        tetraFollowCall rel = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+        tetraFollow_call(&f, &rel, 30);
+        REQUIRE(tetraFollow_join(&f, NULL, 40));
+        REQUIRE(tetraFollow_tick(&f, 40 + TETRA_FOLLOW_TIMEOUT_MS));
+        requireHome(f);
+        REQUIRE_FALSE(tetraFollow_join(&f, NULL, 50 + TETRA_FOLLOW_TIMEOUT_MS));
+    }
+
+    SECTION("not once released")
+    {
+        tetraFollowCall relB = makeCall(TETRA_FOLLOW_RELEASE, 200, 0xffff, 0);
+        tetraFollow_call(&f, &relB, 20);
+        tetraFollowCall rel = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+        tetraFollow_call(&f, &rel, 30);
+        REQUIRE_FALSE(tetraFollow_join(&f, NULL, 40));
+    }
+
+    SECTION("not when encrypted")
+    {
+        b.encrypted = true;
+        tetraFollow_call(&f, &b, 20);
+        tetraFollowCall rel = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+        tetraFollow_call(&f, &rel, 30);
+        REQUIRE_FALSE(tetraFollow_join(&f, NULL, 40));
+    }
+}
+
+TEST_CASE("TETRA follower does not join a call without a known carrier",
+          "[tetra][follow]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+
+    tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
+                                   HOME, 0x8);
+    tetraFollow_call(&f, &a, 0);
+
+    // Allocation seen, but the cell's numbering not known yet
+    tetraFollowCall b = makeCall(TETRA_FOLLOW_UPDATE, 200, OTHER_CARRIER, 0x1);
+    b.mainFreq = HOME;
+    tetraFollow_call(&f, &b, 10);
+
+    tetraFollowCall rel = makeCall(TETRA_FOLLOW_RELEASE, 100, 0xffff, 0);
+    tetraFollow_call(&f, &rel, 20);
+    REQUIRE_FALSE(f.selected);
+    REQUIRE_FALSE(tetraFollow_join(&f, NULL, 30));
+    requireHome(f);
 }

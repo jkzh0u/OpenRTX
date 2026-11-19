@@ -50,9 +50,14 @@ static struct tetraFollowCallInfo *findCall(struct tetraFollow *f,
     return NULL;
 }
 
-/** Remember a call's type, replacing the oldest entry when full. */
-static void noteCall(struct tetraFollow *f, uint16_t callId, bool speech,
-                     bool encrypted)
+/**
+ * Remember a call's type, replacing the oldest entry when full.
+ *
+ * @return the call's entry.
+ */
+static struct tetraFollowCallInfo *noteCall(struct tetraFollow *f,
+                                            uint16_t callId, bool speech,
+                                            bool encrypted)
 {
     struct tetraFollowCallInfo *c = findCall(f, callId);
 
@@ -68,10 +73,14 @@ static void noteCall(struct tetraFollow *f, uint16_t callId, bool speech,
         f->nextCall = (f->nextCall + 1) % TETRA_FOLLOW_MAX_CALLS;
     }
 
-    c->used = true;
-    c->callId = callId;
+    if (!c->used || c->callId != callId) {
+        memset(c, 0, sizeof(*c));
+        c->used = true;
+        c->callId = callId;
+    }
     c->speech = speech;
     c->encrypted = encrypted;
+    return c;
 }
 
 static bool playable(const struct tetraFollow *f, bool speech, bool encrypted)
@@ -81,6 +90,11 @@ static bool playable(const struct tetraFollow *f, bool speech, bool encrypted)
 
 static void selectCall(struct tetraFollow *f, uint16_t callId, long long now)
 {
+    /* Heard once, by whatever way: not joined late afterwards */
+    struct tetraFollowCallInfo *info = findCall(f, callId);
+    if (info != NULL)
+        info->joined = true;
+
     f->selected = true;
     f->callId = callId;
     f->lastActivity = now;
@@ -109,7 +123,16 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
         if (info != NULL)
             info->used = false;
     } else {
-        noteCall(f, c->callId, c->speech, c->encrypted);
+        struct tetraFollowCallInfo *info =
+            noteCall(f, c->callId, c->speech, c->encrypted);
+
+        /* Where the call is, for a late join */
+        if (c->carrier != 0xffff && c->slots != 0) {
+            info->carrier = c->carrier;
+            info->slots = c->slots & TETRA_FOLLOW_ALL_SLOTS;
+            info->freq = tetraFollow_carrierFreq(f->home, c->mainFreq,
+                                                 c->freq);
+        }
     }
 
     if (f->selected) {
@@ -215,6 +238,34 @@ bool tetraFollow_tick(struct tetraFollow *f, long long now)
 
     if (f->away && f->leave) {
         tetraFollow_home(f);
+        return true;
+    }
+
+    return false;
+}
+
+bool tetraFollow_join(struct tetraFollow *f, bool (*allowed)(uint16_t callId),
+                      long long now)
+{
+    if (f->selected || f->away)
+        return false;
+
+    for (unsigned i = 0; i < TETRA_FOLLOW_MAX_CALLS; i++) {
+        struct tetraFollowCallInfo *c = &f->calls[i];
+
+        if (!c->used || c->joined || c->freq == 0 || c->freq == f->home
+            || c->slots == 0 || !playable(f, c->speech, c->encrypted))
+            continue;
+        if (allowed != NULL && !allowed(c->callId))
+            continue;
+
+        c->joined = true;
+        selectCall(f, c->callId, now);
+        f->leave = false;
+        f->away = true;
+        f->carrier = c->carrier;
+        f->freq = c->freq;
+        f->slots = c->slots;
         return true;
     }
 

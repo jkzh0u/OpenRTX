@@ -66,6 +66,9 @@ struct tetraFollowCall {
     uint8_t slots;    /**< Allocated timeslots, bit 0 = TN1; 0 if none */
     bool speech;      /**< Speech call (not circuit mode data) */
     bool encrypted;   /**< End-to-end or air interface encryption */
+    uint32_t freq;    /**< Carrier downlink from the cell's numbering, Hz;
+                           0 if unknown */
+    uint32_t mainFreq; /**< Main carrier downlink, Hz; 0 if unknown */
 };
 
 /** A retune request from the receiver */
@@ -90,6 +93,10 @@ struct tetraFollowCallInfo {
     uint16_t callId;
     bool speech;
     bool encrypted;
+    uint32_t freq; /**< Where to tune for its carrier, Hz; 0 if unknown */
+    uint16_t carrier;
+    uint8_t slots;
+    bool joined; /**< Selected once: not joined late again */
 };
 
 struct tetraFollow {
@@ -125,6 +132,26 @@ struct tetraFollow {
  */
 uint32_t tetraFollow_carrierFreq(uint32_t home, uint32_t mainHz,
                                  uint32_t carrierHz);
+
+/**
+ * Join late a call going on on another carrier: when the radio is on the
+ * main carrier with no call selected, and a call that can be played was
+ * allocated another carrier (its channel allocation was seen while another
+ * call was followed, so the receiver did not ask to retune), select it and
+ * go there. A call already selected once is not joined, so that one whose
+ * release was missed, or that went silent, does not bring the radio back
+ * after each timeout.
+ *
+ * After a join the caller tunes to tetraFollow_target() and restarts the
+ * receiver's synchronisation, which then finds the call by its timeslots.
+ *
+ * @param f: follower.
+ * @param allowed: whether a call may be joined (talkgroup filter), or NULL.
+ * @param now: current time, ms.
+ * @return true if a call was joined.
+ */
+bool tetraFollow_join(struct tetraFollow *f, bool (*allowed)(uint16_t callId),
+                      long long now);
 
 /**
  * Initialise the follower, at home with no call selected.
