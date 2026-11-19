@@ -413,18 +413,24 @@ in small grey text after the location, e.g. `CN Tower 392.5375`.
   play, it goes to a call still going on elsewhere that the talkgroup
   filter lets through, once per call. The log shows `follow: join call`.
   Late join in the TETRA settings turns this off.
-- **Priority talkgroups** (`TF_PRIORITY` in the channel list, and alarm
-  talkgroups, and calls with the network's emergency priority) come first.
-  On the main carrier a priority call takes over from another call, the
-  speaker switching to its timeslot at once. After one, the radio stays on
-  the main carrier for 10 s before following a call elsewhere: a
-  conversation on such a talkgroup goes on as separate calls a few seconds
-  apart, whose start the radio could not see from another carrier. Calls
-  on the main carrier are still heard meanwhile. The log shows
-  `follow: priority call N takes over`. On the TTC recording of
-  2026-11-19, with Transit Control as a priority talkgroup, the radio
-  stays home through a Transit Control conversation it used to miss half
-  of, then joins the Davisville Yard call on the second carrier.
+- **Priorities** come from the channel list: `TF_PRIORITY(n)` gives a
+  talkgroup's calls priority n, from 1 (lowest) to 15. Alarm talkgroups
+  have 15 unless given another, and so do calls with the network's
+  emergency priority; other calls have none (0). A call's priority is the
+  higher of its talkgroup's and its talking radio's.
+  - On the main carrier a call of higher priority takes over from the call
+    heard, the speaker switching to its timeslot at once. An equal or lower
+    one waits.
+  - After a call of priority n, the radio stays on the main carrier for
+    10 s before following a call of lower priority elsewhere: a
+    conversation goes on as separate calls a few seconds apart, whose start
+    the radio could not see from another carrier. Calls of priority n or
+    more may leave; calls on the main carrier are still heard meanwhile.
+  - A late join takes the call of highest priority.
+  - The log shows `follow: priority N call C takes over`. On the TTC
+    recording of 2026-11-19, with Transit Control at priority 5, the radio
+    stays home through a Transit Control conversation it used to miss half
+    of, then joins the Davisville Yard call on the second carrier.
 - All carriers of a cell share the TDMA timing, so the radio keeps its slot
   timing across the retune instead of synchronising again. A secondary
   carrier may carry no synchronisation bursts at all.
@@ -641,7 +647,7 @@ filters you choose on the radio:
 TETRA_FILTER(OPS, "Operations")
 TETRA_FILTER(MAINT, "Maintenance")
 
-TETRA_ID(1001, "Dispatch", TF(OPS) | TF_PRIORITY)
+TETRA_ID(1001, "Dispatch", TF(OPS) | TF_PRIORITY(5))
 TETRA_ID(2001, "Maint Crew", TF(MAINT))
 TETRA_ID(9999, "Emergency", TF_EVERY | TF_ALARM)
 ```
@@ -650,8 +656,9 @@ TETRA_ID(9999, "Emergency", TF_EVERY | TF_ALARM)
 them, up to 30. `TETRA_ID` gives an SSI (the decimal ID), a name of up to
 16 characters and the filters it belongs to: `TF()` of each, `TF_EVERY` for
 all of them, `0` for none, plus `TF_ALARM` for an alarm talkgroup, whose
-calls turn the screen red and sound three beeps, and `TF_PRIORITY` for a
-talkgroup that comes first (Call following, priority talkgroups). The call
+calls turn the screen red and sound three beeps, and `TF_PRIORITY(n)`, n
+from 1 (lowest) to 15, for a talkgroup that comes first (Call following,
+priority talkgroups). The call
 screen, last heard line, recent calls and short messages show the names
 instead of numbers.
 

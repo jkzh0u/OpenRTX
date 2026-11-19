@@ -86,10 +86,24 @@ def read_channels(path):
 
 
 def read_priority(path):
-    """@return SSIs of the priority and alarm talkgroups of a channel list."""
-    pat = re.compile(r"TETRA_ID\(\s*(\d+)\s*,.*\b(TF_PRIORITY|TF_ALARM)\b")
+    """
+    @return "SSI:N" of the talkgroups of a channel list with a priority:
+    TF_PRIORITY(N), else 15 for an alarm talkgroup.
+    """
+    ident = re.compile(r"TETRA_ID\(\s*(\d+)\s*,")
+    prio = re.compile(r"\bTF_PRIORITY\s*\(\s*(\d+)\s*\)")
+    out = []
     with open(path) as f:
-        return [m.group(1) for m in map(pat.search, f) if m]
+        for line in f:
+            m = ident.search(line)
+            if not m:
+                continue
+            p = prio.search(line)
+            if p:
+                out.append(f"{m.group(1)}:{p.group(1)}")
+            elif re.search(r"\bTF_ALARM\b", line):
+                out.append(f"{m.group(1)}:15")
+    return out
 
 
 def read_start(path, rate, seconds):
