@@ -36,9 +36,12 @@ TETRA_FILTER(MAINT, "Maintenance")
 /*
  * TETRA names: SSI (decimal), name, and the filters it belongs to: TF() of
  * each joined with |, 0 for none, TF_EVERY for all. Add TF_ALARM for an
- * alarm talkgroup: its calls turn the screen red and beep.
+ * alarm talkgroup: its calls turn the screen red and beep. Add TF_PRIORITY
+ * for a talkgroup that comes first: its calls take over from others, and
+ * the radio waits 10 s after each before following a call elsewhere.
+ * Alarm talkgroups have priority too.
  */
-TETRA_ID(1001, "Dispatch", TF(OPS))
+TETRA_ID(1001, "Dispatch", TF(OPS) | TF_PRIORITY)
 TETRA_ID(1002, "Ops Talk", TF(OPS))
 TETRA_ID(2001, "Maint Crew", TF(MAINT))
 TETRA_ID(9999, "Emergency", TF_EVERY | TF_ALARM)

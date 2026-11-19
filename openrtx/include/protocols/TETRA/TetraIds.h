@@ -34,6 +34,9 @@ extern "C" {
  * none, TF_EVERY for all of them. Filter 0, "All", is always there and
  * lets everything through. Up to 30 filters. Adding TF_ALARM marks an
  * alarm talkgroup: its calls sound an alert and turn the screen red.
+ * Adding TF_PRIORITY marks a priority talkgroup: its calls take over from
+ * others, and the radio stays on the main carrier for a while after them
+ * (TetraFollow.h). Alarm talkgroups are priority talkgroups too.
  *
  *     TETRA_LA(39, "Line 5 east")
  *
@@ -92,6 +95,12 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter);
  * @return true if it is an alarm talkgroup (TF_ALARM).
  */
 bool tetraIds_isAlarm(uint32_t ssi);
+
+/**
+ * @param ssi: talkgroup or radio identity.
+ * @return true if its calls have priority (TF_PRIORITY or TF_ALARM).
+ */
+bool tetraIds_isPriority(uint32_t ssi);
 
 /**
  * @param la: location area.

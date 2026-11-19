@@ -12,7 +12,8 @@ openrtx/include/protocols/TETRA/TetraIds.h:
 
     CPS_CHANNEL("Name", frequency_hz, OPMODE_FM | OPMODE_M17 | OPMODE_TETRA)
     TETRA_FILTER(ID, "Name")
-    TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY, TF_ALARM
+    TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY; | TF_ALARM,
+                                                   # TF_PRIORITY
     TETRA_LA(la, "Name")
     TETRA_ID_RANGE(first, last, "Run %u", base, TF(ID))
 
@@ -38,6 +39,7 @@ MODE_NAMES = {v: k[7:] for k, v in OPMODES.items()}
 BW_25 = 1
 RX_ONLY = 0x01
 TF_ALARM = 1
+TF_PRIORITY = 0x80000000
 TF_EVERY = 0x7FFFFFFE
 MACROS = ("CPS_CHANNEL", "TETRA_FILTER", "TETRA_ID", "TETRA_LA",
           "TETRA_ID_RANGE")
@@ -151,14 +153,15 @@ def string(arg, line):
 
 def number(arg, line, filters=None):
     """An integer expression: numbers, OPMODE_x, TF(x), TF_EVERY,
-    TF_ALARM, with | + - * << and parentheses."""
+    TF_ALARM, TF_PRIORITY, with | + - * << and parentheses."""
     def tf(m):
         if filters is None or m.group(1) not in filters:
             raise ListError(f"line {line}: unknown filter {m.group(1)}")
         return str(1 << filters[m.group(1)])
 
     expr = re.sub(r"\bTF\s*\(\s*([A-Za-z_]\w*)\s*\)", tf, arg)
-    names = dict(OPMODES, TF_EVERY=TF_EVERY, TF_ALARM=TF_ALARM)
+    names = dict(OPMODES, TF_EVERY=TF_EVERY, TF_ALARM=TF_ALARM,
+                 TF_PRIORITY=TF_PRIORITY)
     expr = re.sub(r"\b(\d+|0[xX][0-9a-fA-F]+)[uUlL]*\b", r"\1", expr)
     try:
         tree = ast.parse(expr, mode="eval")
@@ -300,7 +303,8 @@ def show(data):
 
     def masks(m):
         names = [fnames[b] for b in range(1, len(fnames)) if m >> b & 1]
-        return ", ".join(names + (["alarm"] if m & 1 else []))
+        return ", ".join(names + (["alarm"] if m & 1 else [])
+                         + (["priority"] if m & TF_PRIORITY else []))
 
     for _ in range(ni):
         ssi, name, mask = struct.unpack_from("<III", data, at)

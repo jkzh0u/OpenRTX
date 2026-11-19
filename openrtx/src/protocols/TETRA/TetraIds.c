@@ -47,6 +47,7 @@ _Static_assert(TF_COUNT_ - 1 <= TETRA_IDS_MAX_FILTERS, "Too many filters");
  */
 #define TF(id) (1ul << TF_##id)
 #define TF_ALARM 1ul
+#define TF_PRIORITY 0x80000000ul
 #define TF_EVERY (0x7ffffffeul)
 
 #ifndef CONFIG_CHLIST
@@ -339,6 +340,11 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter)
 bool tetraIds_isAlarm(uint32_t ssi)
 {
     return (filtersOf(ssi) & TF_ALARM) != 0;
+}
+
+bool tetraIds_isPriority(uint32_t ssi)
+{
+    return (filtersOf(ssi) & (TF_PRIORITY | TF_ALARM)) != 0;
 }
 
 const char *tetraIds_laName(uint16_t la)
