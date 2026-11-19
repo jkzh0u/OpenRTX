@@ -44,6 +44,15 @@ void tetraSpeech_stop(void);
 void tetraSpeech_traffic(const struct tetra_traffic *t);
 
 /**
+ * Play the speech of a timeslot from now on, dropping what is queued from
+ * another: a priority call took over. Call from the receiver's thread, as
+ * tetraSpeech_traffic().
+ *
+ * @param tn: timeslot, 1 to 4.
+ */
+void tetraSpeech_follow(uint8_t tn);
+
+/**
  * Sound an alert on the speaker: three short beeps, over any speech. Call
  * from any thread.
  */

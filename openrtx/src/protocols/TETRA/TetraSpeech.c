@@ -258,6 +258,18 @@ void tetraSpeech_traffic(const struct tetra_traffic *t)
     pthread_mutex_unlock(&queueMutex);
 }
 
+void tetraSpeech_follow(uint8_t tn)
+{
+    if (!running || tn < 1 || tn > 4 || tn == followTn)
+        return;
+
+    followTn = tn;
+    followLast = getTick();
+    pthread_mutex_lock(&queueMutex);
+    queueHead = queueCount = 0;
+    pthread_mutex_unlock(&queueMutex);
+}
+
 void tetraSpeech_alert(void)
 {
     alertFrames = ALERT_FRAMES;
@@ -307,6 +319,11 @@ void tetraSpeech_stop(void)
 void tetraSpeech_traffic(const struct tetra_traffic *t)
 {
     (void)t;
+}
+
+void tetraSpeech_follow(uint8_t tn)
+{
+    (void)tn;
 }
 
 void tetraSpeech_alert(void)
