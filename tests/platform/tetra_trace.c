@@ -26,7 +26,7 @@
  *
  * Run:
  *
- *     ./tetra_trace [-f MHz] [-n] [-v] [-p SSI]... recording.wav
+ *     ./tetra_trace [-f MHz] [-n] [-v] [-p SSI[:N]]... recording.wav
  *
  *     -f  frequency the radio was tuned to, MHz (default: the main carrier
  *         frequency the cell broadcasts)
@@ -35,8 +35,8 @@
  *         scripts/c62_airspy_iq.py and scripts/c62_tetra_sim.py, synthetic
  *         signals), which the C62 taps make undecodable
  *     -v  also print every traffic slot
- *     -p  a priority talkgroup (TF_PRIORITY in a channel list); repeat for
- *         more
+ *     -p  a talkgroup's priority N, 1 to 15 (TF_PRIORITY(N) in a channel
+ *         list; 1 if not given); repeat for more
  */
 
 #include <stdbool.h>
@@ -136,15 +136,24 @@ static void onCell(const struct tetra_cell *c)
 /* Priority talkgroups given with -p */
 #define MAX_PRIORITY 16
 static uint32_t prioritySsi[MAX_PRIORITY];
+static uint8_t priorityOf[MAX_PRIORITY];
 static unsigned priorityCount;
 
-static bool isPriority(uint32_t ssi)
+static uint8_t ssiPriority(uint32_t ssi)
 {
     for (unsigned i = 0; i < priorityCount; i++) {
         if (ssi != 0 && prioritySsi[i] == ssi)
-            return true;
+            return priorityOf[i];
     }
-    return false;
+    return 0;
+}
+
+static uint8_t callPriority(uint32_t dst, uint32_t src, uint8_t net)
+{
+    uint8_t p = ssiPriority(dst), q = ssiPriority(src);
+    if (q > p)
+        p = q;
+    return net >= 15 ? 15 : p;
 }
 
 static void reportTakeover(void)
@@ -152,7 +161,8 @@ static void reportTakeover(void)
     if (!follower.preempted)
         return;
     follower.preempted = false;
-    printf("%8.3f  priority call %u takes over\n", now, follower.callId);
+    printf("%8.3f  priority %u call %u takes over\n", now,
+           follower.selectedPriority, follower.callId);
 }
 
 static void onCall(const struct tetra_call *c)
@@ -207,8 +217,7 @@ static void onCall(const struct tetra_call *c)
             fc.mainFreq = cell->dl_freq_hz;
         }
     }
-    fc.priority = isPriority(c->dst_ssi) || isPriority(c->src_ssi)
-                  || c->priority >= 15;
+    fc.priority = callPriority(c->dst_ssi, c->src_ssi, c->priority);
     tetraFollow_call(&follower, &fc, (long long)(now * 1000));
     reportTakeover();
 }
@@ -262,7 +271,7 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     fr.freq = r->freq_hz;
     fr.mainFreq = (cell != NULL && cell->have_sysinfo) ? cell->dl_freq_hz : 0;
     fr.slots = r->timeslots;
-    fr.priority = isPriority(r->dst_ssi);
+    fr.priority = callPriority(r->dst_ssi, 0, 0);
     ok = tetraFollow_retune(&follower, &fr, (long long)(now * 1000));
 
     printf("%8.3f  retune request: ", now);
@@ -382,10 +391,18 @@ int main(int argc, char *argv[])
 
     while ((opt = getopt(argc, argv, "f:nvp:")) != -1) {
         switch (opt) {
-            case 'p':
-                if (priorityCount < MAX_PRIORITY)
-                    prioritySsi[priorityCount++] = strtoul(optarg, NULL, 10);
+            case 'p': {
+                char *end;
+                unsigned long n = 1;
+                uint32_t ssi = strtoul(optarg, &end, 10);
+                if (*end == ':')
+                    n = strtoul(end + 1, NULL, 10);
+                if (priorityCount < MAX_PRIORITY && n >= 1 && n <= 15) {
+                    prioritySsi[priorityCount] = ssi;
+                    priorityOf[priorityCount++] = (uint8_t)n;
+                }
                 break;
+            }
             case 'f':
                 tunedHz = (uint32_t)(atof(optarg) * 1e6 + 0.5);
                 break;
@@ -396,13 +413,13 @@ int main(int argc, char *argv[])
                 verbose = true;
                 break;
             default:
-                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI]... recording.wav\n",
+                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI[:N]]... recording.wav\n",
                         argv[0]);
                 return 2;
         }
     }
     if (optind != argc - 1) {
-        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI]... recording.wav\n",
+        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI[:N]]... recording.wav\n",
                 argv[0]);
         return 2;
     }
