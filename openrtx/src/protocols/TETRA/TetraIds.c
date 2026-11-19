@@ -47,7 +47,11 @@ _Static_assert(TF_COUNT_ - 1 <= TETRA_IDS_MAX_FILTERS, "Too many filters");
  */
 #define TF(id) (1ul << TF_##id)
 #define TF_ALARM 1ul
-#define TF_PRIORITY 0x80000000ul
+/* Above the 32-bit mask: priority 1 to 15, split off by TETRA_ID() */
+#define TF_PRIORITY(n) ((uint64_t)(n) << 32)
+#define PRIORITY_OF(f) ((uint8_t)((uint64_t)(f) >> 32))
+/* Priority of an alarm talkgroup given none */
+#define ALARM_PRIORITY 15
 #define TF_EVERY (0x7ffffffeul)
 
 #ifndef CONFIG_CHLIST
@@ -71,6 +75,7 @@ struct tetraId {
     uint32_t ssi;
     const char *name;
     uint32_t filters;
+    uint8_t priority;
 };
 
 #ifndef CONFIG_CHLIST
@@ -78,7 +83,8 @@ struct tetraId {
 static const struct tetraId ids[] = {
 #ifdef TETRA_ID_LIST
 #define TETRA_FILTER(...)
-#define TETRA_ID(ssi, name, filters) { (ssi), (name), (uint32_t)(filters) },
+#define TETRA_ID(ssi, name, filters) \
+    { (ssi), (name), (uint32_t)(filters), PRIORITY_OF(filters) },
 #define TETRA_LA(...)
 #define TETRA_ID_RANGE(...)
 #include TETRA_ID_LIST
@@ -87,7 +93,7 @@ static const struct tetraId ids[] = {
 #undef TETRA_ID
 #undef TETRA_FILTER
 #endif
-    { 0, NULL, 0 },
+    { 0, NULL, 0, 0 },
 };
 #endif
 
@@ -119,6 +125,7 @@ struct tetraIdRange {
     const char *format; /**< printf format of the SSI minus base */
     uint32_t base;
     uint32_t filters;
+    uint8_t priority;
 };
 
 #ifndef CONFIG_CHLIST
@@ -128,14 +135,15 @@ static const struct tetraIdRange ranges[] = {
 #define TETRA_ID(...)
 #define TETRA_LA(...)
 #define TETRA_ID_RANGE(first, last, format, base, filters) \
-    { (first), (last), (format), (base), (uint32_t)(filters) },
+    { (first), (last), (format), (base), (uint32_t)(filters), \
+      PRIORITY_OF(filters) },
 #include TETRA_ID_LIST
 #undef TETRA_ID_RANGE
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
 #endif
-    { 0, 0, NULL, 0, 0 },
+    { 0, 0, NULL, 0, 0, 0 },
 };
 #endif
 
@@ -160,9 +168,9 @@ static size_t numIds(void)
 
 static struct tetraId idAt(size_t i)
 {
-    struct chlistId c = { 0, NULL, 0 };
+    struct chlistId c = { 0, NULL, 0, 0 };
     chlist_id(i, &c);
-    return (struct tetraId){ c.ssi, c.name, c.filters };
+    return (struct tetraId){ c.ssi, c.name, c.filters, c.priority };
 }
 
 static size_t numLas(void)
@@ -184,10 +192,10 @@ static size_t numRanges(void)
 
 static struct tetraIdRange rangeAt(size_t i)
 {
-    struct chlistRange c = { 0, 0, NULL, 0, 0 };
+    struct chlistRange c = { 0, 0, NULL, 0, 0, 0 };
     chlist_range(i, &c);
     return (struct tetraIdRange){ c.first, c.last, c.format, c.base,
-                                  c.filters };
+                                  c.filters, c.priority };
 }
 
 #else
@@ -342,9 +350,26 @@ bool tetraIds_isAlarm(uint32_t ssi)
     return (filtersOf(ssi) & TF_ALARM) != 0;
 }
 
-bool tetraIds_isPriority(uint32_t ssi)
+uint8_t tetraIds_priority(uint32_t ssi)
 {
-    return (filtersOf(ssi) & (TF_PRIORITY | TF_ALARM)) != 0;
+    struct tetraId id;
+    struct tetraIdRange r;
+    uint32_t filters;
+    uint8_t priority;
+
+    if (find(ssi, &id)) {
+        filters = id.filters;
+        priority = id.priority;
+    } else if (findRange(ssi, &r)) {
+        filters = r.filters;
+        priority = r.priority;
+    } else {
+        return 0;
+    }
+
+    if (priority == 0 && (filters & TF_ALARM) != 0)
+        priority = ALARM_PRIORITY;
+    return priority;
 }
 
 const char *tetraIds_laName(uint16_t la)

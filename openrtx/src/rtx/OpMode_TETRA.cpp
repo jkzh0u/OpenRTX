@@ -63,7 +63,7 @@ static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
 #ifdef CONFIG_TETRA_FOLLOW
-static bool callPriority(uint32_t dst, uint32_t src, uint8_t netPriority);
+static uint8_t callPriority(uint32_t dst, uint32_t src, uint8_t netPriority);
 static void priorityTakeover(void);
 #endif
 
@@ -446,14 +446,20 @@ static void onEvent(void *user, const struct tetra_event *ev)
 
 #ifdef CONFIG_TETRA_FOLLOW
 /**
- * @return true for a priority call: to or from a priority or alarm
- * talkgroup of the channel list, or with the network's emergency priority
- * (15, pre-emptive priority 4).
+ * @return the priority of a call, 0 none to 15: the higher of its called
+ * and calling parties' in the channel list (TF_PRIORITY(n), alarms 15), or
+ * 15 with the network's emergency priority (pre-emptive priority 4).
  */
-static bool callPriority(uint32_t dst, uint32_t src, uint8_t netPriority)
+static uint8_t callPriority(uint32_t dst, uint32_t src, uint8_t netPriority)
 {
-    return tetraIds_isPriority(dst) || (src != 0 && tetraIds_isPriority(src))
-           || netPriority >= 15;
+    uint8_t p = tetraIds_priority(dst);
+    uint8_t q = src != 0 ? tetraIds_priority(src) : 0;
+
+    if (q > p)
+        p = q;
+    if (netPriority >= 15)
+        p = 15;
+    return p;
 }
 
 /**
@@ -466,7 +472,8 @@ static void priorityTakeover(void)
         return;
     follower.preempted = false;
 
-    TLOG("follow: priority call %u takes over", follower.callId);
+    TLOG("follow: priority %u call %u takes over", follower.selectedPriority,
+         follower.callId);
     uint8_t s = tetraFollow_target(&follower).away ? follower.slots
                                                    : follower.callSlots;
     for (uint8_t tn = 1; tn <= 4; tn++) {

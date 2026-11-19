@@ -25,7 +25,7 @@ static tetraFollowCall makeCall(tetraFollowEvent event, uint16_t callId,
     c.encrypted = false;
     c.freq = 0;
     c.mainFreq = 0;
-    c.priority = false;
+    c.priority = 0;
     return c;
 }
 
@@ -50,7 +50,7 @@ static tetraFollowRetune makeRetune(uint16_t callId, uint16_t carrier,
     r.freq = freq;
     r.mainFreq = HOME;
     r.slots = slots;
-    r.priority = false;
+    r.priority = 0;
     return r;
 }
 
@@ -498,7 +498,7 @@ TEST_CASE("TETRA follower lets a priority call take over",
     {
         tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200,
                                        OTHER_CARRIER, OTHER, 0x1);
-        b.priority = true;
+        b.priority = 5;
         tetraFollow_call(&f, &b, 10);
         REQUIRE(f.callId == 200);
         REQUIRE(f.preempted);
@@ -511,7 +511,7 @@ TEST_CASE("TETRA follower lets a priority call take over",
     {
         tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200, HOME_CARRIER,
                                        HOME, 0x2);
-        b.priority = true;
+        b.priority = 5;
         tetraFollow_call(&f, &b, 10);
         REQUIRE(f.callId == 200);
         REQUIRE(f.preempted);
@@ -522,7 +522,7 @@ TEST_CASE("TETRA follower lets a priority call take over",
     SECTION("first asked for by the receiver")
     {
         tetraFollowRetune r = makeRetune(200, OTHER_CARRIER, OTHER, 0x1);
-        r.priority = true;
+        r.priority = 5;
         REQUIRE(tetraFollow_retune(&f, &r, 10));
         REQUIRE(f.callId == 200);
         REQUIRE(f.preempted);
@@ -546,14 +546,14 @@ TEST_CASE("TETRA follower keeps a priority call", "[tetra][follow][priority]")
 
     tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
                                    HOME, 0x8);
-    a.priority = true;
+    a.priority = 5;
     tetraFollow_call(&f, &a, 0);
 
     SECTION("from another priority call")
     {
         tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200,
                                        OTHER_CARRIER, OTHER, 0x1);
-        b.priority = true;
+        b.priority = 5;
         tetraFollow_call(&f, &b, 10);
         REQUIRE(f.callId == 100);
     }
@@ -563,7 +563,7 @@ TEST_CASE("TETRA follower keeps a priority call", "[tetra][follow][priority]")
         tetraFollow_init(&f, HOME);
         follow(f, 300, 0x1, 0);
         tetraFollowRetune r = makeRetune(400, OTHER_CARRIER + 1, OTHER, 0x2);
-        r.priority = true;
+        r.priority = 5;
         REQUIRE_FALSE(tetraFollow_retune(&f, &r, 10));
         REQUIRE(f.callId == 300);
     }
@@ -579,13 +579,13 @@ TEST_CASE("TETRA follower stays home for a priority conversation",
     // A priority call on the main carrier, and another call elsewhere
     tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
                                    HOME, 0x8);
-    a.priority = true;
+    a.priority = 5;
     tetraFollow_call(&f, &a, 0);
     tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200, OTHER_CARRIER,
                                    OTHER, 0x1);
     tetraFollow_call(&f, &b, 10);
     tetraFollowCall rel = release(100);
-    rel.priority = true;
+    rel.priority = 5;
     tetraFollow_call(&f, &rel, 1000);
 
     SECTION("no late join during the hold, then it joins")
@@ -609,10 +609,10 @@ TEST_CASE("TETRA follower stays home for a priority conversation",
     {
         tetraFollowCall c = makeCallAt(TETRA_FOLLOW_UPDATE, 101, HOME_CARRIER,
                                        HOME, 0x8);
-        c.priority = true;
+        c.priority = 5;
         tetraFollow_call(&f, &c, 3000);
         tetraFollowCall rel2 = release(101);
-        rel2.priority = true;
+        rel2.priority = 5;
         tetraFollow_call(&f, &rel2, 5000);
         REQUIRE_FALSE(tetraFollow_join(&f, NULL, 1000 + hold));
         REQUIRE(tetraFollow_join(&f, NULL, 5000 + hold));
@@ -644,7 +644,7 @@ TEST_CASE("TETRA follower joins priority calls first",
     // A priority call that the receiver could not join (selected elsewhere)
     tetraFollowCall c = makeCallAt(TETRA_FOLLOW_UPDATE, 300, OTHER_CARRIER,
                                    OTHER, 0x4);
-    c.priority = true;
+    c.priority = 5;
     f.away = true; // seen while away: it cannot take over
     tetraFollow_call(&f, &c, 20);
     f.away = false;
@@ -655,4 +655,103 @@ TEST_CASE("TETRA follower joins priority calls first",
     REQUIRE(tetraFollow_join(&f, NULL, 40));
     REQUIRE(f.callId == 300);
     requireAway(f, OTHER, 0x4);
+}
+
+TEST_CASE("TETRA follower compares priorities", "[tetra][follow][priority]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+    const long long hold = TETRA_FOLLOW_PRIORITY_HOLD_MS;
+
+    tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
+                                   HOME, 0x8);
+    a.priority = 5;
+    tetraFollow_call(&f, &a, 0);
+
+    SECTION("a higher one takes over")
+    {
+        tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200, HOME_CARRIER,
+                                       HOME, 0x2);
+        b.priority = 6;
+        tetraFollow_call(&f, &b, 10);
+        REQUIRE(f.callId == 200);
+        REQUIRE(f.selectedPriority == 6);
+    }
+
+    SECTION("an equal or lower one does not")
+    {
+        tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200, HOME_CARRIER,
+                                       HOME, 0x2);
+        b.priority = 5;
+        tetraFollow_call(&f, &b, 10);
+        REQUIRE(f.callId == 100);
+        b.callId = 201;
+        b.priority = 2;
+        tetraFollow_call(&f, &b, 20);
+        REQUIRE(f.callId == 100);
+        REQUIRE_FALSE(f.preempted);
+    }
+
+    SECTION("the hold lets an equal or higher priority leave, not a lower")
+    {
+        tetraFollowCall rel = release(100);
+        rel.priority = 5;
+        tetraFollow_call(&f, &rel, 1000);
+
+        tetraFollowRetune low = makeRetune(200, OTHER_CARRIER, OTHER, 0x1);
+        low.priority = 4;
+        REQUIRE_FALSE(tetraFollow_retune(&f, &low, 2000));
+        requireHome(f);
+
+        tetraFollowRetune same = makeRetune(201, OTHER_CARRIER, OTHER, 0x1);
+        same.priority = 5;
+        REQUIRE(tetraFollow_retune(&f, &same, 2000));
+        requireAway(f, OTHER, 0x1);
+    }
+
+    SECTION("a lower call does not extend the hold of a higher one")
+    {
+        tetraFollowCall rel = release(100);
+        rel.priority = 5;
+        tetraFollow_call(&f, &rel, 1000);
+        tetraFollowCall c = makeCallAt(TETRA_FOLLOW_UPDATE, 300, HOME_CARRIER,
+                                       HOME, 0x4);
+        c.priority = 2;
+        tetraFollow_call(&f, &c, 5000);
+        tetraFollowCall rel2 = release(300);
+        rel2.priority = 2;
+        tetraFollow_call(&f, &rel2, 6000);
+
+        // Priority 3 waits for the hold of 5 only, from 1000
+        tetraFollowRetune r = makeRetune(400, OTHER_CARRIER, OTHER, 0x1);
+        r.priority = 3;
+        REQUIRE_FALSE(tetraFollow_retune(&f, &r, 1000 + hold - 1));
+        REQUIRE(tetraFollow_retune(&f, &r, 1000 + hold));
+    }
+}
+
+TEST_CASE("TETRA follower joins the call of highest priority",
+          "[tetra][follow][priority]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+
+    tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
+                                   HOME, 0x8);
+    a.priority = 9;
+    tetraFollow_call(&f, &a, 0);
+    const uint8_t prio[] = { 2, 7, 4 };
+    for (uint16_t i = 0; i < 3; i++) {
+        tetraFollowCall c = makeCallAt(TETRA_FOLLOW_UPDATE, 200 + i,
+                                       OTHER_CARRIER, OTHER, 0x1);
+        c.priority = prio[i];
+        tetraFollow_call(&f, &c, 10);
+    }
+    tetraFollowCall rel = release(100);
+    tetraFollow_call(&f, &rel, 20);
+
+    // Held for 9: none of them yet
+    REQUIRE_FALSE(tetraFollow_join(&f, NULL, 30));
+    REQUIRE(tetraFollow_join(&f, NULL, TETRA_FOLLOW_PRIORITY_HOLD_MS));
+    REQUIRE(f.callId == 201);
 }

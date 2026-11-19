@@ -88,22 +88,39 @@ static bool playable(const struct tetraFollow *f, bool speech, bool encrypted)
     return speech && (!encrypted || f->followEncrypted);
 }
 
-/** A priority call was active: hold the radio on the main carrier */
-static void notePriority(struct tetraFollow *f, long long now)
+/**
+ * @return the priority the radio holds for: that of a call active less
+ * than TETRA_FOLLOW_PRIORITY_HOLD_MS ago, 0 if none.
+ */
+static uint8_t held(const struct tetraFollow *f, long long now)
 {
-    f->priorityHeard = true;
+    if (f->holdPriority == 0
+        || now - f->lastPriority >= TETRA_FOLLOW_PRIORITY_HOLD_MS)
+        return 0;
+    return f->holdPriority;
+}
+
+/**
+ * A call of some priority was active: hold the radio on the main carrier
+ * for that priority, unless it holds for a higher one.
+ */
+static void notePriority(struct tetraFollow *f, uint8_t priority,
+                         long long now)
+{
+    if (priority == 0 || priority < held(f, now))
+        return;
+    f->holdPriority = priority;
     f->lastPriority = now;
 }
 
 /**
- * @return true while the radio should stay on the main carrier for
- * priority calls: one was active less than TETRA_FOLLOW_PRIORITY_HOLD_MS
- * ago.
+ * @return true while the radio should stay on the main carrier instead of
+ * leaving for a call of this priority.
  */
-static bool holding(const struct tetraFollow *f, long long now)
+static bool holding(const struct tetraFollow *f, uint8_t priority,
+                    long long now)
 {
-    return f->priorityHeard
-           && now - f->lastPriority < TETRA_FOLLOW_PRIORITY_HOLD_MS;
+    return priority < held(f, now);
 }
 
 static void selectCall(struct tetraFollow *f, uint16_t callId, long long now)
@@ -116,10 +133,9 @@ static void selectCall(struct tetraFollow *f, uint16_t callId, long long now)
     f->selected = true;
     f->callId = callId;
     f->lastActivity = now;
-    f->selectedPriority = info != NULL && info->priority;
+    f->selectedPriority = info != NULL ? info->priority : 0;
     f->callSlots = info != NULL ? info->slots : 0;
-    if (f->selectedPriority)
-        notePriority(f, now);
+    notePriority(f, f->selectedPriority, now);
 }
 
 void tetraFollow_setHome(struct tetraFollow *f, uint32_t home)
@@ -140,8 +156,7 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
 {
     bool ok = playable(f, c->speech, c->encrypted);
 
-    if (c->priority)
-        notePriority(f, now);
+    notePriority(f, c->priority, now);
 
     if (c->event == TETRA_FOLLOW_RELEASE) {
         struct tetraFollowCallInfo *info = findCall(f, c->callId);
@@ -150,7 +165,8 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
     } else {
         struct tetraFollowCallInfo *info =
             noteCall(f, c->callId, c->speech, c->encrypted);
-        info->priority = info->priority || c->priority;
+        if (c->priority > info->priority)
+            info->priority = c->priority;
 
         /* Where the call is, for a late join */
         if (c->carrier != 0xffff && c->slots != 0) {
@@ -164,11 +180,11 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
     if (f->selected) {
         /*
          * One call at a time: others wait until it ends. Except that on the
-         * main carrier a priority call takes over from another call.
+         * main carrier a call of higher priority takes over.
          */
         if (c->callId != f->callId) {
-            if (c->event == TETRA_FOLLOW_UPDATE && ok && c->priority
-                && !f->selectedPriority && !f->away) {
+            if (c->event == TETRA_FOLLOW_UPDATE && ok
+                && c->priority > f->selectedPriority && !f->away) {
                 selectCall(f, c->callId, now);
                 f->preempted = true;
             }
@@ -227,8 +243,7 @@ void tetraFollow_traffic(struct tetraFollow *f, uint16_t callId, bool speech,
     }
 
     f->lastActivity = now;
-    if (f->selectedPriority)
-        notePriority(f, now);
+    notePriority(f, f->selectedPriority, now);
 }
 
 bool tetraFollow_retune(struct tetraFollow *f,
@@ -243,11 +258,13 @@ bool tetraFollow_retune(struct tetraFollow *f,
     if (info != NULL && !playable(f, info->speech, info->encrypted))
         return false;
 
-    bool priority = r->priority || (info != NULL && info->priority);
+    uint8_t priority = r->priority;
+    if (info != NULL && info->priority > priority)
+        priority = info->priority;
     bool preempt = false;
     if (f->selected && f->callId != r->callId) {
-        /* Only a priority call takes over, and only from the main carrier */
-        if (!priority || f->selectedPriority || f->away)
+        /* Only a call of higher priority takes over, from the main carrier */
+        if (priority <= f->selectedPriority || f->away)
             return false;
         preempt = true;
     }
@@ -257,11 +274,11 @@ bool tetraFollow_retune(struct tetraFollow *f,
         return false;
 
     /*
-     * Priority talkgroups were active just now: stay for their next call.
-     * A call selected on the main carrier that leaves it is let go, and
-     * may be joined late after the hold.
+     * A call of higher priority was active just now: stay for its next
+     * call. A call selected on the main carrier that leaves it is let go,
+     * and may be joined late after the hold.
      */
-    if (!priority && freq != f->home && holding(f, now)) {
+    if (freq != f->home && holding(f, priority, now)) {
         if (f->selected && f->callId == r->callId) {
             tetraFollow_drop(f);
             if (info != NULL)
@@ -271,9 +288,9 @@ bool tetraFollow_retune(struct tetraFollow *f,
     }
 
     selectCall(f, r->callId, now);
-    if (priority) {
-        f->selectedPriority = true;
-        notePriority(f, now);
+    if (priority > f->selectedPriority) {
+        f->selectedPriority = priority;
+        notePriority(f, priority, now);
     }
     f->preempted = f->preempted || preempt;
     f->leave = false;
@@ -312,19 +329,28 @@ bool tetraFollow_join(struct tetraFollow *f, bool (*allowed)(uint16_t callId),
     if (f->selected || f->away)
         return false;
 
-    /* Priority calls first; others not while priority calls are held for */
-    bool hold = holding(f, now);
-    for (unsigned i = 0; i < 2 * TETRA_FOLLOW_MAX_CALLS; i++) {
-        struct tetraFollowCallInfo *c = &f->calls[i % TETRA_FOLLOW_MAX_CALLS];
-        bool firstPass = i < TETRA_FOLLOW_MAX_CALLS;
+    /*
+     * The call of highest priority, not below the priority held for; the
+     * first one found among equals
+     */
+    struct tetraFollowCallInfo *best = NULL;
+    for (unsigned i = 0; i < TETRA_FOLLOW_MAX_CALLS; i++) {
+        struct tetraFollowCallInfo *c = &f->calls[i];
 
-        if (c->priority != firstPass || (!c->priority && hold))
-            continue;
         if (!c->used || c->joined || c->freq == 0 || c->freq == f->home
             || c->slots == 0 || !playable(f, c->speech, c->encrypted))
             continue;
+        if (holding(f, c->priority, now))
+            continue;
+        if (best != NULL && c->priority <= best->priority)
+            continue;
         if (allowed != NULL && !allowed(c->callId))
             continue;
+        best = c;
+    }
+
+    if (best != NULL) {
+        struct tetraFollowCallInfo *c = best;
 
         c->joined = true;
         selectCall(f, c->callId, now);
