@@ -52,17 +52,20 @@ typedef struct
     bool    showBatteryIcon;      // Battery display true: icon, false: percentage
     bool    gpsSetTime;           // Use GPS to ajust RTC time
     char    M17_meta_text[53];    // M17 Meta Text to send
+    int16_t tetraAfcOffset;       // TETRA frequency correction learned, Hz
 #ifdef CONFIG_TETRA
     /*
      * Zero means the default for each: settings stored by a firmware without
-     * these fields read back as zeros.
+     * these fields read back as zeros. After tetraAfcOffset, so that the
+     * settings stored by sp5wwp's C62 firmware, which ends there, read the
+     * same.
      */
     uint8_t tetraFollowOff   : 1,  // Do not follow calls to other carriers
             tetraRoamOff     : 1,  // Do not move between cells by itself
             tetraAlarmOff    : 1,  // No beep at the start of an alarm call
             tetraFilterReset : 1,  // Start each time with the filter TG All
             _tetraReserved   : 4;
-    uint8_t tetraFilter;          // Talkgroup filter at power off
+    uint8_t tetraFilter;          // Talkgroup filter last picked
 #endif
 }
 __attribute__((packed)) settings_t;
@@ -93,6 +96,7 @@ static const settings_t default_settings =
     false,                        // Display battery icon
     false,                        // Update RTC with GPS
     "OpenRTX",                    // Default M17 meta text
+    0,                            // No TETRA frequency correction learned
 #ifdef CONFIG_TETRA
     0,                            // Follow calls
     0,                            // Cell tracking
