@@ -105,7 +105,9 @@ T mode on the strong cell (memory mode, its channel):
       (a C62 measured 13 to 17% with a test signal; above 45% the meter
       shows no decoding), and `crc ok` higher on each line
 - [ ] `correction` settles within about 20 s, usually somewhere around
-      +1600 Hz plus your radio's crystal error, then changes little
+      +1600 Hz plus your radio's crystal error, then changes little. After
+      the radio has been on for 10 s more, turn it off and on: `correction`
+      starts at that value
 - [ ] `reacquired` and `realigned` stay the same from line to line, or
       go up only now and then. Climbing every line means the receiver
       keeps losing the signal's timing: keep the log

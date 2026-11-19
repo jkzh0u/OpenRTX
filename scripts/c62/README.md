@@ -478,7 +478,7 @@ saved a few seconds after a change, and all are on at first.
 | Cell tracking | Moves between cells by itself (Cell tracking above) | Stays on the channel you picked. A long **0** still searches once |
 | Alarm beep | An alarm call beeps three times and turns the screen red | Red screen only |
 | Keep filter | Starts with the talkgroup filter you last picked | Starts at `TG All` |
-| Freq. correct | Tunes itself so the signal decodes best: the C62 decodes best about 1.6 kHz off the channel frequency, plus its crystal error. Found within about 20 s of decoding, kept across channel changes, and reset if nothing decodes for 8 s | Tunes exactly to the channel frequency |
+| Freq. correct | Tunes itself so the signal decodes best: the C62 decodes best about 1.6 kHz off the channel frequency, plus its crystal error. Found within about 20 s of decoding and kept across channel changes. Remembered at power off, so the radio starts corrected even on a weak signal. If a strong signal stops decoding for 8 s, it goes back to the remembered correction, then to none, and searches again | Tunes exactly to the channel frequency |
 
 Follow calls and Cell tracking only do something in a firmware built with
 them, which is the default (`C62_TETRA_FOLLOW`, `C62_TETRA_ROAM`).
