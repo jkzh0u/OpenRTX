@@ -62,6 +62,11 @@ static uint8_t searchRequests; // tetraStatus_searchRequests() handled
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
+#ifdef CONFIG_TETRA_FOLLOW
+static bool callPriority(uint32_t dst, uint32_t src, uint8_t netPriority);
+static void priorityTakeover(void);
+#endif
+
 #ifdef CONFIG_TETRA_LOG
 static long long lastSignalLog; // Last signal line of the log
 
@@ -420,7 +425,9 @@ static void onEvent(void *user, const struct tetra_event *ev)
                     fc.mainFreq = cell->dl_freq_hz;
                 }
             }
+            fc.priority = callPriority(c->dst_ssi, c->src_ssi, c->priority);
             tetraFollow_call(&follower, &fc, getTick());
+            priorityTakeover();
             tune();
             break;
         }
@@ -438,6 +445,38 @@ static void onEvent(void *user, const struct tetra_event *ev)
 }
 
 #ifdef CONFIG_TETRA_FOLLOW
+/**
+ * @return true for a priority call: to or from a priority or alarm
+ * talkgroup of the channel list, or with the network's emergency priority
+ * (15, pre-emptive priority 4).
+ */
+static bool callPriority(uint32_t dst, uint32_t src, uint8_t netPriority)
+{
+    return tetraIds_isPriority(dst) || (src != 0 && tetraIds_isPriority(src))
+           || netPriority >= 15;
+}
+
+/**
+ * A priority call took over from the call heard: log it, and on the same
+ * carrier make the speaker play its timeslot at once.
+ */
+static void priorityTakeover(void)
+{
+    if (!follower.preempted)
+        return;
+    follower.preempted = false;
+
+    TLOG("follow: priority call %u takes over", follower.callId);
+    uint8_t s = tetraFollow_target(&follower).away ? follower.slots
+                                                   : follower.callSlots;
+    for (uint8_t tn = 1; tn <= 4; tn++) {
+        if (s == (1u << (tn - 1))) {
+            tetraSpeech_follow(tn);
+            break;
+        }
+    }
+}
+
 /** Late join of a call: the talkgroup filter must let it through */
 static bool joinAllowed(uint16_t callId)
 {
@@ -477,6 +516,7 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     fr.freq = r->freq_hz;
     fr.mainFreq = (cell != NULL && cell->have_sysinfo) ? cell->dl_freq_hz : 0;
     fr.slots = r->timeslots;
+    fr.priority = callPriority(r->dst_ssi, 0, 0);
 
     if (!tetraFollow_retune(&follower, &fr, getTick())) {
         if (fr.main)
@@ -487,6 +527,7 @@ static bool onRetune(void *user, const struct tetra_retune *r)
         return false;
     }
 
+    priorityTakeover();
     tune();
 #ifdef CONFIG_TETRA_LOG
     struct tetraFollowTarget t = tetraFollow_target(&follower);
