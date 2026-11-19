@@ -198,6 +198,7 @@ const char* settings_fm_items[] =
 const char *settings_tetra_items[] =
 {
     "Follow calls",
+    "Late join",
     "Cell tracking",
     "Alarm beep",
     "Keep filter",
@@ -726,6 +727,7 @@ extern bool _ui_tetraCallActive(void);
 static void _ui_tetraApplySettings(void)
 {
     tetraConfig_set(!state.settings.tetraFollowOff,
+                    !state.settings.tetraJoinOff,
                     !state.settings.tetraRoamOff,
                     !state.settings.tetraAlarmOff);
 }
@@ -753,6 +755,9 @@ static void _ui_changeTetraSetting(uint8_t item, bool on)
     switch (item) {
         case T_FOLLOW:
             state.settings.tetraFollowOff = !on;
+            break;
+        case T_JOIN:
+            state.settings.tetraJoinOff = !on;
             break;
         case T_ROAM:
             state.settings.tetraRoamOff = !on;

@@ -540,6 +540,9 @@ int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
         case T_FOLLOW:
             on = !last_state.settings.tetraFollowOff;
             break;
+        case T_JOIN:
+            on = !last_state.settings.tetraJoinOff;
+            break;
         case T_ROAM:
             on = !last_state.settings.tetraRoamOff;
             break;

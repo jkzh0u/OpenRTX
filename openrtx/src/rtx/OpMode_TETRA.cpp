@@ -938,7 +938,8 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
 #ifdef CONFIG_TETRA_ROAM
     searching = tetraRoam_searching(&roam);
 #endif
-    if (tetraConfig_follow() && !searching && tetra_tmo_locked(&tmo)
+    if (tetraConfig_follow() && tetraConfig_join() && !searching
+        && tetra_tmo_locked(&tmo)
         && tetraFollow_join(&follower, joinAllowed, getTick())) {
         struct tetraFollowTarget t = tetraFollow_target(&follower);
         tetra_tmo_resync(&tmo);

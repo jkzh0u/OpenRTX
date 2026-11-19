@@ -144,6 +144,7 @@ enum settingsAccessibilityItems
 enum settingsTetraItems
 {
     T_FOLLOW = 0,
+    T_JOIN,
     T_ROAM,
     T_ALARM_BEEP,
     T_KEEP_FILTER,

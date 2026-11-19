@@ -64,7 +64,8 @@ typedef struct
             tetraRoamOff     : 1,  // Do not move between cells by itself
             tetraAlarmOff    : 1,  // No beep at the start of an alarm call
             tetraFilterReset : 1,  // Start each time with the filter TG All
-            _tetraReserved   : 4;
+            tetraJoinOff     : 1,  // Do not join calls late on other carriers
+            _tetraReserved   : 3;
     uint8_t tetraFilter;          // Talkgroup filter last picked
 #endif
 }
@@ -102,6 +103,7 @@ static const settings_t default_settings =
     0,                            // Cell tracking
     0,                            // Alarm beep
     0,                            // Keep the talkgroup filter
+    0,                            // Join calls late
     0,                            // not used
     0,                            // Talkgroup filter: All
 #endif

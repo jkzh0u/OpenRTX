@@ -412,6 +412,7 @@ in small grey text after the location, e.g. `CN Tower 392.5375`.
   joined late: when the radio is back on the main carrier with nothing to
   play, it goes to a call still going on elsewhere that the talkgroup
   filter lets through, once per call. The log shows `follow: join call`.
+  Late join in the TETRA settings turns this off.
 - All carriers of a cell share the TDMA timing, so the radio keeps its slot
   timing across the retune instead of synchronising again. A secondary
   carrier may carry no synchronisation bursts at all.
@@ -479,6 +480,7 @@ saved a few seconds after a change, and all are on at first.
 | Setting | On | Off |
 |---|---|---|
 | Follow calls | Follows a call to the carrier the network moves it to (Call following above) | Stays on the main carrier: calls on other carriers are shown but not heard |
+| Late join | When a call ends, joins a call still going on on another carrier, which started while the first one played (Call following above) | Only calls whose start it sees while free are followed |
 | Cell tracking | Moves between cells by itself (Cell tracking above) | Stays on the channel you picked. A long **0** still searches once |
 | Alarm beep | An alarm call beeps three times and turns the screen red | Red screen only |
 | Keep filter | Starts with the talkgroup filter you last picked | Starts at `TG All` |
