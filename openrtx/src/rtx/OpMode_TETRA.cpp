@@ -408,6 +408,18 @@ static void onEvent(void *user, const struct tetra_event *ev)
             fc.slots = c->timeslots;
             fc.speech = c->circuit_type == 0;
             fc.encrypted = c->encrypted;
+            fc.freq = 0;
+            fc.mainFreq = 0;
+            {
+                /* The carrier's frequency, for a late join */
+                const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+                if (cell != NULL && cell->have_sysinfo && cell->band != 0
+                    && c->carrier != 0xffff) {
+                    fc.freq = tetra_carrier_hz(cell->band, c->carrier,
+                                               cell->offset);
+                    fc.mainFreq = cell->dl_freq_hz;
+                }
+            }
             tetraFollow_call(&follower, &fc, getTick());
             tune();
             break;
@@ -426,6 +438,12 @@ static void onEvent(void *user, const struct tetra_event *ev)
 }
 
 #ifdef CONFIG_TETRA_FOLLOW
+/** Late join of a call: the talkgroup filter must let it through */
+static bool joinAllowed(uint16_t callId)
+{
+    return tetraFilter_passes(&filter, callId);
+}
+
 /**
  * libtetra retune callback: a call moved to another carrier of the cell, or
  * back to the main carrier. The follower decides; the radio retunes before
@@ -907,6 +925,25 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
         tetra_tmo_resync(&tmo);
         TLOG("follow: back to the main carrier >> %s",
              mhz(tetraFollow_target(&follower).freq));
+    }
+
+    /*
+     * Back on the main carrier with nothing to play: join a call still
+     * going on on another carrier, whose allocation was seen while another
+     * call was followed. libtetra did not tune there itself, so restart its
+     * synchronisation: it finds the call by its timeslots. Not during a
+     * cell search, which owns the tuning.
+     */
+    bool searching = false;
+#ifdef CONFIG_TETRA_ROAM
+    searching = tetraRoam_searching(&roam);
+#endif
+    if (tetraConfig_follow() && !searching && tetra_tmo_locked(&tmo)
+        && tetraFollow_join(&follower, joinAllowed, getTick())) {
+        struct tetraFollowTarget t = tetraFollow_target(&follower);
+        tetra_tmo_resync(&tmo);
+        TLOG("follow: join call %u on carrier %u >> %s slots 0x%x",
+             follower.callId, follower.carrier, mhz(t.freq), t.slots);
     }
 #endif
     /* Also undoes a configuration update that tuned back home meanwhile */
