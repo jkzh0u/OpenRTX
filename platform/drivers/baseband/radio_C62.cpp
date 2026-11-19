@@ -55,6 +55,12 @@ static enum opstatus radioStatus; // Current operating status
 static enum opmode radioMode;     // Current operating mode
 static bool rxVhf;                // RX on the VHF LNA, else UHF
 
+/*
+ * Fine RX tuning offset, Hz, added to the channel frequency: for tests and
+ * a frequency correction loop. See c62_setRxOffset().
+ */
+static volatile int32_t rxOffset;
+
 /**
  * @return true if the frequency is received through the VHF LNA.
  */
@@ -289,7 +295,7 @@ void radio_enableRx()
         gpioDev_set(&c62_bk4819_gpio, GPIO_UHF_RX_LNA);
     }
 
-    bk4819_set_freq(&c62_bk4819, config->rxFrequency);
+    bk4819_set_freq(&c62_bk4819, config->rxFrequency + rxOffset);
 
     if (flatMode(radioMode)) {
         applyM17Fields(false);
@@ -373,7 +379,7 @@ void radio_updateConfiguration()
      */
     if (radioStatus == RX && radioMode == OPMODE_TETRA
         && vhfLna(config->rxFrequency) == rxVhf) {
-        bk4819_set_freq(&c62_bk4819, config->rxFrequency);
+        bk4819_set_freq(&c62_bk4819, config->rxFrequency + rxOffset);
         return;
     }
 
@@ -419,4 +425,16 @@ rssi_t radio_getRssi()
 enum opstatus radio_getStatus()
 {
     return radioStatus;
+}
+
+extern "C" void c62_setRxOffset(int32_t hz)
+{
+    rxOffset = hz;
+    if (radioStatus == RX && config != NULL)
+        bk4819_set_freq(&c62_bk4819, config->rxFrequency + hz);
+}
+
+extern "C" int32_t c62_getRxOffset(void)
+{
+    return rxOffset;
 }

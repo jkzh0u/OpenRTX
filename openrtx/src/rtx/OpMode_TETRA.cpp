@@ -474,6 +474,11 @@ static bool onRetune(void *user, const struct tetra_retune *r)
 }
 #endif
 
+/* Diagnostics and remote control (see TetraStatus.h) */
+static uint32_t crcBase;            /* CRC passes of earlier tmo contexts */
+static volatile bool resetRequest;
+static volatile bool eqSeed = true; /* Start from CONFIG_TETRA_EQ_INIT */
+
 OpMode_TETRA::OpMode_TETRA()
     : startRx(false)
     , dataErrors(0)
@@ -494,7 +499,8 @@ void OpMode_TETRA::reset()
     tetraDemod_init(&demod);
 #ifdef CONFIG_TETRA_EQ_INIT
     static const float eqInit[TETRA_DEMOD_EQ_TAPS] = CONFIG_TETRA_EQ_INIT;
-    tetraDemod_setEqualizer(&demod, eqInit);
+    if (eqSeed)
+        tetraDemod_setEqualizer(&demod, eqInit);
 #endif
 
     demodJumps = 0;
@@ -503,6 +509,7 @@ void OpMode_TETRA::reset()
     tetraFilter_select(&filter, tetraIds_selectedFilter());
     tetraFollow_init(&follower, homeFreq);
     resync(false);
+    crcBase = 0;
     tetraStatus_reset();
     tetraStatus_setTuned(homeFreq);
 #ifdef CONFIG_TETRA_ROAM
@@ -524,6 +531,8 @@ void OpMode_TETRA::reset()
  */
 void OpMode_TETRA::resync(bool overrun)
 {
+    crcBase += tetra_tmo_crc_ok(&tmo);
+
     struct tetra_rx_config cfg;
     memset(&cfg, 0, sizeof(cfg));
     cfg.cb = onEvent;
@@ -611,10 +620,15 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     /*
      * A new frequency is a new cell: start from scratch. Other settings keep
      * the receiver. While following a call the radio has just been tuned
-     * back to the main carrier: tune() below retunes it.
+     * back to the main carrier: tune() below retunes it. The remote control
+     * can also ask for a restart.
      */
     if ((newCfg || homeFreq == 0) && rtx->rxFrequency != homeFreq) {
         homeFreq = rtx->rxFrequency;
+        resetRequest = false;
+        reset();
+    } else if (resetRequest) {
+        resetRequest = false;
         reset();
     }
 
@@ -724,4 +738,25 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
         platform_ledOn(GREEN);
     else
         platform_ledOff(GREEN);
+}
+
+void tetra_getDiag(struct tetraDiag *out)
+{
+    out->crcOk = crcBase + tetra_tmo_crc_ok(&tmo);
+    out->realigned = tetra_tmo_realigned(&tmo, NULL);
+    out->locked = tetra_tmo_locked(&tmo);
+    out->reacquired = demod.reacquired;
+    out->slips = demod.slips;
+    out->symbols = demod.symbols;
+    out->phaseErr = tetraDemod_phaseError(&demod);
+    out->carrierHz = tetraDemod_carrierOffset(&demod);
+    out->clockPpm = tetraDemod_clockOffset(&demod);
+    out->eqSeed = eqSeed;
+    memcpy(out->eq, demod.eq, sizeof(out->eq));
+}
+
+void tetra_requestReset(bool seedEqualizer)
+{
+    eqSeed = seedEqualizer;
+    resetRequest = true;
 }

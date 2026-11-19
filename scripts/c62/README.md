@@ -189,6 +189,7 @@ docker run --rm -it --user "$(id -u):$(id -g)" \
 | `C62_TETRA_LOG` | `ON` | TETRA receive log over the UART, and the last lines kept in PSRAM (section 5, Receive log) |
 | `C62_TETRA_LOG_HISTORY` | `262144` | Bytes of log kept in PSRAM |
 | `C62_CHANNELS` | empty | Also build the channel list image `channels.bin` from this list (section 6). The firmware itself holds no channels |
+| `C62_REMOTE` | `OFF` | Remote control over the programming cable, for automated tests (section 8). PTT does not work in these builds |
 | `C62_REG43_SWEEP` | `OFF` | Cycle `REG_43` through 7 test values in M17 RX |
 | `C62_REG43_SWEEP_MS` | `1400` | Recorded time per sweep value (one burst covers all 7 values) |
 
@@ -699,3 +700,48 @@ scripts/c62/ui_render.sh -c scripts/c62/channels/ttc_tetra.h -n 302-2013 \
 
 It needs a C compiler and zlib, nothing from the radio. Radio state and
 TETRA status are example values, set in `tests/platform/ui_render/ui_render.c`.
+
+## 8. Remote control (test builds)
+
+Build with `-DC62_REMOTE=ON` to drive the radio from a computer over the
+same cable. The cable's host TX line reaches the radio on GPIOA_15, which is
+both UART2 RXD and the PTT button: the firmware switches the pad to UART RX,
+so **PTT does nothing in these builds**. Replies travel as control packets
+of the baseband dump (magic `A5 5A C3 3D`) between its sample packets, so
+the dump keeps working.
+
+Remote control needs the baseband dump, which shares the console UART
+with the TETRA receive log: build with `-DC62_REMOTE=ON
+-DC62_BASEBAND_DUMP=ON -DC62_TETRA_LOG=OFF`.
+
+```bash
+python3 OpenRTX/scripts/c62_remote.py -p /dev/ttyUSB0 ping "m t" "f 438275000" s
+python3 OpenRTX/scripts/c62_remote.py -p /dev/ttyUSB0 --watch 1000
+```
+
+| Command | Effect |
+|---|---|
+| `ping` | Replies `pong` |
+| `s` | Status: mode, frequency, RSSI and, in T mode, the TETRA figures below |
+| `a <ms>` | Send the status every `<ms>` (0: off) |
+| `f <hz>` / `m fm\|m17\|t` | Set the frequency / mode |
+| `k <key> [l]` | Press a key (`l`: long press): `0`-`9 star hash enter esc up down left right moni f1` |
+| `v <0-15>` | Volume |
+| `p` / `p <name> <value>` | List / set the demodulator loop constants (`tetraDemodParams`) |
+| `r [0\|1]` | Restart the TETRA receiver, starting the equalizer from the measured taps (1) or not (0) |
+| `d 0\|1` | Stop / resume recording baseband samples |
+| `fo [hz]` | Read / set a fine RX tuning offset, added to the channel frequency |
+| `rr <reg>` / `rw <reg> <value>` | Read / write a BK4819 register (the driver may overwrite it at the next mode or frequency change) |
+
+Status fields in T mode: `e` phase error (% of pi/4), `cfo` carrier offset
+(Hz), `clk` sample clock offset (ppm), `lk`/`sync` libtetra lock, `crc`
+downlink blocks that passed the CRC, `ral` slot grid re-alignments, `rq`/`sl`
+demodulator re-acquisitions / timing jumps, `rs`/`ov` resyncs / overruns,
+`fr`/`bad` speech frames decoded / failing the CRC, `ots` traffic slots
+ignored because speech follows another timeslot, `seed`, and the centre
+equalizer taps (x1000).
+
+`scripts/c62_remote.py` also works as a Python module (`Remote`) for test
+loops. For offline work, `tests/platform/c62_tetra_host.c` runs the same
+demodulator and libtetra on a capture or on `scripts/c62_tetra_sim.py`
+output.
