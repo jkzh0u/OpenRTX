@@ -53,6 +53,7 @@ private:
 
     bool startRx;
     unsigned dataErrors; // Consecutive failed reads of the sample stream
+    size_t settle;       // Samples still to drop after a start or retune
     uint32_t demodJumps; // Demodulator slips and re-acquisitions seen
     uint32_t homeFreq;   // Configured frequency (main carrier), Hz
     pathId basebandPath;

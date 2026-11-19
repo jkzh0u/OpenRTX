@@ -6,6 +6,7 @@
 
 #include <interfaces/platform.h>
 #include <interfaces/delays.h>
+#include <interfaces/nvmem.h>
 #include <hwconfig.h>
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
@@ -120,6 +121,9 @@ void platform_init_csk6()
 #endif
 
     channelListInit();
+
+    /* Settings and VFO storage, read by state_init() */
+    nvm_init();
 
     // Configure the PTT key as input with pull-up
     gpio_pin_configure_dt(&button_ptt, GPIO_INPUT);

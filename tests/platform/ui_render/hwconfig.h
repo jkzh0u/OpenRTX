@@ -19,6 +19,7 @@
 /* Shortcut menu drawn as a grid shaped like the keypad */
 #define CONFIG_UI_MACRO_GRID
 #define CONFIG_TETRA_LOG
+#define CONFIG_TETRA_AFC
 #define CONFIG_BAT_LIION
 #define CONFIG_BAT_NCELLS 2
 #define CONFIG_M17

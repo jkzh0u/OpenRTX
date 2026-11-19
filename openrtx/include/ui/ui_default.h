@@ -147,6 +147,9 @@ enum settingsTetraItems
     T_ROAM,
     T_ALARM_BEEP,
     T_KEEP_FILTER,
+#ifdef CONFIG_TETRA_AFC
+    T_AFC,
+#endif
 };
 #endif
 

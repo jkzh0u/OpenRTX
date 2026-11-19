@@ -538,16 +538,21 @@ int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
     switch(index)
     {
         case T_FOLLOW:
-            on = last_state.settings.tetraFollow;
+            on = !last_state.settings.tetraFollowOff;
             break;
         case T_ROAM:
-            on = last_state.settings.tetraRoam;
+            on = !last_state.settings.tetraRoamOff;
             break;
         case T_ALARM_BEEP:
-            on = last_state.settings.tetraAlarmBeep;
+            on = !last_state.settings.tetraAlarmOff;
             break;
+#ifdef CONFIG_TETRA_AFC
+        case T_AFC:
+            on = !last_state.settings.tetraAfcOff;
+            break;
+#endif
         default:
-            on = last_state.settings.tetraKeepFilter;
+            on = !last_state.settings.tetraFilterReset;
             break;
     }
     sniprintf(buf, max_len, "%s", on ? currentLanguage->on : currentLanguage->off);

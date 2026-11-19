@@ -200,7 +200,10 @@ const char *settings_tetra_items[] =
     "Follow calls",
     "Cell tracking",
     "Alarm beep",
-    "Keep filter"
+    "Keep filter",
+#ifdef CONFIG_TETRA_AFC
+    "Freq. correct",
+#endif
 };
 #endif
 
@@ -722,8 +725,9 @@ extern bool _ui_tetraCallActive(void);
  */
 static void _ui_tetraApplySettings(void)
 {
-    tetraConfig_set(state.settings.tetraFollow, state.settings.tetraRoam,
-                    state.settings.tetraAlarmBeep);
+    tetraConfig_set(!state.settings.tetraFollowOff,
+                    !state.settings.tetraRoamOff,
+                    !state.settings.tetraAlarmOff);
 }
 
 /**
@@ -748,17 +752,22 @@ static void _ui_changeTetraSetting(uint8_t item, bool on)
 {
     switch (item) {
         case T_FOLLOW:
-            state.settings.tetraFollow = on;
+            state.settings.tetraFollowOff = !on;
             break;
         case T_ROAM:
-            state.settings.tetraRoam = on;
+            state.settings.tetraRoamOff = !on;
             break;
         case T_ALARM_BEEP:
-            state.settings.tetraAlarmBeep = on;
+            state.settings.tetraAlarmOff = !on;
             break;
         case T_KEEP_FILTER:
-            state.settings.tetraKeepFilter = on;
+            state.settings.tetraFilterReset = !on;
             break;
+#ifdef CONFIG_TETRA_AFC
+        case T_AFC:
+            state.settings.tetraAfcOff = !on;
+            break;
+#endif
         default:
             return;
     }
@@ -1627,7 +1636,7 @@ void ui_init()
 #ifdef CONFIG_TETRA
     // TETRA settings, and the talkgroup filter of the last power off
     _ui_tetraApplySettings();
-    if (state.settings.tetraKeepFilter
+    if (!state.settings.tetraFilterReset
         && state.settings.tetraFilter < tetraIds_filterCount()) {
         for (uint8_t i = 0; i < state.settings.tetraFilter; i++)
             tetraIds_stepFilter(1);

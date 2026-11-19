@@ -23,6 +23,8 @@ target_sources(app
     ${OPENRTX_ROOT}/platform/drivers/baseband/BK1080.c
 
     ${OPENRTX_ROOT}/platform/drivers/NVM/nvmem_c62.c
+    ${OPENRTX_ROOT}/platform/drivers/NVM/eeep.c
+    ${OPENRTX_ROOT}/platform/drivers/NVM/flash_zephyr.c
 
     ${OPENRTX_ROOT}/platform/drivers/display/display_c62.c
     ${OPENRTX_ROOT}/platform/drivers/baseband/radio_C62.cpp

@@ -692,10 +692,25 @@ static void _ui_drawTetraLine1(ui_state_t *ui_state)
         return;
     }
 
-    // Phase error, carrier offset, lost sample blocks, resyncs
+    /*
+     * Phase error, carrier offset, lost sample blocks, resyncs: shortened
+     * until it fits, as the counters grow (gfx_print() does not clip)
+     */
+    char demod[4][40];
+    snprintf(demod[0], sizeof(demod[0]), "e%u%% %+dHz o%u r%u", ts.phaseErr,
+             ts.carrierHz, ts.overruns, ts.resyncs);
+    snprintf(demod[1], sizeof(demod[1]), "e%u%% %+d o%u r%u", ts.phaseErr,
+             ts.carrierHz, ts.overruns, ts.resyncs);
+    snprintf(demod[2], sizeof(demod[2]), "e%u%% %+dHz", ts.phaseErr,
+             ts.carrierHz);
+    snprintf(demod[3], sizeof(demod[3]), "e%u%%", ts.phaseErr);
+    size_t i = 0;
+    while (i < 3
+           && gfx_getTextWidth(layout.line1_font, demod[i])
+                  > CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad)
+        i++;
     gfx_print(layout.line1_pos, layout.line1_font, TEXT_ALIGN_CENTER,
-              tetraMuted, "e%u%% %+dHz o%u r%u", ts.phaseErr, ts.carrierHz,
-              ts.overruns, ts.resyncs);
+              tetraMuted, "%s", demod[i]);
 }
 
 /**

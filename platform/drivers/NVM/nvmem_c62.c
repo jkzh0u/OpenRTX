@@ -5,145 +5,99 @@
  */
 
 /*
- * Retevis C62 settings storage: the settings and the current channel, kept
- * with Zephyr's NVS in the first sectors of storage_partition (0x2b0000, a
- * flash area found erased in every factory dump examined, see c62.dts).
+ * Retevis C62 nonvolatile memory: settings and VFO in an emulated EEPROM
+ * (eeep) on the CSK6 SPI flash, as on the CS7000.
  *
- * NVS writes an item only when it changed, and a write cut short by a power
- * loss leaves the previous value readable. Writes happen at power off
- * (state_terminate()): flash writes and erases run with interrupts masked,
- * up to tens of milliseconds for an erase, which would break audio while
- * receiving.
- *
- * The C62 has no codeplug or calibration in flash for OpenRTX: those
- * functions do nothing.
+ * The flash also holds the firmware (executed in place), the DSP image and
+ * the OEM factory resources, calibration included. Only the first 16 KiB of
+ * the devicetree's storage_partition (0x2B0000, erased in every factory
+ * dump examined) is used: eeep erases its whole partition when it finds no
+ * valid page, so the partition below must stay inside storage_partition.
  */
 
 #include <string.h>
-#include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/drivers/flash.h>
-#include <zephyr/fs/nvs.h>
 #include <zephyr/storage/flash_map.h>
 #include "interfaces/nvmem.h"
-#include "rtx/rtx.h"
+#include "core/nvmem_access.h"
+#include "core/crc.h"
+#include "drivers/NVM/eeep.h"
+#include "drivers/NVM/flash_zephyr.h"
 
-/* Sectors of storage_partition used, of 4 kB each */
-#define NVS_SECTORS 4
+#define C62_EEEP_OFFSET FIXED_PARTITION_OFFSET(storage_partition)
+#define C62_EEEP_SIZE (16 * 1024)
 
-/* Item identifiers */
-enum {
-    ID_FORMAT = 1,   /**< Layout of the items below */
-    ID_SETTINGS = 2, /**< settings_t */
-    ID_VFO = 3,      /**< channel_t of the channel in use */
-};
+BUILD_ASSERT(C62_EEEP_SIZE <= FIXED_PARTITION_SIZE(storage_partition),
+             "eeep area larger than the storage partition");
+
+/* eeep record ids, as on the CS7000 */
+#define EEEP_VFO 0x0001
+#define EEEP_SETTINGS 0x0002
 
 /*
- * Layout of the stored items: changes when settings_t or channel_t change
- * size, or when FORMAT_VERSION is raised for a change of meaning. Items of
- * another layout are not used, and are replaced at the next power off.
+ * The flash controller that holds storage_partition (the "flash" alias
+ * names the memory node, which is not a device)
  */
-#define FORMAT_VERSION 1
-#define FORMAT                                                     \
-    (((uint32_t)FORMAT_VERSION << 24) | ((uint32_t)sizeof(settings_t) << 12) \
-     | (uint32_t)sizeof(channel_t))
+static struct nvmInfo eflashInfo;
+static const struct nvmDevice eflash = {
+    .priv = FIXED_PARTITION_DEVICE(storage_partition),
+    .ops = &zephyr_flash_ops,
+    .info = &eflashInfo,
+};
+EEEP_DEVICE_DEFINE(eeep)
 
-static struct nvs_fs fs;
-static bool mounted;
-static bool failed;
+static const struct nvmPartition memPartitions[] = {
+    {
+        .offset = C62_EEEP_OFFSET, // eeep storage
+        .size = C62_EEEP_SIZE,
+    },
+};
 
-/**
- * Mount the store on first use. Flash that holds something else than an NVS
- * store is erased: only the NVS_SECTORS sectors at the start of
- * storage_partition.
- *
- * @return true if the store can be used.
- */
-static bool mount(void)
-{
-    struct flash_pages_info page;
+static const struct nvmDescriptor memAreas[] = {
+    {
+        .name = "SPI flash",
+        .dev = &eflash,
+        .baseAddr = 0x00000000,
+        .size = 0x400000, // 4 MiB
+        .nbPart = ARRAY_SIZE(memPartitions),
+        .partitions = memPartitions,
+    },
+    {
+        .name = "Virtual EEPROM",
+        .dev = &eeep,
+        .baseAddr = 0x00000000,
+        .size = 0xFFFFFFFF, // No physical size
+        .nbPart = 0,
+        .partitions = NULL,
+    },
+};
 
-    if (mounted)
-        return true;
-    if (failed)
-        return false;
+const struct nvmTable nvmTab = {
+    .areas = memAreas,
+    .nbAreas = ARRAY_SIZE(memAreas),
+};
 
-    fs.flash_device = FIXED_PARTITION_DEVICE(storage_partition);
-    fs.offset = FIXED_PARTITION_OFFSET(storage_partition);
-    if (!device_is_ready(fs.flash_device)
-        || flash_get_page_info_by_offs(fs.flash_device, fs.offset, &page)
-               != 0) {
-        printk("nvmem: flash not ready\n");
-        failed = true;
-        return false;
-    }
-    fs.sector_size = page.size;
-    fs.sector_count = NVS_SECTORS;
-    BUILD_ASSERT(NVS_SECTORS * 4096 <= FIXED_PARTITION_SIZE(storage_partition),
-                 "NVS sectors do not fit storage_partition");
-
-    int ret = nvs_mount(&fs);
-    if (ret != 0) {
-        printk("nvmem: mount failed (%d), erasing the settings area\n", ret);
-        ret = flash_erase(fs.flash_device, fs.offset,
-                          (size_t)fs.sector_size * fs.sector_count);
-        if (ret == 0)
-            ret = nvs_mount(&fs);
-    }
-    if (ret != 0) {
-        printk("nvmem: no settings storage (%d)\n", ret);
-        failed = true;
-        return false;
-    }
-
-    mounted = true;
-    return true;
-}
-
-/**
- * Read an item of exactly the expected size, from a store of this layout.
- */
-static int readItem(uint16_t id, void *data, size_t len)
-{
-    uint32_t format;
-
-    if (!mount())
-        return -1;
-    if (nvs_read(&fs, ID_FORMAT, &format, sizeof(format)) != sizeof(format)
-        || format != FORMAT)
-        return -1;
-    if (nvs_read(&fs, id, data, len) != (ssize_t)len)
-        return -1;
-
-    return 0;
-}
-
-/**
- * @return true if a stored channel can be used.
- */
-static bool channelValid(const channel_t *ch)
-{
-    switch (ch->mode) {
-        case OPMODE_FM:
-        case OPMODE_M17:
-#ifdef CONFIG_TETRA
-        case OPMODE_TETRA:
-#endif
-            break;
-        default:
-            return false;
-    }
-
-    return ch->rx_frequency != 0;
-}
+/* CRCs of what is stored, to skip writes of unchanged data */
+static uint16_t settingsCrc;
+static uint16_t vfoCrc;
+static bool ready;
 
 void nvm_init()
 {
-    mount();
+    if (zephirFlash_init(&eflash) < 0)
+        return;
+    /*
+     * eeep writes records of any length at any address, and rewrites a
+     * record header to mark it valid. The devicetree gives a 4-byte write
+     * block, but the CSK6 driver programs any byte range and the NOR flash
+     * clears bits of programmed bytes: allow single bytes, as on the CS7000.
+     */
+    eflashInfo.write_size = 1;
+    ready = eeep_init(&eeep, 0, 0) == 0;
 }
 
 void nvm_terminate()
 {
+    eeep_terminate(&eeep);
 }
 
 void nvm_readCalibData(void *buf)
@@ -158,47 +112,56 @@ void nvm_readHwInfo(hwInfo_t *info)
 
 int nvm_readVfoChannelData(channel_t *channel)
 {
-    channel_t ch;
-
-    if (readItem(ID_VFO, &ch, sizeof(ch)) < 0 || !channelValid(&ch))
+    if (!ready)
         return -1;
 
-    *channel = ch;
+    memset(channel, 0x00, sizeof(channel_t));
+    if (nvm_read(1, 0, EEEP_VFO, channel, sizeof(channel_t)) < 0)
+        return -1;
+
+    vfoCrc = crc_ccitt(channel, sizeof(channel_t));
     return 0;
 }
 
 int nvm_readSettings(settings_t *settings)
 {
-    return readItem(ID_SETTINGS, settings, sizeof(*settings));
-}
+    if (!ready)
+        return -1;
 
-static int writeItem(uint16_t id, const void *data, size_t len)
-{
-    /* NVS returns 0 when the stored value is the same: nothing written */
-    ssize_t ret = nvs_write(&fs, id, data, len);
-    return (ret < 0) ? -1 : 0;
-}
+    memset(settings, 0x00, sizeof(settings_t));
+    if (nvm_read(1, 0, EEEP_SETTINGS, settings, sizeof(settings_t)) < 0)
+        return -1;
 
-static int writeFormat(void)
-{
-    const uint32_t format = FORMAT;
-    return writeItem(ID_FORMAT, &format, sizeof(format));
+    settingsCrc = crc_ccitt(settings, sizeof(settings_t));
+    return 0;
 }
 
 int nvm_writeSettings(const settings_t *settings)
 {
-    if (!mount())
-        return -1;
-    if (writeFormat() < 0)
+    if (!ready)
         return -1;
 
-    return writeItem(ID_SETTINGS, settings, sizeof(*settings));
+    uint16_t crc = crc_ccitt(settings, sizeof(settings_t));
+    if (crc == settingsCrc)
+        return 0;
+    if (nvm_write(1, 0, EEEP_SETTINGS, settings, sizeof(settings_t)) < 0)
+        return -1;
+
+    settingsCrc = crc;
+    return 0;
 }
 
 int nvm_writeSettingsAndVfo(const settings_t *settings, const channel_t *vfo)
 {
-    if (nvm_writeSettings(settings) < 0)
+    if (!ready)
         return -1;
 
-    return writeItem(ID_VFO, vfo, sizeof(*vfo));
+    uint16_t crc = crc_ccitt(vfo, sizeof(channel_t));
+    if (crc != vfoCrc) {
+        if (nvm_write(1, 0, EEEP_VFO, vfo, sizeof(channel_t)) < 0)
+            return -1;
+        vfoCrc = crc;
+    }
+
+    return nvm_writeSettings(settings);
 }

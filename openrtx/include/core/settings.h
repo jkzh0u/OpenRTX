@@ -45,18 +45,23 @@ typedef struct
     uint8_t vpLevel         : 3,  // Voice prompt level
             vpPhoneticSpell : 1,  // Phonetic spell enabled
             macroMenuLatch  : 1,  // Automatic latch of macro menu
-            _reserved       : 3;
+            tetraAfcOff     : 1,  // TETRA frequency correction off
+            _reserved       : 2;
     bool    m17_can_rx;           // Check M17 CAN on RX
     char    m17_dest[10];         // M17 destination
     bool    showBatteryIcon;      // Battery display true: icon, false: percentage
     bool    gpsSetTime;           // Use GPS to ajust RTC time
     char    M17_meta_text[53];    // M17 Meta Text to send
 #ifdef CONFIG_TETRA
-    uint8_t tetraFollow     : 1,  // Follow calls to other carriers
-            tetraRoam       : 1,  // Move between cells by itself
-            tetraAlarmBeep  : 1,  // Beep at the start of an alarm call
-            tetraKeepFilter : 1,  // Start with the filter of the last power off
-            _tetraReserved  : 4;
+    /*
+     * Zero means the default for each: settings stored by a firmware without
+     * these fields read back as zeros.
+     */
+    uint8_t tetraFollowOff   : 1,  // Do not follow calls to other carriers
+            tetraRoamOff     : 1,  // Do not move between cells by itself
+            tetraAlarmOff    : 1,  // No beep at the start of an alarm call
+            tetraFilterReset : 1,  // Start each time with the filter TG All
+            _tetraReserved   : 4;
     uint8_t tetraFilter;          // Talkgroup filter at power off
 #endif
 }
@@ -81,6 +86,7 @@ static const settings_t default_settings =
     0,                            // Voice prompts off
     0,                            // Phonetic spell off
     1,                            // Automatic latch of macro menu enabled
+    0,                            // TETRA frequency correction on
     0,                            // not used
     false,                        // Check M17 CAN on RX
     "",                           // Empty M17 destination
@@ -88,10 +94,10 @@ static const settings_t default_settings =
     false,                        // Update RTC with GPS
     "OpenRTX",                    // Default M17 meta text
 #ifdef CONFIG_TETRA
-    1,                            // Follow calls
-    1,                            // Cell tracking
-    1,                            // Alarm beep
-    1,                            // Keep the talkgroup filter
+    0,                            // Follow calls
+    0,                            // Cell tracking
+    0,                            // Alarm beep
+    0,                            // Keep the talkgroup filter
     0,                            // not used
     0,                            // Talkgroup filter: All
 #endif
