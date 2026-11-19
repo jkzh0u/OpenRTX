@@ -173,6 +173,16 @@ static void onCall(const struct tetra_call *c)
     fc.slots = c->timeslots;
     fc.speech = c->circuit_type == 0;
     fc.encrypted = c->encrypted;
+    fc.freq = 0;
+    fc.mainFreq = 0;
+    {
+        const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+        if (cell != NULL && cell->have_sysinfo && cell->band != 0
+            && c->carrier != 0xffff) {
+            fc.freq = tetra_carrier_hz(cell->band, c->carrier, cell->offset);
+            fc.mainFreq = cell->dl_freq_hz;
+        }
+    }
     tetraFollow_call(&follower, &fc, (long long)(now * 1000));
 }
 
@@ -257,6 +267,12 @@ static void reportTarget(void)
 
     if (tetraFollow_tick(&follower, (long long)(now * 1000))) {
         printf("%8.3f  follower left the call's carrier, resync\n", now);
+        tetra_tmo_resync(&tmo);
+    }
+    /* As the radio: join a call going on elsewhere once idle at home */
+    if (tetra_tmo_locked(&tmo)
+        && tetraFollow_join(&follower, NULL, (long long)(now * 1000))) {
+        printf("%8.3f  join call %u late, resync\n", now, follower.callId);
         tetra_tmo_resync(&tmo);
     }
     t = tetraFollow_target(&follower);
