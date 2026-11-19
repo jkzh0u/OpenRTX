@@ -100,8 +100,12 @@ T mode on the strong cell (memory mode, its channel):
 - [ ] `sync locked` within a few seconds, and the screen shows the station
 - [ ] A `cell` line with your network's MCC-MNC (302-2013 for the TTC) and
       a location area
-- [ ] A `signal` line every 10 s: `locked`, phase error mostly 10% or
-      less (above 45% the meter shows no decoding)
+- [ ] A `signal` line every 10 s: `locked`, phase error about 25% or
+      less (a C62 measured about 20% on a strong test signal; above 45%
+      the meter shows no decoding), and `crc ok` higher on each line
+- [ ] `reacquired` and `realigned` stay the same from line to line, or
+      go up only now and then. Climbing every line means the receiver
+      keeps losing the signal's timing: keep the log
 - [ ] **No `samples lost: resync` lines**, or only a rare one. Many of them
       mean the radio cannot keep up: note how often, stop here
 - [ ] **Menu** > **Field test**: the same network, location area and main

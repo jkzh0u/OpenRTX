@@ -725,10 +725,14 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
 #ifdef CONFIG_TETRA_LOG
     if (getTick() - lastSignalLog >= LOG_SIGNAL_MS) {
         lastSignalLog = getTick();
-        TLOG("signal %d dBm on %s, %s, phase error %u%%, offset %+d Hz",
+        struct tetraDiag d;
+        tetra_getDiag(&d);
+        TLOG("signal %d dBm on %s, %s, phase error %u%%, offset %+d Hz, "
+             "crc ok %lu, reacquired %lu, realigned %lu",
              radio_getRssi(), mhz(rtxCfg->rxFrequency),
-             tetraStatus_sync() ? "locked" : "no lock",
-             tetraDemod_phaseError(&demod), tetraDemod_carrierOffset(&demod));
+             tetraStatus_sync() ? "locked" : "no lock", d.phaseErr,
+             d.carrierHz, (unsigned long)d.crcOk,
+             (unsigned long)d.reacquired, (unsigned long)d.realigned);
     }
 #endif
 

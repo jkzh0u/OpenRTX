@@ -362,8 +362,9 @@ typically because the call was set up before.
 
 The demodulator figures on line 1, e.g. `e11% -234Hz o0 r1`:
 
-- `e`: RMS phase error in % of pi/4. About 10 to 20% on a clean signal;
-  decoding fails above about 45%, where the demodulator starts again.
+- `e`: RMS phase error in % of pi/4. About 20% on a strong, clean signal
+  (measured on a C62 with a signal generator); decoding fails above about
+  45%, where the demodulator starts again.
 - the carrier offset in Hz.
 - `o`: overruns, blocks of samples lost because the radio could not keep
   up. This should stay at 0: if it counts up, the radio is short of CPU
@@ -514,7 +515,7 @@ Each line starts with the seconds since power on:
   40.100  roam: weak cell (-97 dBm), measuring 2 neighbours
   40.160  roam: measured 2: 392.61250 -88, 392.71250 -101
   46.200  roam: move to a stronger neighbour >> 392.61250 (-88 dBm)
-  50.000  signal -85 dBm on 392.61250, locked, phase error 12%, offset -234 Hz
+  50.000  signal -85 dBm on 392.61250, locked, phase error 18%, offset -234 Hz, crc ok 1234, reacquired 1, realigned 0
 ```
 
 - `sync`, `cell`, `neighbours`, `network time`: the lock and the cell. A
@@ -531,7 +532,10 @@ Each line starts with the seconds since power on:
 - `roam:`: cell tracking and the long **0** search: what was measured,
   the moves and tries, and `staying on` when the cell received is best.
 - `filter`, `start on`, `samples lost`, and every 10 s `signal`: signal
-  strength, frequency, lock, decoding quality.
+  strength, frequency, lock, decoding quality, and three counts since the
+  receiver started: `crc ok` downlink blocks that passed the CRC (it should
+  climb while locked), `reacquired` demodulator restarts and `realigned`
+  slot grid moves (both should stay low).
 - `--- N lines not sent` if the cable could not keep up; those lines are
   still in the kept log.
 
