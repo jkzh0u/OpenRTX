@@ -85,6 +85,13 @@ def read_channels(path):
     return chans
 
 
+def read_priority(path):
+    """@return SSIs of the priority and alarm talkgroups of a channel list."""
+    pat = re.compile(r"TETRA_ID\(\s*(\d+)\s*,.*\b(TF_PRIORITY|TF_ALARM)\b")
+    with open(path) as f:
+        return [m.group(1) for m in map(pat.search, f) if m]
+
+
 def read_start(path, rate, seconds):
     """First seconds of a 16-bit I/Q recording, raw or WAV."""
     with open(path, "rb") as f:
@@ -141,6 +148,9 @@ def main():
 
     centre_hz = round(a.centre * 1e6)
     chans = read_channels(a.channels)
+    priority = []
+    for ssi in read_priority(a.channels):
+        priority += ["-p", ssi]
     z, rate = read_start(a.inp, a.rate, SURVEY_SECONDS)
     found = survey(z, rate, centre_hz, chans)
     os.makedirs(a.out, exist_ok=True)
@@ -182,7 +192,7 @@ def main():
                 f.write(stats)
             trace = subprocess.run(
                 [os.path.join(tmp, "tetra_trace"), "-n", "-f",
-                 str(hz / 1e6), base],
+                 str(hz / 1e6)] + priority[:32] + [base],
                 check=True, capture_output=True, text=True).stdout
             with open(os.path.join(d, "trace.txt"), "w") as f:
                 f.write(trace)
