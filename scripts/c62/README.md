@@ -408,6 +408,10 @@ in small grey text after the location, e.g. `CN Tower 392.5375`.
 - It follows one call at a time, the first clear speech call it sees,
   including calls that stay on the main carrier. Encrypted and data calls
   are not followed.
+- A call that started on another carrier while it was following one is
+  joined late: when the radio is back on the main carrier with nothing to
+  play, it goes to a call still going on elsewhere that the talkgroup
+  filter lets through, once per call. The log shows `follow: join call`.
 - All carriers of a cell share the TDMA timing, so the radio keeps its slot
   timing across the retune instead of synchronising again. A secondary
   carrier may carry no synchronisation bursts at all.
@@ -779,12 +783,13 @@ approximation of the C62's receive filters.
    minute or two while calls are going on:
 
    ```bash
-   airspy_rx -f 392.3 -t 2 -r ttc.raw -n 300000000
+   airspy_rx -f 423.0 -a 3000000 -t 2 -g 18 -r ttc.raw -n 360000000
    ```
 
-   `-f` is the centre in MHz, `-t 2` 16-bit I/Q, `-n` the number of
-   samples (120 s at 2.5 MHz; about 1.2 GB). Check `airspy_rx -h` for the
-   sample rate option and gains on your model, and note the rate used.
+   `-f` is the centre in MHz, `-a` the sample rate (an Airspy Mini has 3
+   and 6 MHz, `airspy_info` lists them), `-t 2` 16-bit I/Q, `-g` the
+   gain (raise it until the strongest carrier peaks around -10 dBFS),
+   `-n` the number of samples (120 s at 3 MHz; 1.4 GB).
    The cell's other carriers in the same 2.5 MHz can be cut out of the
    same file later.
 
@@ -793,7 +798,7 @@ approximation of the C62's receive filters.
 
    ```bash
    python3 OpenRTX/scripts/c62_airspy_iq.py ttc.raw ttc_250k.wav \
-       --rate 2500000 --centre 392.3 --carrier 392.5125
+       --rate 3000000 --centre 423.0 --carrier 423.4875
    python3 OpenRTX/scripts/c62_tetra_sim.py ttc_250k.wav ttc_c62.s16
    ```
 
@@ -813,6 +818,17 @@ approximation of the C62's receive filters.
    `-e` and `-n` start the equalizer from scratch: the C62's measured
    taps fit the radio's filters, not the approximation, and make such
    recordings undecodable.
+
+Or do all of it at once: `scripts/c62_decode_capture.py` measures every
+TETRA carrier of a channel list inside the recording, and decodes each one
+strong enough into a folder: the figures, the call trace, the clear speech
+of each timeslot as 8 kHz WAV files, and a summary table.
+
+```bash
+python3 OpenRTX/scripts/c62_decode_capture.py ttc.raw decoded \
+    --rate 3000000 --centre 423.0 \
+    --channels OpenRTX/scripts/c62/channels/ttc_tetra.h
+```
 
 On a clean synthetic cell this gives about 100 blocks per second passing
 the CRC, 8 to 9% phase error, and every speech frame good. A real network
