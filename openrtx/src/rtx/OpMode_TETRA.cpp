@@ -52,11 +52,12 @@ static struct tetraFilter filter;
 static uint8_t filterSelection; // tetraIds_selection() applied to filter
 static struct tetraRoam roam;
 static uint8_t searchRequests; // tetraStatus_searchRequests() handled
-static long long lastSignalLog;
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
 
 #ifdef CONFIG_TETRA_LOG
+static long long lastSignalLog; // Last signal line of the log
+
 /** A frequency for a log line; two can be used in one line */
 static const char *mhz(uint32_t hz)
 {
