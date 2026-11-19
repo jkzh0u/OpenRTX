@@ -52,6 +52,14 @@ extern "C" {
 /** Calls whose type is remembered */
 #define TETRA_FOLLOW_MAX_CALLS 8
 
+/**
+ * After a priority call, the radio stays on the main carrier this long
+ * before leaving for another call, ms: a conversation on a priority
+ * talkgroup goes on as new calls a few seconds apart, whose set-up cannot
+ * be seen from another carrier.
+ */
+#define TETRA_FOLLOW_PRIORITY_HOLD_MS 10000
+
 enum tetraFollowEvent {
     TETRA_FOLLOW_UPDATE,  /**< Set-up, connect, grant or other call update */
     TETRA_FOLLOW_CEASED,  /**< Transmission ceased, the call continues */
@@ -69,6 +77,7 @@ struct tetraFollowCall {
     uint32_t freq;    /**< Carrier downlink from the cell's numbering, Hz;
                            0 if unknown */
     uint32_t mainFreq; /**< Main carrier downlink, Hz; 0 if unknown */
+    bool priority;     /**< A priority call (talkgroup, alarm) */
 };
 
 /** A retune request from the receiver */
@@ -79,6 +88,7 @@ struct tetraFollowRetune {
     uint32_t freq;     /**< Carrier downlink from the cell's numbering, Hz */
     uint32_t mainFreq; /**< Main carrier downlink, Hz; 0 if unknown */
     uint8_t slots;     /**< Timeslots of the call, bit 0 = TN1 */
+    bool priority;     /**< A priority call (talkgroup, alarm) */
 };
 
 /** Where to listen */
@@ -97,6 +107,7 @@ struct tetraFollowCallInfo {
     uint16_t carrier;
     uint8_t slots;
     bool joined; /**< Selected once: not joined late again */
+    bool priority;
 };
 
 struct tetraFollow {
@@ -111,6 +122,13 @@ struct tetraFollow {
     bool selected;
     uint16_t callId;
     long long lastActivity;
+    bool selectedPriority; /**< The selected call is a priority call */
+    uint8_t callSlots;     /**< Its timeslots if known, else 0 */
+    bool preempted;        /**< A priority call took over: the caller
+                                clears it */
+    /* Priority calls */
+    bool priorityHeard;     /**< A priority call has been seen */
+    long long lastPriority; /**< When a priority call was last active */
     /* Carrier being received */
     bool away;
     bool leave;       /**< Return home at the next tick */
