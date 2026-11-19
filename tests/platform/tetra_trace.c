@@ -26,7 +26,7 @@
  *
  * Run:
  *
- *     ./tetra_trace [-f MHz] [-n] [-v] recording.wav
+ *     ./tetra_trace [-f MHz] [-n] [-v] [-p SSI]... recording.wav
  *
  *     -f  frequency the radio was tuned to, MHz (default: the main carrier
  *         frequency the cell broadcasts)
@@ -35,6 +35,8 @@
  *         scripts/c62_airspy_iq.py and scripts/c62_tetra_sim.py, synthetic
  *         signals), which the C62 taps make undecodable
  *     -v  also print every traffic slot
+ *     -p  a priority talkgroup (TF_PRIORITY in a channel list); repeat for
+ *         more
  */
 
 #include <stdbool.h>
@@ -131,6 +133,28 @@ static void onCell(const struct tetra_cell *c)
     }
 }
 
+/* Priority talkgroups given with -p */
+#define MAX_PRIORITY 16
+static uint32_t prioritySsi[MAX_PRIORITY];
+static unsigned priorityCount;
+
+static bool isPriority(uint32_t ssi)
+{
+    for (unsigned i = 0; i < priorityCount; i++) {
+        if (ssi != 0 && prioritySsi[i] == ssi)
+            return true;
+    }
+    return false;
+}
+
+static void reportTakeover(void)
+{
+    if (!follower.preempted)
+        return;
+    follower.preempted = false;
+    printf("%8.3f  priority call %u takes over\n", now, follower.callId);
+}
+
 static void onCall(const struct tetra_call *c)
 {
     struct tetraFollowCall fc;
@@ -183,7 +207,10 @@ static void onCall(const struct tetra_call *c)
             fc.mainFreq = cell->dl_freq_hz;
         }
     }
+    fc.priority = isPriority(c->dst_ssi) || isPriority(c->src_ssi)
+                  || c->priority >= 15;
     tetraFollow_call(&follower, &fc, (long long)(now * 1000));
+    reportTakeover();
 }
 
 static void onEvent(void *user, const struct tetra_event *ev)
@@ -235,6 +262,7 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     fr.freq = r->freq_hz;
     fr.mainFreq = (cell != NULL && cell->have_sysinfo) ? cell->dl_freq_hz : 0;
     fr.slots = r->timeslots;
+    fr.priority = isPriority(r->dst_ssi);
     ok = tetraFollow_retune(&follower, &fr, (long long)(now * 1000));
 
     printf("%8.3f  retune request: ", now);
@@ -246,6 +274,7 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     printf(" = ");
     printFreq(r->freq_hz);
     printf(", %s\n", ok ? "accepted" : "declined");
+    reportTakeover();
     return ok;
 }
 
@@ -351,8 +380,12 @@ int main(int argc, char *argv[])
     bool eqInit = true;
     int opt;
 
-    while ((opt = getopt(argc, argv, "f:nv")) != -1) {
+    while ((opt = getopt(argc, argv, "f:nvp:")) != -1) {
         switch (opt) {
+            case 'p':
+                if (priorityCount < MAX_PRIORITY)
+                    prioritySsi[priorityCount++] = strtoul(optarg, NULL, 10);
+                break;
             case 'f':
                 tunedHz = (uint32_t)(atof(optarg) * 1e6 + 0.5);
                 break;
@@ -363,13 +396,13 @@ int main(int argc, char *argv[])
                 verbose = true;
                 break;
             default:
-                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] recording.wav\n",
+                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI]... recording.wav\n",
                         argv[0]);
                 return 2;
         }
     }
     if (optind != argc - 1) {
-        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] recording.wav\n",
+        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI]... recording.wav\n",
                 argv[0]);
         return 2;
     }
