@@ -15,7 +15,8 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
   **talkgroup names** and **filters** chosen on the radio (section 6): one
   firmware for everyone, each with their own list. An example list and a
   full one for the Toronto Transit Commission network are included;
-- **saves its settings** and the channel in use at power off;
+- **saves its settings** and the channel in use a few seconds after a
+  change;
 - has a **recent calls** list with details, a **last heard** line, **talk
   time**, a talkgroup **hold**, **alarm** alerts, a decoding quality meter
   and colour in T mode, and plays one call at a time;
@@ -362,9 +363,9 @@ typically because the call was set up before.
 
 The demodulator figures on line 1, e.g. `e11% -234Hz o0 r1`:
 
-- `e`: RMS phase error in % of pi/4. About 20% on a strong, clean signal
-  (measured on a C62 with a signal generator); decoding fails above about
-  45%, where the demodulator starts again.
+- `e`: RMS phase error in % of pi/4. About 13 to 17% on a strong, clean
+  signal once the frequency correction has settled (measured on a C62
+  with a signal generator); decoding fails above about 45%.
 - the carrier offset in Hz.
 - `o`: overruns, blocks of samples lost because the radio could not keep
   up. This should stay at 0: if it counts up, the radio is short of CPU
@@ -469,14 +470,15 @@ afterwards. Use `-n` for recordings not made with a C62.
 **Menu** > **Settings** > **TETRA** switches parts of T mode on and off.
 Select a line, press **green**, then **Up** turns it on and **Down** off;
 **green** again or **red** to finish. Like the other settings they are
-kept at power off, and all are on at first.
+saved a few seconds after a change, and all are on at first.
 
 | Setting | On | Off |
 |---|---|---|
 | Follow calls | Follows a call to the carrier the network moves it to (Call following above) | Stays on the main carrier: calls on other carriers are shown but not heard |
 | Cell tracking | Moves between cells by itself (Cell tracking above) | Stays on the channel you picked. A long **0** still searches once |
 | Alarm beep | An alarm call beeps three times and turns the screen red | Red screen only |
-| Keep filter | Starts with the talkgroup filter of the last power off | Starts at `TG All` |
+| Keep filter | Starts with the talkgroup filter you last picked | Starts at `TG All` |
+| Freq. correct | Tunes itself so the signal decodes best: the C62 decodes best about 1.6 kHz off the channel frequency, plus its crystal error. Found within about 20 s of decoding, kept across channel changes, and reset if nothing decodes for 8 s | Tunes exactly to the channel frequency |
 
 Follow calls and Cell tracking only do something in a firmware built with
 them, which is the default (`C62_TETRA_FOLLOW`, `C62_TETRA_ROAM`).
@@ -515,7 +517,7 @@ Each line starts with the seconds since power on:
   40.100  roam: weak cell (-97 dBm), measuring 2 neighbours
   40.160  roam: measured 2: 392.61250 -88, 392.71250 -101
   46.200  roam: move to a stronger neighbour >> 392.61250 (-88 dBm)
-  50.000  signal -85 dBm on 392.61250, locked, phase error 18%, offset -234 Hz, crc ok 1234, reacquired 1, realigned 0
+  50.000  signal -85 dBm on 392.61250, locked, phase error 14%, offset -12 Hz, correction +1590 Hz, crc ok 1234, reacquired 1, realigned 0
 ```
 
 - `sync`, `cell`, `neighbours`, `network time`: the lock and the cell. A
@@ -535,7 +537,8 @@ Each line starts with the seconds since power on:
   strength, frequency, lock, decoding quality, and three counts since the
   receiver started: `crc ok` downlink blocks that passed the CRC (it should
   climb while locked), `reacquired` demodulator restarts and `realigned`
-  slot grid moves (both should stay low).
+  slot grid moves (both should stay low). `correction` is the fine tuning
+  the frequency correction applies (TETRA settings).
 - `--- N lines not sent` if the cable could not keep up; those lines are
   still in the kept log.
 
@@ -548,18 +551,20 @@ line, mostly at boot. `-DC62_TETRA_LOG=OFF` builds without the log, and
 ### Saved settings
 
 The radio saves the menu settings (brightness, squelch, timers and so on)
-and the channel in use when you turn it off with the knob, and starts with
-them. The channel comes back in VFO mode: a memory channel you were on
+and the channel in use 5 s after you last changed one, and starts with
+them. The C62 notices power off too late for a reliable flash write, so
+it does not wait for it: turning off within 5 s of a change loses that
+change. The channel comes back in VFO mode: a memory channel you were on
 returns as its frequency and mode, so T mode on a TETRA cell starts
 receiving again by itself. The talkgroup filter comes back too, unless
 Keep filter is off (TETRA settings); a held talkgroup does not.
 
-The first start, or a firmware whose settings layout changed, uses the
-defaults: VFO mode on 430.000 MHz, M17. They are stored with Zephyr's NVS
-in the flash area at `0x2b0000`, which the stock firmware leaves empty; the
-calibration at `0x3b0000` is never written. Settings are written only at
-power off, and only what changed. Taking the battery out while on keeps the
-last saved ones.
+The first start uses the defaults: VFO mode on 430.000 MHz, M17. Settings
+are kept in an emulated EEPROM in the first 16 kB of the flash area at
+`0x2b0000`, which the stock firmware leaves empty; the calibration at
+`0x3b0000` is never written. Only what changed is written, and the writes
+are spread over that area. Settings saved by sp5wwp's C62 firmware are
+read too: the TETRA settings it does not have start on.
 
 ### Channel lists
 

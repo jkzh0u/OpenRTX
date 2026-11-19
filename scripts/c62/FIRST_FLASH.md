@@ -100,9 +100,12 @@ T mode on the strong cell (memory mode, its channel):
 - [ ] `sync locked` within a few seconds, and the screen shows the station
 - [ ] A `cell` line with your network's MCC-MNC (302-2013 for the TTC) and
       a location area
-- [ ] A `signal` line every 10 s: `locked`, phase error about 25% or
-      less (a C62 measured about 20% on a strong test signal; above 45%
-      the meter shows no decoding), and `crc ok` higher on each line
+- [ ] A `signal` line every 10 s: `locked`, phase error about 20% or
+      less on a strong signal once the frequency correction has settled
+      (a C62 measured 13 to 17% with a test signal; above 45% the meter
+      shows no decoding), and `crc ok` higher on each line
+- [ ] `correction` settles within about 20 s, usually somewhere around
+      +1600 Hz plus your radio's crystal error, then changes little
 - [ ] `reacquired` and `realigned` stay the same from line to line, or
       go up only now and then. Climbing every line means the receiver
       keeps losing the signal's timing: keep the log
@@ -194,8 +197,10 @@ In memory mode:
       **red** goes back
 - [ ] **Settings** > **TETRA**: **green** on a line, then Up / Down switch
       it on and off, **green** or **red** finishes
-- [ ] Keep filter: pick a filter with **#**, turn off and on: it starts on
-      that filter. With Keep filter OFF it starts at `TG All`
+- [ ] Keep filter: pick a filter with **#**, wait 10 s, turn off and on:
+      it starts on that filter. With Keep filter OFF it starts at `TG All`
+- [ ] Settings are kept: change the brightness, wait 10 s, turn off and
+      on
 - [ ] **Menu** > **About**: `C62 fork:`, `Jackson Zhou` and `jkzhou.ca`
       first, then the OpenRTX authors
 - [ ] In T mode: short **0** opens the recent calls (on release), long
@@ -224,9 +229,8 @@ In VFO mode:
   again with the `chlist.py` of this firmware and flash it again. The radio
   works without a list, with no memory channels and numbers instead of
   names.
-- **`nvmem: mount failed …, erasing the settings area`:** once, at the
-  first start, is normal if that flash area held something else. Every
-  start means settings cannot be saved: note it.
+- **Settings forgotten at every start** (after waiting 10 s before turning
+  off): the settings flash area cannot be written. Note it.
 - **No log at all:** check the port and 115200 baud. If the radio works
   otherwise, build with `-DC62_TETRA_LOG=OFF`: if the radio now works
   better, the log is the problem.
