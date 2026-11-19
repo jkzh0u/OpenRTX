@@ -20,6 +20,11 @@
  *  -t  trace the demodulator every 0.48 s
  *  -g  input gain (float), applied before the demodulator
  *  -P  name=value: set a demodulator parameter (tetraDemodParams)
+ *  -a  prefix: write the clear speech of each timeslot to prefix_tsN.wav
+ *      (8 kHz mono, silence between transmissions so that it keeps the
+ *      recording's time). Needs OpenACELP: add -DHOST_SPEECH,
+ *      -I <openacelp>/include and <openacelp>/src/oa_{dsp,bits,dec,
+ *      tables_tetra}.c to the build.
  */
 
 #include <math.h>
@@ -30,6 +35,9 @@
 #include <unistd.h>
 #include <tetra/tetra.h>
 #include "protocols/TETRA/TetraDemod.h"
+#ifdef HOST_SPEECH
+#include <openacelp.h>
+#endif
 
 #define HALF_SAMPLES 1440
 
@@ -47,6 +55,83 @@ static unsigned nFrames, nBadFrames; /* Clear speech frames, CRC failed */
 static struct tetra_speech_ws speechWs;
 static int trace;
 static uint32_t crcTotal;
+static uint32_t samplesIn; /* 48 kHz input samples decoded so far */
+
+#ifdef HOST_SPEECH
+/* Clear speech of each timeslot, decoded and written to a WAV file */
+static const char *audioPrefix;
+static struct {
+    FILE *f;
+    oa_dec_t dec;
+    uint32_t written; /* 8 kHz samples */
+} audio[4];
+
+static void writeWavHeader(FILE *f, uint32_t samples)
+{
+    uint32_t data = samples * 2, riff = 36 + data, fmtLen = 16, rate = 8000,
+             byteRate = 16000;
+    uint16_t pcm = 1, ch = 1, align = 2, bits = 16;
+    fseek(f, 0, SEEK_SET);
+    fwrite("RIFF", 1, 4, f);
+    fwrite(&riff, 4, 1, f);
+    fwrite("WAVEfmt ", 1, 8, f);
+    fwrite(&fmtLen, 4, 1, f);
+    fwrite(&pcm, 2, 1, f);
+    fwrite(&ch, 2, 1, f);
+    fwrite(&rate, 4, 1, f);
+    fwrite(&byteRate, 4, 1, f);
+    fwrite(&align, 2, 1, f);
+    fwrite(&bits, 2, 1, f);
+    fwrite("data", 1, 4, f);
+    fwrite(&data, 4, 1, f);
+    fseek(f, 0, SEEK_END);
+}
+
+static void playSpeech(unsigned tn, const struct tetra_speech *sp)
+{
+    if (audioPrefix == NULL || tn < 1 || tn > 4)
+        return;
+    tn--;
+    if (audio[tn].f == NULL) {
+        char path[512];
+        snprintf(path, sizeof(path), "%s_ts%u.wav", audioPrefix, tn + 1);
+        audio[tn].f = fopen(path, "wb");
+        if (audio[tn].f == NULL) {
+            perror(path);
+            exit(1);
+        }
+        writeWavHeader(audio[tn].f, 0);
+        oa_dec_init(&audio[tn].dec, &oa_tables_tetra);
+    }
+
+    /* Silence up to now, less the two frames about to be written */
+    static const int16_t zero[OA_FRAME_SAMPLES];
+    uint32_t now = samplesIn / 6;
+    while (audio[tn].written + 3 * OA_FRAME_SAMPLES <= now) {
+        fwrite(zero, 2, OA_FRAME_SAMPLES, audio[tn].f);
+        audio[tn].written += OA_FRAME_SAMPLES;
+    }
+
+    for (int i = 0; i < 2; i++) {
+        int16_t pcm[OA_FRAME_SAMPLES];
+        oa_dec_frame(&audio[tn].dec, sp->bits[i], sp->bfi[i], pcm);
+        fwrite(pcm, 2, OA_FRAME_SAMPLES, audio[tn].f);
+        audio[tn].written += OA_FRAME_SAMPLES;
+    }
+}
+
+static void closeAudio(void)
+{
+    for (unsigned i = 0; i < 4; i++) {
+        if (audio[i].f == NULL)
+            continue;
+        writeWavHeader(audio[i].f, audio[i].written);
+        fclose(audio[i].f);
+        printf("speech TN%u: %.1f s written\n", i + 1,
+               audio[i].written / 8000.0);
+    }
+}
+#endif
 
 static void onEvent(void *user, const struct tetra_event *ev)
 {
@@ -60,6 +145,9 @@ static void onEvent(void *user, const struct tetra_event *ev)
                 tetra_speech_decode(&speechWs, t, &sp);
                 nFrames += 2;
                 nBadFrames += sp.bfi[0] + sp.bfi[1];
+#ifdef HOST_SPEECH
+                playSpeech(t->time.tn, &sp);
+#endif
             }
             break;
         }
@@ -122,7 +210,7 @@ int main(int argc, char **argv)
 {
     int useResync = 0, seedEq = 1, opt;
     float inGain = 1.0f;
-    while ((opt = getopt(argc, argv, "rvteg:P:")) != -1) {
+    while ((opt = getopt(argc, argv, "rvteg:P:a:")) != -1) {
         switch (opt) {
             case 'r':
                 useResync = 1;
@@ -139,6 +227,14 @@ int main(int argc, char **argv)
             case 'g':
                 inGain = strtof(optarg, NULL);
                 break;
+            case 'a':
+#ifdef HOST_SPEECH
+                audioPrefix = optarg;
+                break;
+#else
+                fprintf(stderr, "-a: built without -DHOST_SPEECH\n");
+                return 2;
+#endif
             case 'P':
                 if (!setParam(optarg)) {
                     fprintf(stderr, "bad -P %s\n", optarg);
@@ -202,6 +298,7 @@ int main(int argc, char **argv)
                 inits++;
             }
         }
+        samplesIn = samples + n;
         tetra_tmo_push_soft(&tmo, soft, k);
         /* As OpMode_TETRA: good blocks keep the demodulator's lock */
         uint32_t crcNow = crcTotal + tetra_tmo_crc_ok(&tmo);
@@ -248,5 +345,8 @@ int main(int argc, char **argv)
            tetraDemod_clockOffset(&demod), nTraffic, nCalls, nSds, demod.eq[3],
            demod.eq[4], demod.eq[5], demod.eqBias * 18000 / (2 * 3.14159265),
            nFrames, nBadFrames, errLate);
+#ifdef HOST_SPEECH
+    closeAudio();
+#endif
     return 0;
 }
