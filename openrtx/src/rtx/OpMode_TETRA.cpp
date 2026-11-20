@@ -525,14 +525,22 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     fr.slots = r->timeslots;
     fr.priority = callPriority(r->dst_ssi, 0, 0);
 
+    /*
+     * libtetra asks again on every block that repeats the allocation: log a
+     * decline once per call
+     */
+    static uint16_t lastDeclined = 0xffff;
     if (!tetraFollow_retune(&follower, &fr, getTick())) {
         if (fr.main)
             TLOG("retune: main carrier: declined");
-        else
+        else if (r->call_id != lastDeclined)
             TLOG("retune: call %u to carrier %u = %s slots 0x%x: declined",
                  r->call_id, r->carrier, mhz(r->freq_hz), r->timeslots);
+        if (!fr.main)
+            lastDeclined = r->call_id;
         return false;
     }
+    lastDeclined = 0xffff;
 
     priorityTakeover();
     tune();
