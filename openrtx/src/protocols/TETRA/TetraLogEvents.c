@@ -30,15 +30,26 @@ static bool neighboursLogged;
 static long long lastTime;
 static bool timeLogged;
 
-static uint16_t trafficCall;
-static long long trafficLast;
-static bool trafficSeen;
+/*
+ * Transmissions heard, one per timeslot: two calls on two timeslots of a
+ * carrier are each logged once, not at every slot as they alternate
+ */
+static struct {
+    bool seen;
+    uint16_t call;
+    long long last;
+} traffic[4];
+
+static void forgetTraffic(void)
+{
+    memset(traffic, 0, sizeof(traffic));
+}
 
 void tetraLogEvents_reset(void)
 {
     cell.valid = false;
     neighboursLogged = false;
-    trafficSeen = false;
+    forgetTraffic();
 }
 
 const char *tetraLog_freq(char *buf, unsigned len, uint32_t hz)
@@ -229,6 +240,22 @@ static void onCall(long long now, const struct tetra_call *c, bool passed)
                     passed ? "" : ", filtered out");
 }
 
+/**
+ * @return true if a decoded text is worth printing: not empty, and nothing
+ * but printable characters and white space up to its end, so that binary
+ * data sent as a text message is not shown as text.
+ */
+static bool printable(const char *utf8)
+{
+    if (*utf8 == '\0')
+        return false;
+    for (const unsigned char *p = (const unsigned char *)utf8; *p; p++) {
+        if (*p < 0x20 && *p != '\n' && *p != '\r' && *p != '\t')
+            return false;
+    }
+    return true;
+}
+
 /** Short data: text and status as such, other data by its size */
 static void onSds(long long now, const struct tetra_sds *s, bool passed)
 {
@@ -243,8 +270,9 @@ static void onSds(long long now, const struct tetra_sds *s, bool passed)
     } else if (s->type == TETRA_SDS_UDD4) {
         struct tetra_sds_text t;
         char utf8[96];
-        if (tetra_sds_parse_text(s, &t) == 0
-            && tetra_sds_text_utf8(&t, utf8, sizeof(utf8)) >= 0) {
+        bool parsed = tetra_sds_parse_text(s, &t) == 0;
+        int len = parsed ? tetra_sds_text_utf8(&t, utf8, sizeof(utf8)) : -1;
+        if (len > 0 && printable(utf8)) {
             /* Printable ASCII only, for any terminal */
             size_t n = 0;
             text[n++] = '"';
@@ -255,6 +283,19 @@ static void onSds(long long now, const struct tetra_sds *s, bool passed)
                               : '?';
             text[n++] = '"';
             text[n] = '\0';
+        } else if (parsed) {
+            /* Binary in a text message (a NUL, control bytes): the bytes */
+            int n = snprintf(text, sizeof(text), "data (protocol %u, coding "
+                             "%u):", t.protocol_id, t.coding);
+            for (unsigned i = 0; i < t.nbits / 8 && n > 0
+                                 && (size_t)n + 4 < sizeof(text); i++) {
+                unsigned bit = t.start + 8 * i;
+                unsigned b = (unsigned)((t.data[bit / 8] << (bit % 8)
+                                         | (bit % 8 ? t.data[bit / 8 + 1]
+                                                          >> (8 - bit % 8)
+                                                    : 0)) & 0xff);
+                n += snprintf(text + n, sizeof(text) - n, " %02x", b);
+            }
         }
     }
     if (text[0] == '\0')
@@ -268,12 +309,13 @@ static void onSds(long long now, const struct tetra_sds *s, bool passed)
 static void onTraffic(long long now, const struct tetra_traffic *t,
                       bool passed)
 {
-    bool start = !trafficSeen || t->call_id != trafficCall
-              || now - trafficLast >= TRAFFIC_GAP_MS;
+    unsigned tn = (t->time.tn >= 1 && t->time.tn <= 4) ? t->time.tn - 1 : 0;
+    bool start = !traffic[tn].seen || t->call_id != traffic[tn].call
+              || now - traffic[tn].last >= TRAFFIC_GAP_MS;
 
-    trafficSeen = true;
-    trafficCall = t->call_id;
-    trafficLast = now;
+    traffic[tn].seen = true;
+    traffic[tn].call = t->call_id;
+    traffic[tn].last = now;
     if (!start)
         return;
 
@@ -300,7 +342,7 @@ void tetraLogEvents_event(long long now, const struct tetra_event *ev,
             tetraLog_printf(now, "sync %s",
                             ev->u.sync.locked ? "locked" : "lost");
             if (!ev->u.sync.locked)
-                trafficSeen = false;
+                forgetTraffic();
             break;
 
         case TETRA_EV_CELL:
