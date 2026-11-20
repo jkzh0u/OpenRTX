@@ -20,9 +20,14 @@ extern "C" {
  * many cells (base stations, or subway zones), each on its own main
  * carrier, and each broadcasts the carriers of its neighbours.
  *
- * - While locked, if the serving cell gets weak, it measures the signal of
- *   each neighbour, a few milliseconds each, and moves to one that is
- *   clearly stronger, twice in a row.
+ * - While locked, if the serving cell gets weak (its signal, averaged, or
+ *   nothing decoded for a while), it measures the signal of each
+ *   neighbour, a few milliseconds each, and moves to one that is clearly
+ *   stronger, twice in a row, or at once when the cell is about to be lost.
+ *   Not during a call, unless the cell is about to be lost.
+ * - Locked on a carrier that is not its cell's main carrier (a search found
+ *   a secondary carrier), it moves to the main carrier
+ *   (tetraRoam_mainCarrier()).
  * - When the lock is lost, it measures every known carrier (neighbours
  *   first, then the frequencies of the built-in channel list), and tries
  *   the strongest ones in turn until one locks.
@@ -37,8 +42,8 @@ extern "C" {
  * Independent of the radio and of libtetra.
  */
 
-/** Neighbour cells kept */
-#define TETRA_ROAM_MAX_NEIGHBOURS 8
+/** Neighbour cells kept (a TTC cell names 11 or more) */
+#define TETRA_ROAM_MAX_NEIGHBOURS 16
 /** Other known carriers kept */
 #define TETRA_ROAM_MAX_SCAN 48
 /** Candidates of a search */
@@ -49,8 +54,25 @@ extern "C" {
 #define TETRA_ROAM_LOST_MS 2500
 /** Time between checks of the neighbours while the cell is weak, ms */
 #define TETRA_ROAM_CHECK_MS 3000
-/** Serving cell weaker than this: check the neighbours, dBm */
-#define TETRA_ROAM_WEAK_DBM -95
+/**
+ * Serving cell weaker than this, averaged: check the neighbours, dBm. On a
+ * C62 decoding starts to suffer at about -90 dBm and fails at about -94
+ * (scripts/c62/README.md, section 9): move before that.
+ */
+#define TETRA_ROAM_WEAK_DBM -88
+/**
+ * Weaker than this, or nothing decoded: the cell is about to be lost.
+ * Measure the neighbours even during a call (a measurement may click), and
+ * move on the first measurement that finds a stronger one, dBm.
+ */
+#define TETRA_ROAM_CRITICAL_DBM -91
+/** Time constant of the serving cell's signal average, ms */
+#define TETRA_ROAM_AVERAGE_MS 2000
+/**
+ * Locked but nothing decoded for this long: as weak as a lost cell, ms (for
+ * the caller, which tells tetraRoam_tick() whether blocks decode).
+ */
+#define TETRA_ROAM_DEAF_MS 1000
 /** A neighbour must be this much stronger to move to it, dB */
 #define TETRA_ROAM_MARGIN_DB 6
 /** Weaker than this: no signal worth trying, dBm */
@@ -98,6 +120,10 @@ struct tetraRoam {
     long long lastLock;  /**< Last time locked */
     long long lastCheck; /**< Last check of the neighbours */
     int16_t servingRssi; /**< At the start of the check */
+    int32_t average;     /**< Serving cell signal, dBm x 16 */
+    long long lastAverage;
+    bool averaged;   /**< average holds a value */
+    bool urgent;     /**< The check is of a cell about to be lost */
 
     struct tetraRoamCandidate cand[TETRA_ROAM_MAX_CANDIDATES];
     uint8_t nCand;
@@ -125,7 +151,9 @@ void tetraRoam_init(struct tetraRoam *r, uint32_t serving, long long now);
 void tetraRoam_addScan(struct tetraRoam *r, uint32_t freq);
 
 /**
- * Set the neighbours broadcast by the serving cell.
+ * Add neighbours broadcast by the serving cell. A cell names its neighbours
+ * a few at a time, so they add up; they are forgotten on a move to another
+ * cell, when the oldest make room for new ones too.
  *
  * @param r: tracker.
  * @param freq: their frequencies as the radio tunes them, Hz; zeros are
@@ -153,12 +181,37 @@ void tetraRoam_search(struct tetraRoam *r, long long now);
  * @param r: tracker.
  * @param now: current time, ms.
  * @param locked: the receiver is locked to a cell.
- * @param busy: a call is being received: do not probe.
+ * @param decoding: blocks decoded within TETRA_ROAM_DEAF_MS.
+ * @param busy: a call is being received: do not probe, unless the cell is
+ * about to be lost.
  * @param rssi: signal strength of the serving cell, dBm.
  * @return what to do.
  */
 struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
-                                    bool locked, bool busy, int rssi);
+                                    bool locked, bool decoding, bool busy,
+                                    int rssi);
+
+/**
+ * The receiver stays locked elsewhere meanwhile (following a call on
+ * another carrier of the cell): not a lost lock. Call while away.
+ *
+ * @param r: tracker.
+ * @param now: current time, ms.
+ */
+void tetraRoam_hold(struct tetraRoam *r, long long now);
+
+/**
+ * The cell received has its main carrier elsewhere: the receiver locked to
+ * a secondary carrier, where calls are not set up. Move to the main
+ * carrier, when locked and not searching.
+ *
+ * @param r: tracker.
+ * @param main: the cell's main carrier as the radio tunes it, Hz.
+ * @param now: current time, ms.
+ * @return a tune to it, or nothing.
+ */
+struct tetraRoamStep tetraRoam_mainCarrier(struct tetraRoam *r, uint32_t main,
+                                           long long now);
 
 /**
  * Report the result of a probe.

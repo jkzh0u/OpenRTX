@@ -41,12 +41,16 @@ void tetraRoam_addScan(struct tetraRoam *r, uint32_t freq)
 void tetraRoam_setNeighbours(struct tetraRoam *r, const uint32_t *freq,
                              unsigned n)
 {
-    r->nNeighbours = 0;
-    for (unsigned i = 0; i < n && r->nNeighbours < TETRA_ROAM_MAX_NEIGHBOURS;
-         i++) {
+    for (unsigned i = 0; i < n; i++) {
         if (freq[i] == 0 || freq[i] == r->serving
             || contains(r->neighbour, r->nNeighbours, freq[i]))
             continue;
+        if (r->nNeighbours == TETRA_ROAM_MAX_NEIGHBOURS) {
+            /* Full: the oldest makes room */
+            memmove(&r->neighbour[0], &r->neighbour[1],
+                    (TETRA_ROAM_MAX_NEIGHBOURS - 1) * sizeof(r->neighbour[0]));
+            r->nNeighbours--;
+        }
         r->neighbour[r->nNeighbours++] = freq[i];
     }
 }
@@ -103,7 +107,27 @@ static struct tetraRoamStep step(enum tetraRoamAction action, uint32_t freq)
 static struct tetraRoamStep tune(struct tetraRoam *r, uint32_t freq)
 {
     r->serving = freq;
+    r->averaged = false; /* Another cell: its own signal and neighbours */
+    r->nNeighbours = 0;
     return step(TETRA_ROAM_TUNE, freq);
+}
+
+/** Average of the serving cell's signal, dBm */
+static int average(struct tetraRoam *r, long long now, int rssi)
+{
+    if (!r->averaged) {
+        r->average = rssi * 16;
+        r->averaged = true;
+    } else {
+        long long dt = now - r->lastAverage;
+        if (dt > TETRA_ROAM_AVERAGE_MS)
+            dt = TETRA_ROAM_AVERAGE_MS;
+        if (dt > 0)
+            r->average += (int32_t)((rssi * 16 - r->average) * dt
+                                    / TETRA_ROAM_AVERAGE_MS);
+    }
+    r->lastAverage = now;
+    return r->average / 16;
 }
 
 /** Strongest candidates first */
@@ -132,7 +156,8 @@ static struct tetraRoamStep checkDone(struct tetraRoam *r, long long now)
     r->state = TETRA_ROAM_LOCKED;
     r->lastCheck = now;
 
-    if (best == NULL || best->rssi < r->servingRssi + TETRA_ROAM_MARGIN_DB) {
+    if (best == NULL || best->rssi < r->servingRssi + TETRA_ROAM_MARGIN_DB
+        || best->rssi <= TETRA_ROAM_FLOOR_DBM) {
         r->confirmed = 0;
         return step(TETRA_ROAM_NONE, 0);
     }
@@ -145,7 +170,8 @@ static struct tetraRoamStep checkDone(struct tetraRoam *r, long long now)
         r->confirmed = 1;
     }
 
-    if (r->confirmed < 2)
+    /* About to lose the cell: no time to confirm */
+    if (r->confirmed < (r->urgent ? 1 : 2))
         return step(TETRA_ROAM_NONE, 0);
 
     r->confirmed = 0;
@@ -187,7 +213,16 @@ static void settle(struct tetraRoam *r, long long now)
 static struct tetraRoamStep checkStep(struct tetraRoam *r, long long now,
                                       bool locked, bool busy)
 {
-    if (!locked || busy) {
+    /*
+     * The lock lost during a check: the check goes on, as one of a cell
+     * about to be lost, which is worth nothing now; its result moves the
+     * radio sooner than the search after a lost lock would
+     */
+    if (!locked && !r->urgent) {
+        r->urgent = true;
+        r->servingRssi = TETRA_ROAM_FLOOR_DBM - TETRA_ROAM_MARGIN_DB;
+    }
+    if (busy && !r->urgent) {
         r->state = TETRA_ROAM_LOCKED;
         return step(TETRA_ROAM_NONE, 0);
     }
@@ -197,25 +232,47 @@ static struct tetraRoamStep checkStep(struct tetraRoam *r, long long now,
 }
 
 struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
-                                    bool locked, bool busy, int rssi)
+                                    bool locked, bool decoding, bool busy,
+                                    int rssi)
 {
-    if (locked)
+    /* The serving cell's signal, and whether it is about to be lost */
+    int level = 0;
+    bool urgent = false;
+    if (locked) {
         r->lastLock = now;
+        level = average(r, now, rssi);
+        urgent = level < TETRA_ROAM_CRITICAL_DBM || !decoding;
+    }
 
     switch (r->state) {
-        case TETRA_ROAM_LOCKED:
+        case TETRA_ROAM_LOCKED: {
             if (!locked) {
                 if (now - r->lastLock >= TETRA_ROAM_LOST_MS)
                     startSweep(r, now);
                 break;
             }
 
-            if (busy || r->nNeighbours == 0
-                || now - r->lastCheck < TETRA_ROAM_CHECK_MS)
+            /*
+             * About to be lost, and the last check found a stronger
+             * neighbour: no time to measure again
+             */
+            if (urgent && r->confirmed > 0 && r->best != 0) {
+                uint32_t to = r->best;
+                r->confirmed = 0;
+                r->best = 0;
+                r->lastCheck = now;
+                return tune(r, to);
+            }
+
+            /* Checked more often when the cell is about to be lost */
+            long long every = urgent ? TETRA_ROAM_CHECK_MS / 3
+                                     : TETRA_ROAM_CHECK_MS;
+            if ((busy && !urgent) || r->nNeighbours == 0
+                || now - r->lastCheck < every)
                 break;
 
             r->lastCheck = now;
-            if (rssi >= TETRA_ROAM_WEAK_DBM) {
+            if (level >= TETRA_ROAM_WEAK_DBM && decoding) {
                 r->confirmed = 0;
                 break;
             }
@@ -226,12 +283,25 @@ struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
                 if (r->neighbour[i] != r->serving)
                     addCandidate(r, r->neighbour[i]);
             }
-            r->servingRssi = (int16_t)rssi;
+            /*
+             * A cell that does not decode, however strong: a neighbour as
+             * strong will do, no margin needed
+             */
+            r->servingRssi = (int16_t)(decoding ? level
+                                                : level - TETRA_ROAM_MARGIN_DB);
+            r->urgent = urgent;
             r->next = 0;
             r->state = TETRA_ROAM_CHECK;
             return checkStep(r, now, locked, busy);
+        }
 
         case TETRA_ROAM_CHECK:
+            /* Worse during the check: decide as for a cell about to go */
+            if (urgent && !r->urgent) {
+                r->urgent = true;
+                if (!decoding && r->servingRssi > level - TETRA_ROAM_MARGIN_DB)
+                    r->servingRssi = (int16_t)(level - TETRA_ROAM_MARGIN_DB);
+            }
             return checkStep(r, now, locked, busy);
 
         case TETRA_ROAM_SWEEP: {
@@ -307,6 +377,24 @@ void tetraRoam_probed(struct tetraRoam *r, uint32_t freq, int rssi)
 
     r->cand[r->next].rssi = (int16_t)rssi;
     r->next++;
+}
+
+void tetraRoam_hold(struct tetraRoam *r, long long now)
+{
+    r->lastLock = now;
+    r->lastCheck = now;
+}
+
+struct tetraRoamStep tetraRoam_mainCarrier(struct tetraRoam *r, uint32_t main,
+                                           long long now)
+{
+    if (r->state != TETRA_ROAM_LOCKED || main == 0 || main == r->serving)
+        return step(TETRA_ROAM_NONE, 0);
+
+    r->lastLock = now;
+    r->lastCheck = now;
+    r->confirmed = 0;
+    return tune(r, main);
 }
 
 bool tetraRoam_searching(const struct tetraRoam *r)

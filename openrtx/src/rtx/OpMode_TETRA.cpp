@@ -61,6 +61,8 @@ static struct tetraRoam roam;
 static uint8_t searchRequests; // tetraStatus_searchRequests() handled
 static uint8_t slots;       // Timeslots libtetra decodes
 static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
+static long long lastGoodBlock; // Last block that passed its CRC
+static bool cellMoved;          // Cell tracking moved: restart the receiver
 
 #ifdef CONFIG_TETRA_FOLLOW
 static uint8_t callPriority(uint32_t dst, uint32_t src, uint8_t netPriority);
@@ -283,19 +285,63 @@ static void roamLog(enum tetraRoamState before, bool measuredAll,
 #endif
 
 /**
+ * Move to another cell: what was known of the last one (its calls, the
+ * talkgroup filter's view of them, the receiver's state) is dropped, since
+ * call numbers and carriers mean other things there. The receiver restarts
+ * at the next update.
+ */
+static void moveCell(uint32_t freq)
+{
+    tetraFollow_init(&follower, freq);
+    tetraFilter_init(&filter);
+    filterSelection = tetraIds_selection();
+    tetraFilter_select(&filter, tetraIds_selectedFilter());
+    tetraStatus_setTuned(freq);
+    cellMoved = true;
+    tune();
+}
+
+/**
  * One step of cell tracking: measure another carrier for a few
  * milliseconds, or move to another cell and synchronise there.
  */
 static void roamStep()
 {
-    /* While following a call, the follower owns the tuning */
-    if (tetraFollow_target(&follower).away || rtxCfg == NULL)
+    /*
+     * While following a call, the follower owns the tuning; the receiver is
+     * locked elsewhere in the cell, not lost
+     */
+    if (tetraFollow_target(&follower).away || rtxCfg == NULL) {
+        tetraRoam_hold(&roam, getTick());
         return;
+    }
 
     struct tetraStatus ts;
     tetra_getStatus(&ts);
     bool busy = ts.call || follower.selected;
+    bool decoding = getTick() - lastGoodBlock < TETRA_ROAM_DEAF_MS;
     enum tetraRoamState before = roam.state;
+
+    /*
+     * Locked to a secondary carrier (a search found it): move to the cell's
+     * main carrier, where calls are set up and followed from
+     */
+    const struct tetra_cell *cell = tetra_tmo_cell(&tmo);
+    if (ts.sync && cell != NULL && cell->have_sysinfo) {
+        uint32_t main = cell->dl_freq_hz;
+        int32_t off = (int32_t)(roam.serving - main);
+        if (off > TETRA_FOLLOW_MAX_TUNING_HZ
+            || off < -TETRA_FOLLOW_MAX_TUNING_HZ) {
+            struct tetraRoamStep m = tetraRoam_mainCarrier(&roam, main,
+                                                           getTick());
+            if (m.action == TETRA_ROAM_TUNE) {
+                TLOG("roam: on a secondary carrier, to the main carrier >> %s",
+                     mhz(main));
+                moveCell(m.freq);
+                return;
+            }
+        }
+    }
 
     /* Search for the best signal, asked for on the keypad */
     if (tetraStatus_searchRequests() != searchRequests) {
@@ -319,8 +365,8 @@ static void roamStep()
         roamLogMeasured(m, n, measured);
 #endif
     }
-    struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync, busy,
-                                            rssi);
+    struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync,
+                                            decoding, busy, rssi);
 
     switch (s.action) {
         case TETRA_ROAM_PROBE: {
@@ -336,10 +382,7 @@ static void roamStep()
         }
 
         case TETRA_ROAM_TUNE:
-            tetraFollow_setHome(&follower, s.freq);
-            tetra_tmo_resync(&tmo);
-            tetraStatus_setTuned(s.freq);
-            tune();
+            moveCell(s.freq);
             break;
 
         default:
@@ -776,6 +819,7 @@ void OpMode_TETRA::resync(bool overrun)
     cfg.promiscuous = true;
     tetra_tmo_init(&tmo, &cfg);
     slots = TETRA_FOLLOW_ALL_SLOTS;
+    lastGoodBlock = getTick(); /* A new receiver: time to decode first */
 
     /* A new receiver knows nothing of the followed call: go home */
     tetraFollow_home(&follower);
@@ -936,6 +980,7 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     uint32_t crc = crcBase + tetra_tmo_crc_ok(&tmo);
     if (crc != lastCrc) {
         lastCrc = crc;
+        lastGoodBlock = getTick();
         tetraDemod_signalOk(&demod);
 #ifdef CONFIG_TETRA_AFC
         lastCrcTick = getTick();
@@ -1014,6 +1059,10 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
     if (tetraConfig_roam() || tetraRoam_searching(&roam)
         || tetraStatus_searchRequests() != searchRequests)
         roamStep();
+    if (cellMoved) {
+        cellMoved = false;
+        resync(false);
+    }
 #endif
 
 #ifdef CONFIG_TETRA_LOG

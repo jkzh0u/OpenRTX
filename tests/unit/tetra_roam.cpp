@@ -24,6 +24,7 @@ struct Radio {
     long long tunedAt = 0;
     long long now = 0;
     bool busy = false;
+    bool deaf = false; // Locked, but nothing decodes
     std::vector<uint32_t> probes;
     std::vector<uint32_t> tunes;
 
@@ -42,7 +43,8 @@ struct Radio {
     void run(tetraRoam &r, long long ms)
     {
         for (long long end = now + ms; now < end; now += 30) {
-            tetraRoamStep s = tetraRoam_tick(&r, now, locked(), busy,
+            tetraRoamStep s = tetraRoam_tick(&r, now, locked(),
+                                             locked() && !deaf, busy,
                                              level(tuned));
             if (s.action == TETRA_ROAM_PROBE) {
                 probes.push_back(s.freq);
@@ -91,7 +93,8 @@ TEST_CASE("TETRA roaming moves to a clearly stronger neighbour",
 
     SECTION("stronger twice in a row: move")
     {
-        radio.rssi = { { A, -100 }, { B, -85 }, { C, -98 } };
+        // Weak, not yet about to be lost: confirmed before moving
+        radio.rssi = { { A, -89 }, { B, -80 }, { C, -98 } };
         radio.run(r, TETRA_ROAM_CHECK_MS * 2 + 300);
         REQUIRE(radio.probes == std::vector<uint32_t>({ B, C, B, C }));
         REQUIRE(radio.tunes == std::vector<uint32_t>({ B }));
@@ -105,7 +108,7 @@ TEST_CASE("TETRA roaming moves to a clearly stronger neighbour",
 
     SECTION("not stronger by the margin: stay")
     {
-        radio.rssi = { { A, -100 }, { B, -96 }, { C, -98 } };
+        radio.rssi = { { A, -89 }, { B, -85 }, { C, -98 } };
         radio.run(r, TETRA_ROAM_CHECK_MS * 4);
         REQUIRE_FALSE(radio.probes.empty());
         REQUIRE(radio.tunes.empty());
@@ -113,11 +116,60 @@ TEST_CASE("TETRA roaming moves to a clearly stronger neighbour",
 
     SECTION("not while a call is received")
     {
-        radio.rssi = { { A, -100 }, { B, -85 } };
+        radio.rssi = { { A, -89 }, { B, -80 } };
         radio.busy = true;
         radio.run(r, TETRA_ROAM_CHECK_MS * 4);
         REQUIRE(radio.probes.empty());
         REQUIRE(radio.tunes.empty());
+    }
+
+    SECTION("about to be lost: during a call too, at the first measurement")
+    {
+        radio.rssi = { { A, -93 }, { B, -85 } };
+        radio.busy = true;
+        radio.run(r, TETRA_ROAM_CHECK_MS + 300);
+        REQUIRE(radio.probes == std::vector<uint32_t>({ B, C }));
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ B }));
+    }
+
+    SECTION("found stronger once, then about to be lost: moves at once")
+    {
+        radio.rssi = { { A, -89 }, { B, -80 }, { C, -98 } };
+        radio.run(r, TETRA_ROAM_CHECK_MS + 300); // one check: B, once
+        REQUIRE(radio.tunes.empty());
+        radio.deaf = true; // nothing decodes any more
+        radio.run(r, 60);
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ B }));
+    }
+
+    SECTION("lost during a check: the strongest neighbour, no margin")
+    {
+        // Weak, and the neighbour not stronger by the margin
+        radio.rssi = { { A, -89 }, { B, -86 }, { C, -98 } };
+        radio.run(r, TETRA_ROAM_CHECK_MS + 30); // the check starts
+        REQUIRE(radio.probes.size() == 1);
+        radio.lockable.erase(A); // and the lock goes as it measures
+        radio.run(r, 300);
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ B }));
+    }
+
+    SECTION("nothing decoded, however strong: a neighbour as strong will do")
+    {
+        radio.rssi = { { A, -75 }, { B, -75 }, { C, -98 } };
+        radio.deaf = true;
+        radio.run(r, TETRA_ROAM_CHECK_MS + 300);
+        REQUIRE(radio.tunes == std::vector<uint32_t>({ B }));
+    }
+
+    SECTION("a short dip does not start a check: the signal is averaged")
+    {
+        radio.rssi = { { A, -75 }, { B, -60 } };
+        radio.run(r, 5000);
+        radio.rssi[A] = -100; // under a bridge for 300 ms
+        radio.run(r, 300);
+        radio.rssi[A] = -75;
+        radio.run(r, TETRA_ROAM_CHECK_MS * 2);
+        REQUIRE(radio.probes.empty());
     }
 }
 
@@ -275,4 +327,64 @@ TEST_CASE("TETRA roaming searches for the best signal on request",
         REQUIRE(radio.tunes == std::vector<uint32_t>({ C }));
         REQUIRE(radio.locked());
     }
+}
+
+TEST_CASE("TETRA roaming moves from a secondary carrier to the main one",
+          "[tetra][roam]")
+{
+    tetraRoam r;
+    Radio radio = start(r, E);
+
+    tetraRoamStep s = tetraRoam_mainCarrier(&r, A, 1000);
+    REQUIRE(s.action == TETRA_ROAM_TUNE);
+    REQUIRE(s.freq == A);
+    REQUIRE(r.serving == A);
+
+    // Already there, or searching: nothing
+    REQUIRE(tetraRoam_mainCarrier(&r, A, 2000).action == TETRA_ROAM_NONE);
+    tetraRoam_search(&r, 3000);
+    REQUIRE(tetraRoam_mainCarrier(&r, B, 3000).action == TETRA_ROAM_NONE);
+}
+
+TEST_CASE("TETRA roaming is not lost while following a call elsewhere",
+          "[tetra][roam]")
+{
+    tetraRoam r;
+    Radio radio = start(r, A);
+    radio.rssi = { { A, -70 } };
+    radio.run(r, 1000);
+
+    // Away 20 s: the tracker is not run, only held
+    for (long long t = 1000; t < 21000; t += 30)
+        tetraRoam_hold(&r, t);
+    radio.now = 21000;
+
+    // Back, the receiver resyncs for a moment: no search
+    radio.lockable.clear();
+    radio.run(r, 300);
+    REQUIRE(r.state == TETRA_ROAM_LOCKED);
+    REQUIRE(radio.probes.empty());
+}
+
+TEST_CASE("TETRA roaming adds up the neighbours a cell names in parts",
+          "[tetra][roam]")
+{
+    tetraRoam r;
+    Radio radio = start(r, A);
+
+    uint32_t part1[] = { B, C };
+    uint32_t part2[] = { C, D };
+    tetraRoam_setNeighbours(&r, part1, 2);
+    tetraRoam_setNeighbours(&r, part2, 2);
+    REQUIRE(r.nNeighbours == 3);
+
+    // Full: the oldest go
+    for (uint32_t f = 1; f <= TETRA_ROAM_MAX_NEIGHBOURS; f++)
+        tetraRoam_setNeighbours(&r, &f, 1);
+    REQUIRE(r.nNeighbours == TETRA_ROAM_MAX_NEIGHBOURS);
+    REQUIRE(r.neighbour[0] == 1);
+
+    // Another cell: its own neighbours
+    tetraRoam_mainCarrier(&r, E, 1000);
+    REQUIRE(r.nNeighbours == 0);
 }
