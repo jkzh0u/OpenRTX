@@ -400,7 +400,7 @@ call is given a channel on another carrier, it retunes there and decodes
 only the call's timeslots, then comes back to the main carrier when the
 call is released, stays silent for 10 s, turns out to be encrypted, or the
 radio loses the signal. Line 3 of the call screen then shows the carrier
-in small grey text after the location, e.g. `CN Tower 392.5375`.
+in small grey text after the location, e.g. `Malvern 423.5875`.
 
 - libtetra tracks the channel allocations and asks to retune. The radio
   decides which calls to follow, in
@@ -527,34 +527,60 @@ between `--- stored log` and `--- end of stored log` (256 kB take about
 25 s). Any serial terminal at 115200 baud works too, and so does a phone
 with a USB OTG serial app.
 
-Each line starts with the seconds since power on:
+Each line starts with the seconds since power on. A real log, from a
+recording of the TTC's Malvern site (scripts/c62_decode_capture.py and
+`tetra_trace -L`), with the TTC channel list, Transit Control at
+priority 5:
 
 ```
-  12.345  sync locked
-  12.890  cell 302-2013 LA 12 (Eglinton east) CC 5, main carrier 1234 = 392.51250
-  13.100  network time 2026-11-16 08:12:33 local
-  13.100  neighbours: 392.61250, 392.71250
-  15.020  call 7 setup to G 101011 (Transit Control) from 100112 (Run 112), carrier 1236 = 392.56250 slots 2
-  15.021  retune: call 7 to carrier 1236 slots 0x2 >> 392.56250
-  15.100  voice call 7 from 100112 (Run 112)
-  31.400  follow: back to the main carrier >> 392.51250
-  40.100  roam: weak cell (-97 dBm), measuring 2 neighbours
-  40.160  roam: measured 2: 392.61250 -88, 392.71250 -101
-  46.200  roam: move to a stronger neighbour >> 392.61250 (-88 dBm)
-  50.000  signal -85 dBm on 392.61250, locked, phase error 14%, offset -12 Hz, correction +1590 Hz, crc ok 1234, reacquired 1, realigned 0
+     0.810  sync locked
+     0.810  cell 302-2013 LA 30 CC 30, main carrier 939 = 423.48750
+     0.870  call 24 setup to G 101011 (Transit Control) from 6053, carrier 939 = 423.48750 slots 4
+     1.970  network time 2026-11-19 16:30:02 local
+     1.970  neighbours: 422.46250, 422.46250, 422.32500
+     2.340  sds from 5398 to 319083: data (protocol 2, coding 16): 00 a0 a8 fd 4e 30
+    42.240  call 28 setup to G 101011 (Transit Control) from 6301, carrier 939 = 423.48750 slots 4
+    42.560  voice call 28 from 6301
+    44.110  call 29 setup to G 100004 (Davisville Yard) from 1215646, carrier 943 = 423.58750 slots 1
+    44.110  retune: call 29 to carrier 943 = 423.58750 slots 0x1: declined
+    49.810  call 28 release to G 101011 (Transit Control), carrier 939 = 423.48750 slots 4
+    51.440  call 30 setup to G 101011 (Transit Control) from 40106, carrier 939 = 423.48750 slots 4
+   100.870  call 31 release to G 101011 (Transit Control), carrier 939 = 423.48750 slots 4
+   110.870  follow: join call 29 on carrier 943 >> 423.58750 slots 0x1
+   110.900  sync locked
+   115.260  call 29 release to G 100004 (Davisville Yard) from 3523, carrier 943 = 423.58750 slots 1
+   115.260  follow: back to the main carrier >> 423.48750
+   115.320  sync locked
+```
+
+The Davisville Yard call on the second carrier is declined while Transit
+Control talks, then joined 10 s after the conversation ends. Lines the
+recording cannot give, as they need the radio's own signal readings, look
+like this:
+
+```
+    40.100  roam: weak cell (-97 dBm), measuring 2 neighbours
+    40.160  roam: measured 2: 422.68750 -88, 422.46250 -101
+    46.200  roam: move to a stronger neighbour >> 422.68750 (-88 dBm)
+    50.000  signal -85 dBm on 422.68750, locked, phase error 14%, offset -12 Hz, correction +1590 Hz, crc ok 1234, reacquired 1, realigned 0
 ```
 
 - `sync`, `cell`, `neighbours`, `network time`: the lock and the cell. A
-  cell or neighbour line comes again only when it changes; the network
-  time every 10 minutes, to match the log to a clock.
+  cell or neighbour line comes again only when it changes (the cell
+  broadcasts its neighbours a few at a time, so that line changes often);
+  the network time every 10 minutes, to match the log to a clock.
 - `call`: every call control event, with the talkgroup and radio names of
   the channel list, the allocated carrier and timeslots, and `filtered
   out` for calls the talkgroup filter holds back. `voice call` marks the
-  start of each transmission heard, `sds` a short message or status.
+  start of each transmission heard, `sds` a short message or status: its
+  text, or `data (protocol, coding): bytes` for a message that is not
+  printable text (the TTC sends many).
 - `retune`: libtetra asking to follow a call to another carrier or back,
   and the radio's answer (`>>` where it tuned, or `declined` / `filtered
-  out`). `follow:` is the radio going back on its own (silence,
-  encryption, a filter change).
+  out`; a decline is logged once per call, though libtetra asks again on
+  every block). `follow:` is the radio moving on its own: joining a call
+  late, a priority call taking over, going back (silence, encryption, a
+  filter change).
 - `roam:`: cell tracking and the long **0** search: what was measured,
   the moves and tries, and `staying on` when the cell received is best.
 - `filter`, `start on`, `samples lost`, and every 10 s `signal`: signal

@@ -10,6 +10,7 @@ folder:
   <out>/README.md                summary table
   <out>/<MHz>_<name>/stats.txt    c62_tetra_host figures
   <out>/<MHz>_<name>/trace.txt    tetra_trace: cell, calls, call following
+  <out>/<MHz>_<name>/radio_log.txt  what the radio's receive log would say
   <out>/<MHz>_<name>/speech_tsN.wav  clear speech of timeslot N, 8 kHz
   <out>/<MHz>_<name>/baseband.wav what the C62 would hear, 48 kHz
 
@@ -55,7 +56,11 @@ def build_tools(dest):
     inc = ["-I", os.path.join(ROOT, "openrtx/include"),
            "-I", os.path.join(lt, "include"), "-I", os.path.join(lt, "src")]
     demod = os.path.join(ROOT, "openrtx/src/protocols/TETRA/TetraDemod.c")
-    follow = os.path.join(ROOT, "openrtx/src/protocols/TETRA/TetraFollow.c")
+    follow = [os.path.join(ROOT, f) for f in (
+        "openrtx/src/protocols/TETRA/TetraFollow.c",
+        "openrtx/src/protocols/TETRA/TetraIds.c",
+        "openrtx/src/protocols/TETRA/TetraLogEvents.c",
+        "openrtx/src/core/chlist.c")]
     acelp = [os.path.join(oa, "src", f) for f in
              ("oa_dsp.c", "oa_bits.c", "oa_dec.c", "oa_tables_tetra.c")]
     cc = ["cc", "-std=gnu17", "-O2", "-w"]
@@ -66,9 +71,9 @@ def build_tools(dest):
                       demod] + acelp + srcs
                    + ["-lm", "-o", os.path.join(dest, "c62_tetra_host")],
                    check=True)
-    subprocess.run(cc + inc
+    subprocess.run(cc + inc + ["-DCONFIG_CHLIST"]
                    + [os.path.join(ROOT, "tests/platform/tetra_trace.c"),
-                      demod, follow] + srcs
+                      demod] + follow + srcs
                    + ["-lm", "-o", os.path.join(dest, "tetra_trace")],
                    check=True)
 
@@ -83,27 +88,6 @@ def read_channels(path):
             if m:
                 chans.setdefault(int(m.group(2)), []).append(m.group(1))
     return chans
-
-
-def read_priority(path):
-    """
-    @return "SSI:N" of the talkgroups of a channel list with a priority:
-    TF_PRIORITY(N), else 15 for an alarm talkgroup.
-    """
-    ident = re.compile(r"TETRA_ID\(\s*(\d+)\s*,")
-    prio = re.compile(r"\bTF_PRIORITY\s*\(\s*(\d+)\s*\)")
-    out = []
-    with open(path) as f:
-        for line in f:
-            m = ident.search(line)
-            if not m:
-                continue
-            p = prio.search(line)
-            if p:
-                out.append(f"{m.group(1)}:{p.group(1)}")
-            elif re.search(r"\bTF_ALARM\b", line):
-                out.append(f"{m.group(1)}:15")
-    return out
 
 
 def read_start(path, rate, seconds):
@@ -162,9 +146,6 @@ def main():
 
     centre_hz = round(a.centre * 1e6)
     chans = read_channels(a.channels)
-    priority = []
-    for ssi in read_priority(a.channels):
-        priority += ["-p", ssi]
     z, rate = read_start(a.inp, a.rate, SURVEY_SECONDS)
     found = survey(z, rate, centre_hz, chans)
     os.makedirs(a.out, exist_ok=True)
@@ -174,6 +155,10 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         print("building the decoders")
         build_tools(tmp)
+        # The list as the radio reads it: names and priorities
+        image = os.path.join(tmp, "channels.bin")
+        subprocess.run([py, os.path.join(HERE, "chlist.py"), a.channels,
+                        "-o", image], check=True, stdout=subprocess.DEVNULL)
         for snr, hz, names in found:
             if snr < a.min_snr:
                 continue
@@ -204,12 +189,16 @@ def main():
                 check=True, capture_output=True, text=True).stdout
             with open(os.path.join(d, "stats.txt"), "w") as f:
                 f.write(stats)
-            trace = subprocess.run(
-                [os.path.join(tmp, "tetra_trace"), "-n", "-f",
-                 str(hz / 1e6)] + priority[:32] + [base],
-                check=True, capture_output=True, text=True).stdout
+            trace_cmd = [os.path.join(tmp, "tetra_trace"), "-n", "-f",
+                         str(hz / 1e6), "-c", image]
+            trace = subprocess.run(trace_cmd + [base], check=True,
+                                   capture_output=True, text=True).stdout
             with open(os.path.join(d, "trace.txt"), "w") as f:
                 f.write(trace)
+            log = subprocess.run(trace_cmd + ["-L", base], check=True,
+                                 capture_output=True, text=True).stdout
+            with open(os.path.join(d, "radio_log.txt"), "w") as f:
+                f.write(log)
 
             cell = re.search(r"cell (\d+-\d+ LA \d+)", trace)
             speech = re.findall(r"speech TN(\d): ([\d.]+) s", stats)
