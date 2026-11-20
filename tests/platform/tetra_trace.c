@@ -22,11 +22,15 @@
  *        -I$LIBTETRA/include -I$LIBTETRA/src tests/platform/tetra_trace.c \
  *        openrtx/src/protocols/TETRA/TetraDemod.c \
  *        openrtx/src/protocols/TETRA/TetraFollow.c \
+ *        openrtx/src/protocols/TETRA/TetraIds.c \
+ *        openrtx/src/protocols/TETRA/TetraLogEvents.c \
+ *        openrtx/src/core/chlist.c -DCONFIG_CHLIST \
  *        $(find $LIBTETRA/src -name '*.c' ! -path '*crypto*') -lm
  *
  * Run:
  *
- *     ./tetra_trace [-f MHz] [-n] [-v] [-p SSI[:N]]... recording.wav
+ *     ./tetra_trace [-f MHz] [-n] [-v] [-L] [-c channels.bin]
+ *                   [-p SSI[:N]]... recording.wav
  *
  *     -f  frequency the radio was tuned to, MHz (default: the main carrier
  *         frequency the cell broadcasts)
@@ -35,10 +39,15 @@
  *         scripts/c62_airspy_iq.py and scripts/c62_tetra_sim.py, synthetic
  *         signals), which the C62 taps make undecodable
  *     -v  also print every traffic slot
- *     -p  a talkgroup's priority N, 1 to 15 (TF_PRIORITY(N) in a channel
+ *     -L  print what the radio's receive log would instead (TetraLogEvents
+ *         and the follower's lines of OpMode_TETRA.cpp)
+ *     -c  a channel list image (scripts/chlist.py) for the names and
+ *         priorities of talkgroups, as on the radio
+ *     -p  without -c, a talkgroup's priority N, 1 to 15 (TF_PRIORITY(N) in a channel
  *         list; 1 if not given); repeat for more
  */
 
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -48,6 +57,10 @@
 #include <tetra/tetra.h>
 #include "protocols/TETRA/TetraDemod.h"
 #include "protocols/TETRA/TetraFollow.h"
+#include "protocols/TETRA/TetraIds.h"
+#include "protocols/TETRA/TetraLog.h"
+#include "protocols/TETRA/TetraLogEvents.h"
+#include "core/chlist.h"
 
 /* 10 ms blocks: the time printed is that of the block being decoded */
 #define BLOCK 480
@@ -66,6 +79,37 @@ static bool verbose;
 static double now;       /* Seconds into the recording */
 static unsigned trafficSlots;
 static unsigned cellMcc, cellMnc, cellLa, cellMain;
+static bool radioLog; /* -L: print what the radio's receive log would */
+static bool haveList; /* -c: names and priorities from a channel list */
+
+/* The radio's receive log, to stdout: same line format as TetraLog.c */
+void tetraLog_printf(long long t, const char *fmt, ...)
+{
+    va_list ap;
+
+    if (!radioLog)
+        return;
+    printf("%6lu.%03u  ", (unsigned long)(t / 1000), (unsigned)(t % 1000));
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    printf("\n");
+}
+
+/* A frequency as the radio's log writes it */
+static const char *mhz(uint32_t hz)
+{
+    static char buf[2][16];
+    static unsigned next;
+
+    next = (next + 1) % 2;
+    return tetraLog_freq(buf[next], sizeof(buf[next]), hz);
+}
+
+static long long ms(void)
+{
+    return (long long)(now * 1000);
+}
 
 static const char *callWhat(enum tetra_call_what what)
 {
@@ -118,15 +162,19 @@ static void onCell(const struct tetra_cell *c)
     cellLa = c->location_area;
     cellMain = c->main_carrier;
 
-    printf("%8.3f  cell %u-%u LA %u, main carrier %u = ", now, c->mcc, c->mnc,
-           c->location_area, c->main_carrier);
-    printFreq(c->dl_freq_hz);
-    printf(" (band %u, offset %u, duplex %u%s)%s\n", c->band, c->offset,
-           c->duplex_spacing, c->reverse_operation ? ", reverse" : "",
-           c->air_encryption ? ", air encryption" : "");
+    if (!radioLog) {
+        printf("%8.3f  cell %u-%u LA %u, main carrier %u = ", now, c->mcc,
+               c->mnc, c->location_area, c->main_carrier);
+        printFreq(c->dl_freq_hz);
+        printf(" (band %u, offset %u, duplex %u%s)%s\n", c->band, c->offset,
+               c->duplex_spacing, c->reverse_operation ? ", reverse" : "",
+               c->air_encryption ? ", air encryption" : "");
+    }
 
     if (tetraFollow_carrierFreq(follower.home, c->dl_freq_hz, c->dl_freq_hz)
         == 0) {
+        if (radioLog)
+            return;
         printf("%8.3f  warning: tuned to ", now);
         printFreq(follower.home);
         printf(", not the main carrier: the radio would not follow calls\n");
@@ -141,6 +189,9 @@ static unsigned priorityCount;
 
 static uint8_t ssiPriority(uint32_t ssi)
 {
+    if (haveList)
+        return tetraIds_priority(ssi);
+
     for (unsigned i = 0; i < priorityCount; i++) {
         if (ssi != 0 && prioritySsi[i] == ssi)
             return priorityOf[i];
@@ -161,8 +212,12 @@ static void reportTakeover(void)
     if (!follower.preempted)
         return;
     follower.preempted = false;
-    printf("%8.3f  priority %u call %u takes over\n", now,
-           follower.selectedPriority, follower.callId);
+    if (radioLog)
+        tetraLog_printf(ms(), "follow: priority %u call %u takes over",
+                        follower.selectedPriority, follower.callId);
+    else
+        printf("%8.3f  priority %u call %u takes over\n", now,
+               follower.selectedPriority, follower.callId);
 }
 
 static void onCall(const struct tetra_call *c)
@@ -170,6 +225,8 @@ static void onCall(const struct tetra_call *c)
     struct tetraFollowCall fc;
     uint32_t freq = carrierFreq(c->carrier);
 
+    if (radioLog)
+        goto follow;
     printf("%8.3f  call %u %s", now, c->call_id, callWhat(c->what));
     if (c->dst_ssi)
         printf(" to %s%lu", c->group ? "G " : "", (unsigned long)c->dst_ssi);
@@ -191,6 +248,7 @@ static void onCall(const struct tetra_call *c)
         printf(", encrypted");
     printf("\n");
 
+follow:
     switch (c->what) {
         case TETRA_CALL_RELEASE:
             fc.event = TETRA_FOLLOW_RELEASE;
@@ -226,10 +284,14 @@ static void onEvent(void *user, const struct tetra_event *ev)
 {
     (void)user;
 
+    /* As the radio, with every talkgroup let through */
+    tetraLogEvents_event(ms(), ev, true);
+
     switch (ev->type) {
         case TETRA_EV_SYNC:
-            printf("%8.3f  sync %s\n", now,
-                   ev->u.sync.locked ? "locked" : "lost");
+            if (!radioLog)
+                printf("%8.3f  sync %s\n", now,
+                       ev->u.sync.locked ? "locked" : "lost");
             break;
 
         case TETRA_EV_CELL:
@@ -243,7 +305,7 @@ static void onEvent(void *user, const struct tetra_event *ev)
         case TETRA_EV_TRAFFIC: {
             const struct tetra_traffic *t = &ev->u.traffic;
             trafficSlots++;
-            if (verbose)
+            if (verbose && !radioLog)
                 printf("%8.3f  traffic call %u TN%u um %u%s\n", now, t->call_id,
                        ev->time.tn, t->usage_marker,
                        t->encrypted ? " encrypted" : "");
@@ -274,6 +336,27 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     fr.priority = callPriority(r->dst_ssi, 0, 0);
     ok = tetraFollow_retune(&follower, &fr, (long long)(now * 1000));
 
+    reportTakeover();
+    if (radioLog) {
+        /* As OpMode_TETRA.cpp logs it */
+        static uint16_t lastDeclined = 0xffff;
+        struct tetraFollowTarget t = tetraFollow_target(&follower);
+        if (!ok && fr.main)
+            tetraLog_printf(ms(), "retune: main carrier: declined");
+        else if (!ok && r->call_id != lastDeclined)
+            tetraLog_printf(ms(), "retune: call %u to carrier %u = %s slots "
+                            "0x%x: declined", r->call_id, r->carrier,
+                            mhz(r->freq_hz), r->timeslots);
+        else if (ok && fr.main)
+            tetraLog_printf(ms(), "retune: main carrier >> %s", mhz(t.freq));
+        else if (ok)
+            tetraLog_printf(ms(), "retune: call %u to carrier %u slots 0x%x "
+                            ">> %s%s", r->call_id, r->carrier, t.slots,
+                            mhz(t.freq), t.away ? "" : " (main)");
+        lastDeclined = (!ok && !fr.main) ? r->call_id : 0xffff;
+        return ok;
+    }
+
     printf("%8.3f  retune request: ", now);
     if (fr.main)
         printf("main carrier %u", r->carrier);
@@ -283,7 +366,6 @@ static bool onRetune(void *user, const struct tetra_retune *r)
     printf(" = ");
     printFreq(r->freq_hz);
     printf(", %s\n", ok ? "accepted" : "declined");
-    reportTakeover();
     return ok;
 }
 
@@ -304,17 +386,28 @@ static void reportTarget(void)
     struct tetraFollowTarget t;
 
     if (tetraFollow_tick(&follower, (long long)(now * 1000))) {
-        printf("%8.3f  follower left the call's carrier, resync\n", now);
+        if (radioLog)
+            tetraLog_printf(ms(), "follow: back to the main carrier >> %s",
+                            mhz(tetraFollow_target(&follower).freq));
+        else
+            printf("%8.3f  follower left the call's carrier, resync\n", now);
         tetra_tmo_resync(&tmo);
     }
     /* As the radio: join a call going on elsewhere once idle at home */
     if (tetra_tmo_locked(&tmo)
         && tetraFollow_join(&follower, NULL, (long long)(now * 1000))) {
-        printf("%8.3f  join call %u late, resync\n", now, follower.callId);
+        struct tetraFollowTarget j = tetraFollow_target(&follower);
+        if (radioLog)
+            tetraLog_printf(ms(), "follow: join call %u on carrier %u >> %s "
+                            "slots 0x%x", follower.callId, follower.carrier,
+                            mhz(j.freq), j.slots);
+        else
+            printf("%8.3f  join call %u late, resync\n", now,
+                   follower.callId);
         tetra_tmo_resync(&tmo);
     }
     t = tetraFollow_target(&follower);
-    if (follower.home == 0
+    if (follower.home == 0 || radioLog
         || (t.freq == lastTarget.freq && t.slots == lastTarget.slots))
         return;
     lastTarget = t;
@@ -389,8 +482,26 @@ int main(int argc, char *argv[])
     bool eqInit = true;
     int opt;
 
-    while ((opt = getopt(argc, argv, "f:nvp:")) != -1) {
+    while ((opt = getopt(argc, argv, "f:nvp:Lc:")) != -1) {
         switch (opt) {
+            case 'L':
+                radioLog = true;
+                break;
+            case 'c': {
+                FILE *img = fopen(optarg, "rb");
+                static uint32_t image[0x90000 / 4];
+                size_t len = img ? fread(image, 1, sizeof(image), img) : 0;
+                if (img)
+                    fclose(img);
+                int ret = chlist_open(image, len);
+                if (ret != 0) {
+                    fprintf(stderr, "%s: not a usable channel list (%d)\n",
+                            optarg, ret);
+                    return 1;
+                }
+                haveList = true;
+                break;
+            }
             case 'p': {
                 char *end;
                 unsigned long n = 1;
@@ -413,13 +524,15 @@ int main(int argc, char *argv[])
                 verbose = true;
                 break;
             default:
-                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI[:N]]... recording.wav\n",
+                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-L] [-c channels.bin] "
+                        "[-p SSI[:N]]... recording.wav\n",
                         argv[0]);
                 return 2;
         }
     }
     if (optind != argc - 1) {
-        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-p SSI[:N]]... recording.wav\n",
+        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-L] [-c channels.bin] "
+                        "[-p SSI[:N]]... recording.wav\n",
                 argv[0]);
         return 2;
     }
@@ -451,7 +564,8 @@ int main(int argc, char *argv[])
         /* As the radio on the main carrier: resync after a timing jump */
         if (tetraDemod_reacquisitions(&demod) != jumps) {
             jumps = tetraDemod_reacquisitions(&demod);
-            printf("%8.3f  demodulator jump, resync\n", now);
+            if (!radioLog)
+                printf("%8.3f  demodulator jump, resync\n", now);
             crcBase += tetra_tmo_crc_ok(&tmo);
             resync();
         }
@@ -469,6 +583,8 @@ int main(int argc, char *argv[])
     }
     fclose(f);
 
+    if (radioLog)
+        return 0;
     printf("%8.3f  end: %lu blocks passed the CRC, %u traffic slots, phase "
            "error %u%%, carrier offset %d Hz, clock %d ppm\n",
            (double)samples / TETRA_DEMOD_IN_RATE,
