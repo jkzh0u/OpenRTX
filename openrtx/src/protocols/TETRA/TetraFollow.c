@@ -167,6 +167,7 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
             noteCall(f, c->callId, c->speech, c->encrypted);
         if (c->priority > info->priority)
             info->priority = c->priority;
+        info->lastSeen = now;
 
         /* Where the call is, for a late join */
         if (c->carrier != 0xffff && c->slots != 0) {
@@ -255,6 +256,8 @@ bool tetraFollow_retune(struct tetraFollow *f,
     }
 
     struct tetraFollowCallInfo *info = findCall(f, r->callId);
+    if (info != NULL)
+        info->lastSeen = now; /* Its allocation repeated: still going on */
     if (info != NULL && !playable(f, info->speech, info->encrypted))
         return false;
 
@@ -338,7 +341,8 @@ bool tetraFollow_join(struct tetraFollow *f, bool (*allowed)(uint16_t callId),
         struct tetraFollowCallInfo *c = &f->calls[i];
 
         if (!c->used || c->joined || c->freq == 0 || c->freq == f->home
-            || c->slots == 0 || !playable(f, c->speech, c->encrypted))
+            || c->slots == 0 || !playable(f, c->speech, c->encrypted)
+            || now - c->lastSeen >= TETRA_FOLLOW_JOIN_MAX_AGE_MS)
             continue;
         if (holding(f, c->priority, now))
             continue;

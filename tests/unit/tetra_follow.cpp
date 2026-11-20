@@ -592,6 +592,9 @@ TEST_CASE("TETRA follower stays home for a priority conversation",
     {
         REQUIRE_FALSE(tetraFollow_join(&f, NULL, 1000 + hold - 1));
         requireHome(f);
+        // Its allocation repeated meanwhile: declined in the hold, but seen
+        tetraFollowRetune again = makeRetune(200, OTHER_CARRIER, OTHER, 0x1);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &again, 1000 + hold - 3000));
         REQUIRE(tetraFollow_join(&f, NULL, 1000 + hold));
         requireAway(f, OTHER, 0x1);
     }
@@ -615,6 +618,8 @@ TEST_CASE("TETRA follower stays home for a priority conversation",
         rel2.priority = 5;
         tetraFollow_call(&f, &rel2, 5000);
         REQUIRE_FALSE(tetraFollow_join(&f, NULL, 1000 + hold));
+        tetraFollowRetune again = makeRetune(200, OTHER_CARRIER, OTHER, 0x1);
+        REQUIRE_FALSE(tetraFollow_retune(&f, &again, 5000 + hold - 3000));
         REQUIRE(tetraFollow_join(&f, NULL, 5000 + hold));
     }
 
@@ -754,4 +759,37 @@ TEST_CASE("TETRA follower joins the call of highest priority",
     REQUIRE_FALSE(tetraFollow_join(&f, NULL, 30));
     REQUIRE(tetraFollow_join(&f, NULL, TETRA_FOLLOW_PRIORITY_HOLD_MS));
     REQUIRE(f.callId == 201);
+}
+
+TEST_CASE("TETRA follower does not join a call it has not seen lately",
+          "[tetra][follow]")
+{
+    tetraFollow f;
+    tetraFollow_init(&f, HOME);
+    const long long age = TETRA_FOLLOW_JOIN_MAX_AGE_MS;
+
+    tetraFollowCall a = makeCallAt(TETRA_FOLLOW_UPDATE, 100, HOME_CARRIER,
+                                   HOME, 0x8);
+    tetraFollow_call(&f, &a, 0);
+    tetraFollowCall b = makeCallAt(TETRA_FOLLOW_UPDATE, 200, OTHER_CARRIER,
+                                   OTHER, 0x1);
+    tetraFollow_call(&f, &b, 10);
+    tetraFollowCall rel = release(100);
+    tetraFollow_call(&f, &rel, 20);
+
+    SECTION("its last sign of life too old: it may be over")
+    {
+        REQUIRE_FALSE(tetraFollow_join(&f, NULL, 10 + age));
+        requireHome(f);
+    }
+
+    SECTION("a repeated allocation keeps it alive")
+    {
+        tetraFollowRetune r = makeRetune(200, OTHER_CARRIER, OTHER, 0x1);
+        f.selected = true; // busy: declined, but seen
+        REQUIRE_FALSE(tetraFollow_retune(&f, &r, 5000));
+        f.selected = false;
+        REQUIRE(tetraFollow_join(&f, NULL, 5000 + age - 1));
+        requireAway(f, OTHER, 0x1);
+    }
 }

@@ -53,6 +53,14 @@ extern "C" {
 #define TETRA_FOLLOW_MAX_CALLS 8
 
 /**
+ * A call is joined late only if seen on the main carrier this recently, ms:
+ * its set-up or a repeat of its channel allocation (about every 5 s on the
+ * TTC while it goes on). The release of a call on another carrier is sent
+ * there, and may never reach the main carrier.
+ */
+#define TETRA_FOLLOW_JOIN_MAX_AGE_MS 10000
+
+/**
  * After a priority call, the radio stays on the main carrier this long
  * before leaving for a call of lower priority, ms: a conversation on a
  * priority talkgroup goes on as new calls a few seconds apart, whose
@@ -110,6 +118,7 @@ struct tetraFollowCallInfo {
     uint8_t slots;
     bool joined; /**< Selected once: not joined late again */
     uint8_t priority;
+    long long lastSeen; /**< Last event or allocation, ms */
 };
 
 struct tetraFollow {
@@ -160,7 +169,7 @@ uint32_t tetraFollow_carrierFreq(uint32_t home, uint32_t mainHz,
  * call was followed, so the receiver did not ask to retune), select it and
  * go there. A call already selected once is not joined, so that one whose
  * release was missed, or that went silent, does not bring the radio back
- * after each timeout.
+ * after each timeout; nor one not seen for TETRA_FOLLOW_JOIN_MAX_AGE_MS.
  *
  * After a join the caller tunes to tetraFollow_target() and restarts the
  * receiver's synchronisation, which then finds the call by its timeslots.
