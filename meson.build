@@ -1423,3 +1423,45 @@ test('TETRA Roam Test',      tetra_roam_test)
 test('TETRA Log Test',       tetra_log_test)
 test('TETRA Focus Test',     tetra_focus_test)
 test('M17 Baseband Replay Test', m17_replay_test, timeout : 120) # ~40 s in CI with coverage
+
+# TETRA receive chain on a synthetic cell: libtetra's signal generator,
+# then the C62's demodulator and libtetra decoding it, clean and near the
+# sensitivity limit (tests/platform/c62_tetra_host.c -q). Needs libtetra:
+# the west workspace's checkout by default, else -Dlibtetra=<folder>.
+fs = import('fs')
+libtetra_dir = get_option('libtetra')
+if libtetra_dir == ''
+    libtetra_dir = fs.parent(meson.project_source_root()) / 'modules' / 'lib' / 'libtetra'
+endif
+if fs.exists(libtetra_dir / 'include' / 'tetra' / 'tetra.h')
+    libtetra_src = run_command(find_program('python3'), '-c',
+        'import pathlib, sys; print(chr(10).join(sorted(str(p) for p in pathlib.Path(sys.argv[1], "src").rglob("*.c") if "crypto" not in p.relative_to(sys.argv[1]).as_posix())))',
+        libtetra_dir, check : true).stdout().strip().split('\n')
+    libtetra_inc = include_directories(libtetra_dir / 'include', libtetra_dir / 'src')
+    libm = meson.get_compiler('c').find_library('m', required : false)
+
+    tetra_tmo_gen = executable('tetra_tmo_gen',
+                               sources : [libtetra_dir / 'tools' / 'tetra_tmo_gen.c'] + libtetra_src,
+                               include_directories : libtetra_inc,
+                               c_args : ['-w'],
+                               dependencies : libm)
+    tetra_clip = custom_target('tetra_clip',
+                               output  : 'tetra_clip.cs16',
+                               command : [tetra_tmo_gen, '-n', '10', '-r', '48000',
+                                          '-c', '302:2013:1', '@OUTPUT@'])
+    c62_tetra_host = executable('c62_tetra_host',
+                                sources : ['tests/platform/c62_tetra_host.c',
+                                           'openrtx/src/protocols/TETRA/TetraDemod.c'] + libtetra_src,
+                                include_directories : [libtetra_inc, include_directories('openrtx/include')],
+                                c_args : ['-w'],
+                                dependencies : libm)
+
+    # Clean: about 97 blocks/s and no bad frames. At 9 dB Es/N0, about
+    # -91 dBm on a C62: about 90 blocks/s, no bad frames.
+    test('TETRA Receive Chain Test', c62_tetra_host,
+         args : ['-e', '-q', '-m', '90', '-M', '0.5', tetra_clip])
+    test('TETRA Weak Signal Test', c62_tetra_host,
+         args : ['-e', '-q', '-N', '9', '-m', '75', '-M', '2', tetra_clip])
+else
+    message('libtetra not found in ' + libtetra_dir + ': TETRA receive chain tests skipped (-Dlibtetra=<folder>)')
+endif
