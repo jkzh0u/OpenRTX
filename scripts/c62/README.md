@@ -452,9 +452,23 @@ along the tunnels. Each cell broadcasts the carriers of its neighbours. With
 cell tracking the radio moves between cells by itself, like a TETRA radio
 does:
 
-- While locked, if the cell gets weak (below -95 dBm), it measures each
+- While locked, if the cell gets weak (its signal averaged over about 2 s
+  below -88 dBm, a few dB before decoding suffers), it measures each
   neighbour every 3 s, retuning for about 5 ms, and moves to one that is at
-  least 6 dB stronger twice in a row. It does not measure during a call.
+  least 6 dB stronger twice in a row. Not during a call.
+- When the cell is about to be lost (below -91 dBm, or locked but nothing
+  decoded for a second), it measures every second, during a call too, and
+  moves at the first measurement that finds a stronger neighbour, or at
+  once to one the last measurement found. A lock lost while measuring makes
+  it take the strongest neighbour.
+- The neighbours add up: a cell names a few at a time (a TTC site 11 or
+  more), and they are forgotten on a move to another cell.
+- A move to another cell restarts the receiver and forgets the calls of
+  the last cell, whose call numbers and carriers mean other things on the
+  new one.
+- Locked on a secondary carrier of a cell (a search can find one: the
+  channel list holds them), it moves to the cell's main carrier, where
+  calls are set up.
 - When the signal is lost for 2.5 s, it measures the neighbours and every
   TETRA channel of the channel list, then tries the strongest in turn,
   2.5 s each, until one locks. The screen shows `T scanning` meanwhile,
@@ -469,9 +483,11 @@ does:
 - The grey frequency shows the cell received. The talkgroup filter and the
   hold stay as they are.
 
-A move costs up to a second of silence while the radio synchronises to the
-new cell. The thresholds are first guesses: they need tuning on real
-networks, with baseband dumps of moves that go wrong.
+A move costs about a second of silence while the radio synchronises to the
+new cell. Replayed on a TTC recording (section 9), riding away from a site
+it moves while still locked; a site lost at once (a tunnel) costs about
+1.5 s. The thresholds come from a simulation of the C62's receiver: they
+need checking on the radio, with logs of moves.
 `-DC62_TETRA_ROAM=OFF` builds without it.
 
 To check what the radio would do on a network without flashing, replay a
@@ -896,3 +912,32 @@ only simulated.
 On a clean synthetic cell this gives about 100 blocks per second passing
 the CRC, 8 to 9% phase error, and every speech frame good. A real network
 will do worse: compare carriers and places rather than against that.
+
+### Replaying a network
+
+`scripts/c62_replay.py` runs the radio's own TETRA mode
+(`OpMode_TETRA.cpp`, with call following, priorities, the talkgroup filter
+and cell tracking) on every carrier of a recording at once, with real
+retunes: tuned to another carrier, even for a 5 ms measurement, the radio
+hears that carrier from that moment. Carriers get a level in C62 dBm (from
+how far they stand above the noise) and can be faded to make the radio
+move:
+
+```bash
+python3 OpenRTX/scripts/c62_replay.py ttc.raw work --rate 3000000 \
+    --centre 423.0 --channels OpenRTX/scripts/c62/channels/ttc_tetra.h \
+    --start 423.4875 --fade 423.4875:20:80:-30
+```
+
+It prints the radio's receive log, then the time spent on each carrier,
+the lock and the speech heard there. `--fade MHz:t0:t1:dB` weakens a
+carrier from t0 to t1 seconds, `--level MHz:dBm` sets one. The frequency
+correction is off in the replay, and the speaker is not modelled.
+
+On the TTC recording of 2026-11-19 (Malvern, LA 30, and Finch, LA 28):
+
+| Scenario | Result |
+|---|---|
+| Standing still | stays on Malvern 1 for 120 s, 99% locked, every speech frame heard |
+| Malvern fading 30 dB over a minute | moves to Finch 1 at -95 dBm, still locked, then follows Finch's calls to Finch 3 |
+| Malvern gone within a second | on Finch 1 1.5 s later |
