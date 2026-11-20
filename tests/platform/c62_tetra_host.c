@@ -20,6 +20,13 @@
  *  -t  trace the demodulator every 0.48 s
  *  -g  input gain (float), applied before the demodulator
  *  -P  name=value: set a demodulator parameter (tetraDemodParams)
+ *  -q  the input is complex 16-bit I/Q at 48 kHz (tetra_tmo_gen -r 48000)
+ *      instead of discriminator audio: low-pass and FM-discriminate it,
+ *      a rough stand-in for the C62's flat receive path
+ *  -N  Es/N0, dB in 18 kHz: with -q, add white noise first (seeded)
+ *  -m  minimum blocks per second passing the CRC, and
+ *  -M  maximum percentage of speech frames failing the CRC: exit 1 if
+ *      either is missed, for automated tests
  *  -a  prefix: write the clear speech of each timeslot to prefix_tsN.wav
  *      (8 kHz mono, silence between transmissions so that it keeps the
  *      recording's time). Needs OpenACELP: add -DHOST_SPEECH,
@@ -55,6 +62,98 @@ static unsigned nFrames, nBadFrames; /* Clear speech frames, CRC failed */
 static struct tetra_speech_ws speechWs;
 static int trace;
 static uint32_t crcTotal;
+
+/* -q: I/Q input, discriminated here */
+#define IQ_TAPS 31
+#define IQ_CUTOFF_HZ 12500.0
+static int iqInput;
+static float noiseDb = -1; /* -N, < 0 for none */
+static float iqTaps[IQ_TAPS];
+static float iqHistI[IQ_TAPS], iqHistQ[IQ_TAPS];
+static unsigned iqPos;
+static float lastI = 1, lastQ;
+static float noiseSigma = -1; /* Set from the first block */
+static uint64_t rngState = 0x2545f4914f6cdd1dull;
+
+static float uniform(void)
+{
+    rngState ^= rngState << 13;
+    rngState ^= rngState >> 7;
+    rngState ^= rngState << 17;
+    return ((rngState >> 40) + 0.5f) / 16777216.0f;
+}
+
+static float gauss(void)
+{
+    return sqrtf(-2.0f * logf(uniform())) * cosf(6.2831853f * uniform());
+}
+
+static void iqInit(void)
+{
+    /* Windowed sinc low-pass: the channel filter */
+    float sum = 0;
+    for (int i = 0; i < IQ_TAPS; i++) {
+        float t = i - (IQ_TAPS - 1) / 2.0f;
+        float w = 0.54f - 0.46f * cosf(6.2831853f * i / (IQ_TAPS - 1));
+        float x = 2.0f * IQ_CUTOFF_HZ / 48000.0f;
+        iqTaps[i] = w * (t == 0 ? x : sinf(3.14159265f * x * t)
+                                          / (3.14159265f * t));
+        sum += iqTaps[i];
+    }
+    for (int i = 0; i < IQ_TAPS; i++)
+        iqTaps[i] /= sum;
+}
+
+/**
+ * Read up to n samples of discriminator audio: directly, or from I/Q with
+ * -q (noise, channel filter, FM discriminator, scaled as
+ * scripts/c62_tetra_sim.py does).
+ */
+static size_t readInput(int16_t *out, size_t n, FILE *f)
+{
+    if (!iqInput)
+        return fread(out, 2, n, f);
+
+    static int16_t iq[2 * HALF_SAMPLES];
+    size_t got = fread(iq, 4, n, f);
+
+    if (noiseDb >= 0 && noiseSigma < 0 && got > 0) {
+        double p = 0;
+        for (size_t i = 0; i < got; i++)
+            p += (double)iq[2 * i] * iq[2 * i]
+                 + (double)iq[2 * i + 1] * iq[2 * i + 1];
+        p /= got;
+        double n0 = p / 18000.0 / pow(10.0, noiseDb / 10.0);
+        noiseSigma = (float)sqrt(n0 * 48000.0 / 2.0);
+    }
+
+    for (size_t i = 0; i < got; i++) {
+        float si = iq[2 * i], sq = iq[2 * i + 1];
+        if (noiseSigma > 0) {
+            si += noiseSigma * gauss();
+            sq += noiseSigma * gauss();
+        }
+        iqHistI[iqPos] = si;
+        iqHistQ[iqPos] = sq;
+        float yi = 0, yq = 0;
+        for (int k = 0; k < IQ_TAPS; k++) {
+            unsigned j = (iqPos + IQ_TAPS - k) % IQ_TAPS;
+            yi += iqTaps[k] * iqHistI[j];
+            yq += iqTaps[k] * iqHistQ[j];
+        }
+        iqPos = (iqPos + 1) % IQ_TAPS;
+
+        /* Instantaneous frequency, Hz, to full scale per 18 kHz x 0.25 */
+        float re = yi * lastI + yq * lastQ, im = yq * lastI - yi * lastQ;
+        lastI = yi;
+        lastQ = yq;
+        float hz = atan2f(im, re) * 48000.0f / 6.2831853f;
+        float v = hz / 18000.0f * 0.25f * 32768.0f;
+        out[i] = v > 32767 ? 32767 : (v < -32768 ? -32768 : (int16_t)v);
+    }
+
+    return got;
+}
 static uint32_t samplesIn; /* 48 kHz input samples decoded so far */
 
 #ifdef HOST_SPEECH
@@ -210,7 +309,8 @@ int main(int argc, char **argv)
 {
     int useResync = 0, seedEq = 1, opt;
     float inGain = 1.0f;
-    while ((opt = getopt(argc, argv, "rvteg:P:a:")) != -1) {
+    float minCrc = -1, maxBad = -1;
+    while ((opt = getopt(argc, argv, "rvteg:P:a:qN:m:M:")) != -1) {
         switch (opt) {
             case 'r':
                 useResync = 1;
@@ -226,6 +326,18 @@ int main(int argc, char **argv)
                 break;
             case 'g':
                 inGain = strtof(optarg, NULL);
+                break;
+            case 'q':
+                iqInput = 1;
+                break;
+            case 'N':
+                noiseDb = strtof(optarg, NULL);
+                break;
+            case 'm':
+                minCrc = strtof(optarg, NULL);
+                break;
+            case 'M':
+                maxBad = strtof(optarg, NULL);
                 break;
             case 'a':
 #ifdef HOST_SPEECH
@@ -279,7 +391,9 @@ int main(int argc, char **argv)
     double errSum = 0;
     unsigned errN = 0, syncBlocks = 0, blocks = 0;
     size_t n;
-    while ((n = fread(buf, 2, HALF_SAMPLES, f)) > 0) {
+    if (iqInput)
+        iqInit();
+    while ((n = readInput(buf, HALF_SAMPLES, f)) > 0) {
         if (inGain != 1.0f) {
             for (size_t i = 0; i < n; i++) {
                 float v = buf[i] * inGain;
@@ -348,5 +462,19 @@ int main(int argc, char **argv)
 #ifdef HOST_SPEECH
     closeAudio();
 #endif
-    return 0;
+
+    /* Limits for automated tests */
+    int fail = 0;
+    if (minCrc >= 0 && crcTotal / secs < minCrc) {
+        printf("FAIL: %.1f blocks/s passed the CRC, below %.1f\n",
+               crcTotal / secs, minCrc);
+        fail = 1;
+    }
+    double badPct = nFrames ? 100.0 * nBadFrames / nFrames : 100.0;
+    if (maxBad >= 0 && badPct > maxBad) {
+        printf("FAIL: %.1f%% of %u speech frames bad, above %.1f%%\n",
+               badPct, nFrames, maxBad);
+        fail = 1;
+    }
+    return fail;
 }
