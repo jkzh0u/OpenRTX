@@ -878,6 +878,21 @@ python3 OpenRTX/scripts/c62_decode_capture.py ttc.raw decoded \
     --channels OpenRTX/scripts/c62/channels/ttc_tetra.h
 ```
 
+`c62_tetra_sim.py --esn0` adds noise to find where decoding fails. On
+the TTC recording of 2026-11-19 (Malvern's main carrier), matched to
+sp5wwp's measurement of a C62 at -92 dBm (2 to 4% bad speech frames):
+
+| About, on a C62 | Decoding |
+|---|---|
+| -88 dBm or more | as without noise |
+| -90 dBm | fine: under 1% bad speech frames, a few short messages lost |
+| -92 dBm | a third of the calls and short messages lost, 3% bad frames |
+| -93 dBm | half the calls lost, 11% bad frames |
+| -94 dBm or less | lock lost |
+
+These are estimates within a couple of dB: the C62's own receiver was
+only simulated.
+
 On a clean synthetic cell this gives about 100 blocks per second passing
 the CRC, 8 to 9% phase error, and every speech frame good. A real network
 will do worse: compare carriers and places rather than against that.
