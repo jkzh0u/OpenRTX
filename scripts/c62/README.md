@@ -137,6 +137,25 @@ for the best signal (as long **0**), **ESC** to go back:
 - the strongest carriers of the last measurement by cell tracking, with
   their levels and how long ago; the cell received is green with a `*`.
 
+## Prebuilt firmware
+
+Every push builds the C62 firmware in GitHub Actions (the "Build C62"
+workflow, with the Docker image below and the default options). The latest
+build of the `c62/tetra` branch is the
+[`c62-latest`](https://github.com/sp5wwp/OpenRTX/releases/tag/c62-latest)
+pre-release, downloadable without a GitHub account:
+[`zephyr.bin`](https://github.com/sp5wwp/OpenRTX/releases/download/c62-latest/zephyr.bin),
+[`dsp_firmware.bin`](https://github.com/sp5wwp/OpenRTX/releases/download/c62-latest/dsp_firmware.bin),
+their SHA-256 sums and `FLASHING.txt`. Flash them as in section 2.
+Builds of other branches and pull requests are in the `openrtx-c62` artifact
+of their run (a GitHub account is needed to download artifacts).
+
+That pre-release is sp5wwp's `c62/tetra` branch: it has none of this
+branch's additions (channel lists, call following, cell tracking, the
+TETRA settings and the rest). For those, build as in section 1, or take
+the `openrtx-c62` artifact of this branch's "Build C62" run on its fork.
+A channel list (section 6) is flashed apart in either case.
+
 ## 1. Build with Docker
 
 You only need Docker and git. The image holds the toolchain (Zephyr SDK
