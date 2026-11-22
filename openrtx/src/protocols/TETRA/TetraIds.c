@@ -153,98 +153,90 @@ static const struct tetraIdRange ranges[] = {
 
 #undef CPS_CHANNEL
 
-#ifdef CONFIG_CHLIST
+/*
+ * The list, from the channel list image (CONFIG_CHLIST) or built in. Each
+ * accessor is defined once, so that it is on the same line in both builds
+ * (coverage reports merge them).
+ */
 
 static size_t numFilters(void)
 {
+#ifdef CONFIG_CHLIST
     return chlist_filterCount() + 1;
+#else
+    return TF_COUNT_;
+#endif
 }
 
 static const char *filterName(size_t i)
 {
+#ifdef CONFIG_CHLIST
     return i == 0 ? "All" : chlist_filterName(i - 1);
+#else
+    return filterNames[i];
+#endif
 }
 
 static size_t numIds(void)
 {
+#ifdef CONFIG_CHLIST
     return chlist_idCount();
+#else
+    return sizeof(ids) / sizeof(ids[0]) - 1;
+#endif
 }
 
 static struct tetraId idAt(size_t i)
 {
+#ifdef CONFIG_CHLIST
     struct chlistId c = { 0, NULL, 0, 0 };
     chlist_id(i, &c);
     return (struct tetraId){ c.ssi, c.name, c.filters, c.priority };
+#else
+    return ids[i];
+#endif
 }
 
 static size_t numLas(void)
 {
+#ifdef CONFIG_CHLIST
     return chlist_laCount();
+#else
+    return sizeof(las) / sizeof(las[0]) - 1;
+#endif
 }
 
 static struct tetraLa laAt(size_t i)
 {
+#ifdef CONFIG_CHLIST
     struct chlistLa c = { 0, NULL };
     chlist_la(i, &c);
     return (struct tetraLa){ c.la, c.name };
+#else
+    return las[i];
+#endif
 }
 
 static size_t numRanges(void)
 {
+#ifdef CONFIG_CHLIST
     return chlist_rangeCount();
+#else
+    return sizeof(ranges) / sizeof(ranges[0]) - 1;
+#endif
 }
 
 static struct tetraIdRange rangeAt(size_t i)
 {
+#ifdef CONFIG_CHLIST
     struct chlistRange c = { 0, 0, NULL, 0, 0, 0 };
     chlist_range(i, &c);
     return (struct tetraIdRange){ c.first, c.last,    c.format,
                                   c.base,  c.filters, c.priority };
-}
-
 #else
-
-static size_t numFilters(void)
-{
-    return TF_COUNT_;
-}
-
-static const char *filterName(size_t i)
-{
-    return filterNames[i];
-}
-
-static size_t numIds(void)
-{
-    return sizeof(ids) / sizeof(ids[0]) - 1;
-}
-
-static struct tetraId idAt(size_t i)
-{
-    return ids[i];
-}
-
-static size_t numLas(void)
-{
-    return sizeof(las) / sizeof(las[0]) - 1;
-}
-
-static struct tetraLa laAt(size_t i)
-{
-    return las[i];
-}
-
-static size_t numRanges(void)
-{
-    return sizeof(ranges) / sizeof(ranges[0]) - 1;
-}
-
-static struct tetraIdRange rangeAt(size_t i)
-{
     return ranges[i];
-}
-
 #endif
+}
 
 /* The filter number of a held talkgroup: after the last filter */
 #define HOLD numFilters()

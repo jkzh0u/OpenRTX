@@ -80,10 +80,13 @@ int cps_readContact(contact_t *contact, uint16_t pos)
     return -1;
 }
 
-#ifdef CONFIG_CHLIST
-
+/*
+ * From the channel list image (CONFIG_CHLIST) or the list built in; one
+ * definition, on the same line in both builds (coverage reports merge them)
+ */
 int cps_readChannel(channel_t *channel, uint16_t pos)
 {
+#ifdef CONFIG_CHLIST
     struct chlistChannel c;
 
     if (!chlist_channel(pos, &c))
@@ -102,13 +105,7 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
         channel->fm.txTone = c.txTone & 0x7f;
     }
     strncpy(channel->name, c.name, sizeof(channel->name) - 1);
-    return 0;
-}
-
 #else
-
-int cps_readChannel(channel_t *channel, uint16_t pos)
-{
     if (pos >= NUM_CHANNELS)
         return -1;
 
@@ -121,10 +118,9 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
     channel->rx_frequency = c->freq;
     channel->tx_frequency = c->freq;
     strncpy(channel->name, c->name, sizeof(channel->name) - 1);
+#endif
     return 0;
 }
-
-#endif
 
 int cps_readBankHeader(bankHdr_t *b_header, uint16_t pos)
 {
