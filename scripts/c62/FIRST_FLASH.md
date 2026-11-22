@@ -1,3 +1,9 @@
+<!--
+ - SPDX-FileCopyrightText: Copyright 2020-2026 OpenRTX Contributors
+ -
+ - SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # C62 first flash checklist
 
 For the first time the current firmware goes on a radio. Most of it has
