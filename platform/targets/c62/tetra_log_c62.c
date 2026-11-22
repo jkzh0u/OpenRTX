@@ -65,8 +65,9 @@ static void sender_main(void *p1, void *p2, void *p3)
 void c62_tetraLogInit(void)
 {
     tetraLog_init(history, sizeof(history));
-    tetraLog_printf(k_uptime_get(), "TETRA log, %u kB kept, side key + 0 "
-                                    "sends them",
+    tetraLog_printf(k_uptime_get(),
+                    "TETRA log, %u kB kept, side key + 0 "
+                    "sends them",
                     (unsigned)(sizeof(history) / 1024));
 
     /* Lowest priority: the log only uses time nothing else wants */

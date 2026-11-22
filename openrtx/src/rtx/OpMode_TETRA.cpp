@@ -58,9 +58,9 @@ static struct tetraFollow follower;
 static struct tetraFilter filter;
 static uint8_t filterSelection; // tetraIds_selection() applied to filter
 static struct tetraRoam roam;
-static uint8_t searchRequests; // tetraStatus_searchRequests() handled
-static uint8_t slots;       // Timeslots libtetra decodes
-static rtxStatus_t *rtxCfg; // Receiver configuration, set by update()
+static uint8_t searchRequests;  // tetraStatus_searchRequests() handled
+static uint8_t slots;           // Timeslots libtetra decodes
+static rtxStatus_t *rtxCfg;     // Receiver configuration, set by update()
 static long long lastGoodBlock; // Last block that passed its CRC
 static bool cellMoved;          // Cell tracking moved: restart the receiver
 
@@ -128,8 +128,7 @@ static bool filterEvent(const struct tetra_event *ev)
     switch (ev->type) {
         case TETRA_EV_CALL: {
             const struct tetra_call *c = &ev->u.call;
-            return tetraFilter_call(&filter, c->call_id, c->dst_ssi,
-                                    c->src_ssi,
+            return tetraFilter_call(&filter, c->call_id, c->dst_ssi, c->src_ssi,
                                     c->what == TETRA_CALL_RELEASE);
         }
 
@@ -278,8 +277,7 @@ static void roamLog(enum tetraRoamState before, bool measuredAll,
         TLOG("roam: nothing above %d dBm, waiting", TETRA_ROAM_FLOOR_DBM);
     if (before == TETRA_ROAM_TRY && after == TETRA_ROAM_LOCKED)
         TLOG("roam: locked on %s", mhz(roam.serving));
-    if (before == TETRA_ROAM_SWEEP && after == TETRA_ROAM_LOCKED
-        && measuredAll)
+    if (before == TETRA_ROAM_SWEEP && after == TETRA_ROAM_LOCKED && measuredAll)
         TLOG("roam: staying on %s", mhz(roam.serving));
 }
 #endif
@@ -365,8 +363,8 @@ static void roamStep()
         roamLogMeasured(m, n, measured);
 #endif
     }
-    struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync,
-                                            decoding, busy, rssi);
+    struct tetraRoamStep s = tetraRoam_tick(&roam, getTick(), ts.sync, decoding,
+                                            busy, rssi);
 
     switch (s.action) {
         case TETRA_ROAM_PROBE: {
@@ -517,8 +515,8 @@ static void priorityTakeover(void)
 
     TLOG("follow: priority %u call %u takes over", follower.selectedPriority,
          follower.callId);
-    uint8_t s = tetraFollow_target(&follower).away ? follower.slots
-                                                   : follower.callSlots;
+    uint8_t s = tetraFollow_target(&follower).away ? follower.slots :
+                                                     follower.callSlots;
     for (uint8_t tn = 1; tn <= 4; tn++) {
         if (s == (1u << (tn - 1))) {
             tetraSpeech_follow(tn);
@@ -1077,9 +1075,9 @@ void OpMode_TETRA::update(rtxStatus_t *const rtx, const bool newCfg)
         TLOG("signal %d dBm on %s, %s, phase error %u%%, offset %+d Hz, "
              "correction %+d Hz, crc ok %lu, reacquired %lu, realigned %lu",
              radio_getRssi(), mhz(rtxCfg->rxFrequency),
-             tetraStatus_sync() ? "locked" : "no lock", d.phaseErr,
-             d.carrierHz, correction, (unsigned long)d.crcOk,
-             (unsigned long)d.reacquired, (unsigned long)d.realigned);
+             tetraStatus_sync() ? "locked" : "no lock", d.phaseErr, d.carrierHz,
+             correction, (unsigned long)d.crcOk, (unsigned long)d.reacquired,
+             (unsigned long)d.realigned);
     }
 #endif
 

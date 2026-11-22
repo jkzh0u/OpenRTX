@@ -101,12 +101,12 @@ TEST_CASE("TETRA alarms and location areas", "[tetra][ids]")
 
 TEST_CASE("TETRA identity priorities", "[tetra][ids]")
 {
-    REQUIRE(tetraIds_priority(101011) == 5);  // TF_PRIORITY(5)
-    REQUIRE(tetraIds_priority(60002) == 15);  // alarm, no number given
-    REQUIRE(tetraIds_priority(100250) == 2);  // in a range
-    REQUIRE(tetraIds_priority(100150) == 0);  // range without priority
+    REQUIRE(tetraIds_priority(101011) == 5); // TF_PRIORITY(5)
+    REQUIRE(tetraIds_priority(60002) == 15); // alarm, no number given
+    REQUIRE(tetraIds_priority(100250) == 2); // in a range
+    REQUIRE(tetraIds_priority(100150) == 0); // range without priority
     REQUIRE(tetraIds_priority(100010) == 0);
-    REQUIRE(tetraIds_priority(9001) == 0);    // unknown
+    REQUIRE(tetraIds_priority(9001) == 0);   // unknown
     REQUIRE(tetraIds_priority(0) == 0);
 
     // The priority does not change the identity or its filters

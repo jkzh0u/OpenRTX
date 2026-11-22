@@ -18,8 +18,8 @@ TEST_CASE("TETRA focus keeps the first call", "[tetra][focus]")
     REQUIRE(tetraFocus_offer(&f, 8, 3, false, 200));
 
     // A pause shorter than the hang time keeps it
-    REQUIRE_FALSE(tetraFocus_offer(&f, 9, 4, false,
-                                   200 + TETRA_FOCUS_HANG_MS - 1));
+    REQUIRE_FALSE(
+        tetraFocus_offer(&f, 9, 4, false, 200 + TETRA_FOCUS_HANG_MS - 1));
     REQUIRE(tetraFocus_offer(&f, 8, 3, false, 200 + TETRA_FOCUS_HANG_MS - 1));
 
     // Silent for the hang time: the other call takes over
@@ -49,8 +49,7 @@ TEST_CASE("TETRA focus matches traffic by usage marker", "[tetra][focus]")
     REQUIRE_FALSE(tetraFocus_offer(&f, 0, 0, false, 40));
 }
 
-TEST_CASE("TETRA focus gives way to an alarm and on release",
-          "[tetra][focus]")
+TEST_CASE("TETRA focus gives way to an alarm and on release", "[tetra][focus]")
 {
     tetraFocus f;
     tetraFocus_init(&f);

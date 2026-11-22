@@ -83,7 +83,7 @@ struct Fade {
 
 struct Carrier {
     uint32_t freq;
-    float level; /* dBm at the start */
+    float level;  /* dBm at the start */
     std::vector<int16_t> iq;
     double power; /* Mean |iq|^2 */
     std::vector<Fade> fades;
@@ -122,10 +122,10 @@ static float levelAt(const Carrier &c, double t)
  * The radio: time, tuning, receiver
  */
 
-static size_t pos;          /* Next sample the stream gives */
-static long long clockMs;   /* What getTick() says */
-static rtxStatus_t rtx;     /* Passed to the mode, read by the radio */
-static uint32_t tunedFreq;  /* What the radio is tuned to */
+static size_t pos;         /* Next sample the stream gives */
+static long long clockMs;  /* What getTick() says */
+static rtxStatus_t rtx;    /* Passed to the mode, read by the radio */
+static uint32_t tunedFreq; /* What the radio is tuned to */
 static bool quiet;
 
 struct Tuning {
@@ -189,8 +189,8 @@ static void receiverInit()
         float t = i - (TAPS - 1) / 2.0f;
         float w = 0.54f - 0.46f * cosf(6.2831853f * i / (TAPS - 1));
         float x = 2.0f * CUTOFF_HZ / RATE;
-        taps[i] = w * (t == 0 ? x
-                              : sinf(3.14159265f * x * t) / (3.14159265f * t));
+        taps[i] = w
+                * (t == 0 ? x : sinf(3.14159265f * x * t) / (3.14159265f * t));
         sum += taps[i];
     }
     for (int i = 0; i < TAPS; i++)
@@ -386,8 +386,7 @@ void tetraLog_printf(long long now, const char *fmt, ...)
     if (quiet)
         return;
     va_list ap;
-    printf("%6lu.%03u  ", (unsigned long)(now / 1000),
-           (unsigned)(now % 1000));
+    printf("%6lu.%03u  ", (unsigned long)(now / 1000), (unsigned)(now % 1000));
     va_start(ap, fmt);
     vprintf(fmt, ap);
     va_end(ap);
@@ -584,10 +583,9 @@ int main(int argc, char **argv)
         }
         printf("  %.4f %-14s %6.1f dBm -> %6.1f dBm  tuned %6.1f s, locked "
                "%5.1f%%, speech %u frames (%u bad)\n",
-               c.freq / 1e6, name, c.level,
-               levelAt(c, (double)length / RATE), c.tuned,
-               c.tuned > 0 ? 100.0 * c.locked / c.tuned : 0.0, c.frames,
-               c.bad);
+               c.freq / 1e6, name, c.level, levelAt(c, (double)length / RATE),
+               c.tuned, c.tuned > 0 ? 100.0 * c.locked / c.tuned : 0.0,
+               c.frames, c.bad);
     }
     return 0;
 }

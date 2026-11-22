@@ -135,7 +135,11 @@ static const struct tetraIdRange ranges[] = {
 #define TETRA_ID(...)
 #define TETRA_LA(...)
 #define TETRA_ID_RANGE(first, last, format, base, filters) \
-    { (first), (last), (format), (base), (uint32_t)(filters), \
+    { (first),                                             \
+      (last),                                              \
+      (format),                                            \
+      (base),                                              \
+      (uint32_t)(filters),                                 \
       PRIORITY_OF(filters) },
 #include TETRA_ID_LIST
 #undef TETRA_ID_RANGE
@@ -194,8 +198,8 @@ static struct tetraIdRange rangeAt(size_t i)
 {
     struct chlistRange c = { 0, 0, NULL, 0, 0, 0 };
     chlist_range(i, &c);
-    return (struct tetraIdRange){ c.first, c.last, c.format, c.base,
-                                  c.filters, c.priority };
+    return (struct tetraIdRange){ c.first, c.last,    c.format,
+                                  c.base,  c.filters, c.priority };
 }
 
 #else

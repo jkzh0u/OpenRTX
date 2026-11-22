@@ -13,8 +13,7 @@ void tetraFilter_init(struct tetraFilter *f)
     memset(f, 0, sizeof(*f));
 }
 
-static bool partiesPass(const struct tetraFilter *f, uint32_t dst,
-                        uint32_t src)
+static bool partiesPass(const struct tetraFilter *f, uint32_t dst, uint32_t src)
 {
     return tetraIds_inFilter(dst, f->filter)
         || tetraIds_inFilter(src, f->filter);

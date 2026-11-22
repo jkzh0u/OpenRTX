@@ -83,8 +83,8 @@ static void onNetwork(const struct tetra_network *nw)
     uint8_t n = 0;
 
     status.load = nw->load;
-    for (unsigned i = 0;
-         i < nw->nneighbours && n < TETRA_STATUS_NEIGHBOURS; i++) {
+    for (unsigned i = 0; i < nw->nneighbours && n < TETRA_STATUS_NEIGHBOURS;
+         i++) {
         const struct tetra_neighbour *nb = &nw->neighbour[i];
         struct tetraStatusNeighbour *d = &status.neighbour[n++];
         d->freq = nb->dl_freq_hz;

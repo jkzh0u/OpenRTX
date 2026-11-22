@@ -192,9 +192,9 @@ static void onNetwork(long long now, const struct tetra_network *nw)
         int w = snprintf(line + len, sizeof(line) - len, "%s%s%s",
                          i ? ", " : "", f,
                          (nb->mcc != 0xffff && nb->mcc != cell.mcc)
-                                 || (nb->mnc != 0xffff && nb->mnc != cell.mnc)
-                             ? " (other network)"
-                             : "");
+                                 || (nb->mnc != 0xffff && nb->mnc != cell.mnc) ?
+                             " (other network)" :
+                             "");
         if (w < 0)
             break;
         len += (size_t)w;
@@ -219,9 +219,9 @@ static void onCall(long long now, const struct tetra_call *c, bool passed)
     }
     if (c->carrier != 0xffff) {
         char f[20] = "";
-        uint32_t hz = cell.valid ? tetra_carrier_hz(cell.band, c->carrier,
-                                                    cell.offset)
-                                 : 0;
+        uint32_t hz = cell.valid ?
+                          tetra_carrier_hz(cell.band, c->carrier, cell.offset) :
+                          0;
         if (hz != 0) {
             char mhz[16];
             snprintf(f, sizeof(f), " = %s",
@@ -278,22 +278,26 @@ static void onSds(long long now, const struct tetra_sds *s, bool passed)
             text[n++] = '"';
             for (const char *p = utf8; *p != '\0' && n + 2 < sizeof(text); p++)
                 text[n++] = ((unsigned char)*p >= 0x20
-                             && (unsigned char)*p < 0x7f)
-                              ? *p
-                              : '?';
+                             && (unsigned char)*p < 0x7f) ?
+                              *p :
+                              '?';
             text[n++] = '"';
             text[n] = '\0';
         } else if (parsed) {
             /* Binary in a text message (a NUL, control bytes): the bytes */
-            int n = snprintf(text, sizeof(text), "data (protocol %u, coding "
-                             "%u):", t.protocol_id, t.coding);
-            for (unsigned i = 0; i < t.nbits / 8 && n > 0
-                                 && (size_t)n + 4 < sizeof(text); i++) {
+            int n = snprintf(text, sizeof(text),
+                             "data (protocol %u, coding "
+                             "%u):",
+                             t.protocol_id, t.coding);
+            for (unsigned i = 0;
+                 i < t.nbits / 8 && n > 0 && (size_t)n + 4 < sizeof(text);
+                 i++) {
                 unsigned bit = t.start + 8 * i;
                 unsigned b = (unsigned)((t.data[bit / 8] << (bit % 8)
                                          | (bit % 8 ? t.data[bit / 8 + 1]
-                                                          >> (8 - bit % 8)
-                                                    : 0)) & 0xff);
+                                                          >> (8 - bit % 8) :
+                                                      0))
+                                        & 0xff);
                 n += snprintf(text + n, sizeof(text) - n, " %02x", b);
             }
         }
@@ -306,8 +310,7 @@ static void onSds(long long now, const struct tetra_sds *s, bool passed)
 }
 
 /** The first traffic slot of a transmission: audio is being received */
-static void onTraffic(long long now, const struct tetra_traffic *t,
-                      bool passed)
+static void onTraffic(long long now, const struct tetra_traffic *t, bool passed)
 {
     unsigned tn = (t->time.tn >= 1 && t->time.tn <= 4) ? t->time.tn - 1 : 0;
     bool start = !traffic[tn].seen || t->call_id != traffic[tn].call
@@ -326,8 +329,8 @@ static void onTraffic(long long now, const struct tetra_traffic *t,
                  identity(id, sizeof(id), t->talker_ssi, false));
     }
     tetraLog_printf(now, "%s call %u%s%s%s",
-                    t->circuit_type == 0 ? "voice" : "data", t->call_id,
-                    talker, t->encrypted ? ", encrypted" : "",
+                    t->circuit_type == 0 ? "voice" : "data", t->call_id, talker,
+                    t->encrypted ? ", encrypted" : "",
                     passed ? "" : ", filtered out");
 }
 

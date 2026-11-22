@@ -265,8 +265,8 @@ struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
             }
 
             /* Checked more often when the cell is about to be lost */
-            long long every = urgent ? TETRA_ROAM_CHECK_MS / 3
-                                     : TETRA_ROAM_CHECK_MS;
+            long long every = urgent ? TETRA_ROAM_CHECK_MS / 3 :
+                                       TETRA_ROAM_CHECK_MS;
             if ((busy && !urgent) || r->nNeighbours == 0
                 || now - r->lastCheck < every)
                 break;
@@ -287,8 +287,8 @@ struct tetraRoamStep tetraRoam_tick(struct tetraRoam *r, long long now,
              * A cell that does not decode, however strong: a neighbour as
              * strong will do, no margin needed
              */
-            r->servingRssi = (int16_t)(decoding ? level
-                                                : level - TETRA_ROAM_MARGIN_DB);
+            r->servingRssi = (int16_t)(decoding ? level :
+                                                  level - TETRA_ROAM_MARGIN_DB);
             r->urgent = urgent;
             r->next = 0;
             r->state = TETRA_ROAM_CHECK;

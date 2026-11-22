@@ -42,43 +42,43 @@ struct tetraStatusMeasured {
  * thread, read with tetra_getStatus().
  */
 struct tetraStatus {
-    bool sync;          /**< Locked to a TMO downlink */
-    bool cell;          /**< Fields below up to dlFreq are valid */
-    uint16_t mcc;       /**< Mobile country code */
-    uint16_t mnc;       /**< Mobile network code */
-    uint8_t colourCode; /**< Colour code */
-    bool sysinfo;       /**< la and dlFreq are valid */
-    uint16_t la;        /**< Location area */
-    uint32_t dlFreq;    /**< Main carrier downlink frequency, Hz */
-    bool airEncryption; /**< Cell uses air interface encryption */
+    bool sync;             /**< Locked to a TMO downlink */
+    bool cell;             /**< Fields below up to dlFreq are valid */
+    uint16_t mcc;          /**< Mobile country code */
+    uint16_t mnc;          /**< Mobile network code */
+    uint8_t colourCode;    /**< Colour code */
+    bool sysinfo;          /**< la and dlFreq are valid */
+    uint16_t la;           /**< Location area */
+    uint32_t dlFreq;       /**< Main carrier downlink frequency, Hz */
+    bool airEncryption;    /**< Cell uses air interface encryption */
 
-    bool call;          /**< A call is set up or traffic is flowing */
-    bool callGroup;     /**< Group call */
-    bool callEncrypted; /**< Call or its traffic is encrypted */
-    bool voice;         /**< Traffic seen in the last second */
-    uint16_t callId;    /**< Call identifier */
-    uint32_t callDst;   /**< Called (group) SSI, 0 if unknown */
-    uint32_t talker;    /**< Talking party SSI, 0 if unknown */
-    uint32_t followHz;  /**< Followed traffic carrier, 0 on the main one */
-    bool callAlarm;     /**< The call is to or from an alarm talkgroup */
-    long long txStart;  /**< Tick the current transmission started */
+    bool call;             /**< A call is set up or traffic is flowing */
+    bool callGroup;        /**< Group call */
+    bool callEncrypted;    /**< Call or its traffic is encrypted */
+    bool voice;            /**< Traffic seen in the last second */
+    uint16_t callId;       /**< Call identifier */
+    uint32_t callDst;      /**< Called (group) SSI, 0 if unknown */
+    uint32_t talker;       /**< Talking party SSI, 0 if unknown */
+    uint32_t followHz;     /**< Followed traffic carrier, 0 on the main one */
+    bool callAlarm;        /**< The call is to or from an alarm talkgroup */
+    long long txStart;     /**< Tick the current transmission started */
 
-    uint32_t tunedHz;   /**< Main carrier received, Hz, 0 if not set */
+    uint32_t tunedHz;      /**< Main carrier received, Hz, 0 if not set */
     long long cellChanged; /**< Tick the radio last moved to another cell */
-    uint16_t prevLa;    /**< Location area before the last move */
-    uint32_t prevDlFreq; /**< Main carrier before the last move, Hz */
-    bool searching;     /**< Looking for a cell on other frequencies */
+    uint16_t prevLa;       /**< Location area before the last move */
+    uint32_t prevDlFreq;   /**< Main carrier before the last move, Hz */
+    bool searching;        /**< Looking for a cell on other frequencies */
 
     struct tetraCalls recent; /**< Recent calls, newest first */
 
-    uint32_t sdsSrc;    /**< Sender of the last SDS, 0 if none */
-    char sds[64];       /**< Last SDS text or status, ASCII */
-    long long sdsTime;  /**< Tick of the last SDS */
+    uint32_t sdsSrc;          /**< Sender of the last SDS, 0 if none */
+    char sds[64];             /**< Last SDS text or status, ASCII */
+    long long sdsTime;        /**< Tick of the last SDS */
 
-    uint16_t phaseErr;  /**< Demodulator RMS phase error, % of pi/4 */
-    uint16_t overruns;  /**< Sample blocks lost: the radio was too slow */
-    uint16_t resyncs;   /**< Burst synchronisation restarts */
-    int16_t carrierHz;  /**< Carrier offset estimate */
+    uint16_t phaseErr;        /**< Demodulator RMS phase error, % of pi/4 */
+    uint16_t overruns;        /**< Sample blocks lost: the radio was too slow */
+    uint16_t resyncs;         /**< Burst synchronisation restarts */
+    int16_t carrierHz;        /**< Carrier offset estimate */
 
     /* Field test */
     uint8_t load;        /**< Serving cell load: 0 unknown, 1 low .. 3 high */

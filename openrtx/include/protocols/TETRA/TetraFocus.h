@@ -35,7 +35,7 @@ struct tetraFocus {
     uint16_t callId;     /**< 0 if not known */
     uint8_t usageMarker; /**< 0 if not known */
     bool alarm;
-    long long last; /**< Last activity, ms */
+    long long last;      /**< Last activity, ms */
 };
 
 /**

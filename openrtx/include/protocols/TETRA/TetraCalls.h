@@ -26,11 +26,11 @@ extern "C" {
 #define TETRA_CALLS_PAUSE_MS 1500
 
 struct tetraCallEntry {
-    uint32_t dst;   /**< Called talkgroup or radio, 0 if unknown */
-    uint32_t src;   /**< Last talking party, 0 if unknown */
-    bool group;     /**< Group call */
-    bool voice;     /**< Clear speech was heard */
-    bool encrypted; /**< Encryption was signalled */
+    uint32_t dst;        /**< Called talkgroup or radio, 0 if unknown */
+    uint32_t src;        /**< Last talking party, 0 if unknown */
+    bool group;          /**< Group call */
+    bool voice;          /**< Clear speech was heard */
+    bool encrypted;      /**< Encryption was signalled */
     long long time;      /**< Last activity, ms */
     long long first;     /**< First activity, ms */
     long long lastVoice; /**< Last speech, ms */

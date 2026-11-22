@@ -122,13 +122,13 @@ struct tetraRoam {
     int16_t servingRssi; /**< At the start of the check */
     int32_t average;     /**< Serving cell signal, dBm x 16 */
     long long lastAverage;
-    bool averaged;   /**< average holds a value */
-    bool urgent;     /**< The check is of a cell about to be lost */
+    bool averaged;       /**< average holds a value */
+    bool urgent;         /**< The check is of a cell about to be lost */
 
     struct tetraRoamCandidate cand[TETRA_ROAM_MAX_CANDIDATES];
     uint8_t nCand;
-    uint8_t next;  /**< Next candidate to probe or try */
-    uint32_t best; /**< Stronger neighbour of the last check */
+    uint8_t next;   /**< Next candidate to probe or try */
+    uint32_t best;  /**< Stronger neighbour of the last check */
     uint8_t confirmed;
     bool requested; /**< The search was asked for: not stopped by a lock */
 };

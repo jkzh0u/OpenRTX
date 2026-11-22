@@ -80,11 +80,11 @@ enum tetraFollowEvent {
 struct tetraFollowCall {
     enum tetraFollowEvent event;
     uint16_t callId;
-    uint16_t carrier; /**< Allocated carrier number, 0xffff if none */
-    uint8_t slots;    /**< Allocated timeslots, bit 0 = TN1; 0 if none */
-    bool speech;      /**< Speech call (not circuit mode data) */
-    bool encrypted;   /**< End-to-end or air interface encryption */
-    uint32_t freq;    /**< Carrier downlink from the cell's numbering, Hz;
+    uint16_t carrier;  /**< Allocated carrier number, 0xffff if none */
+    uint8_t slots;     /**< Allocated timeslots, bit 0 = TN1; 0 if none */
+    bool speech;       /**< Speech call (not circuit mode data) */
+    bool encrypted;    /**< End-to-end or air interface encryption */
+    uint32_t freq;     /**< Carrier downlink from the cell's numbering, Hz;
                            0 if unknown */
     uint32_t mainFreq; /**< Main carrier downlink, Hz; 0 if unknown */
     uint8_t priority;  /**< 0 none, 1 (lowest) to 15 */
@@ -116,7 +116,7 @@ struct tetraFollowCallInfo {
     uint32_t freq; /**< Where to tune for its carrier, Hz; 0 if unknown */
     uint16_t carrier;
     uint8_t slots;
-    bool joined; /**< Selected once: not joined late again */
+    bool joined;        /**< Selected once: not joined late again */
     uint8_t priority;
     long long lastSeen; /**< Last event or allocation, ms */
 };
@@ -134,8 +134,8 @@ struct tetraFollow {
     uint16_t callId;
     long long lastActivity;
     uint8_t selectedPriority; /**< Priority of the selected call */
-    uint8_t callSlots;     /**< Its timeslots if known, else 0 */
-    bool preempted;        /**< A priority call took over: the caller
+    uint8_t callSlots;        /**< Its timeslots if known, else 0 */
+    bool preempted;           /**< A priority call took over: the caller
                                 clears it */
     /* Priority calls */
     uint8_t holdPriority;   /**< Priority held for, 0 none */

@@ -96,8 +96,8 @@ static void iqInit(void)
         float t = i - (IQ_TAPS - 1) / 2.0f;
         float w = 0.54f - 0.46f * cosf(6.2831853f * i / (IQ_TAPS - 1));
         float x = 2.0f * IQ_CUTOFF_HZ / 48000.0f;
-        iqTaps[i] = w * (t == 0 ? x : sinf(3.14159265f * x * t)
-                                          / (3.14159265f * t));
+        iqTaps[i] =
+            w * (t == 0 ? x : sinf(3.14159265f * x * t) / (3.14159265f * t));
         sum += iqTaps[i];
     }
     for (int i = 0; i < IQ_TAPS; i++)
@@ -121,7 +121,7 @@ static size_t readInput(int16_t *out, size_t n, FILE *f)
         double p = 0;
         for (size_t i = 0; i < got; i++)
             p += (double)iq[2 * i] * iq[2 * i]
-                 + (double)iq[2 * i + 1] * iq[2 * i + 1];
+               + (double)iq[2 * i + 1] * iq[2 * i + 1];
         p /= got;
         double n0 = p / 18000.0 / pow(10.0, noiseDb / 10.0);
         noiseSigma = (float)sqrt(n0 * 48000.0 / 2.0);
@@ -472,8 +472,8 @@ int main(int argc, char **argv)
     }
     double badPct = nFrames ? 100.0 * nBadFrames / nFrames : 100.0;
     if (maxBad >= 0 && badPct > maxBad) {
-        printf("FAIL: %.1f%% of %u speech frames bad, above %.1f%%\n",
-               badPct, nFrames, maxBad);
+        printf("FAIL: %.1f%% of %u speech frames bad, above %.1f%%\n", badPct,
+               nFrames, maxBad);
         fail = 1;
     }
     return fail;

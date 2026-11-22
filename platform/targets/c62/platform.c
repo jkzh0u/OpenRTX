@@ -99,10 +99,10 @@ extern void c62_tetraLogInit(void);
  */
 static void channelListInit(void)
 {
-    const void *image = (const void *)(DT_REG_ADDR(DT_NODELABEL(flash0))
+    const void *image =
+        (const void *)(DT_REG_ADDR(DT_NODELABEL(flash0))
                        + FIXED_PARTITION_OFFSET(channel_list_partition));
-    int ret = chlist_open(image,
-                          FIXED_PARTITION_SIZE(channel_list_partition));
+    int ret = chlist_open(image, FIXED_PARTITION_SIZE(channel_list_partition));
 
     if (ret == 0)
         printk("Channel list: %u channels, %u TETRA names\n",
@@ -110,8 +110,7 @@ static void channelListInit(void)
     else if (ret == -1)
         printk("Channel list: none flashed\n");
     else
-        printk("Channel list: not used, damaged or other version (%d)\n",
-               ret);
+        printk("Channel list: not used, damaged or other version (%d)\n", ret);
 }
 
 void platform_init_csk6()

@@ -55,9 +55,8 @@ static struct tetraFollowCallInfo *findCall(struct tetraFollow *f,
  *
  * @return the call's entry.
  */
-static struct tetraFollowCallInfo *noteCall(struct tetraFollow *f,
-                                            uint16_t callId, bool speech,
-                                            bool encrypted)
+static struct tetraFollowCallInfo *
+noteCall(struct tetraFollow *f, uint16_t callId, bool speech, bool encrypted)
 {
     struct tetraFollowCallInfo *c = findCall(f, callId);
 
@@ -104,8 +103,7 @@ static uint8_t held(const struct tetraFollow *f, long long now)
  * A call of some priority was active: hold the radio on the main carrier
  * for that priority, unless it holds for a higher one.
  */
-static void notePriority(struct tetraFollow *f, uint8_t priority,
-                         long long now)
+static void notePriority(struct tetraFollow *f, uint8_t priority, long long now)
 {
     if (priority == 0 || priority < held(f, now))
         return;
@@ -163,8 +161,8 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
         if (info != NULL)
             info->used = false;
     } else {
-        struct tetraFollowCallInfo *info =
-            noteCall(f, c->callId, c->speech, c->encrypted);
+        struct tetraFollowCallInfo *info = noteCall(f, c->callId, c->speech,
+                                                    c->encrypted);
         if (c->priority > info->priority)
             info->priority = c->priority;
         info->lastSeen = now;
@@ -173,8 +171,7 @@ void tetraFollow_call(struct tetraFollow *f, const struct tetraFollowCall *c,
         if (c->carrier != 0xffff && c->slots != 0) {
             info->carrier = c->carrier;
             info->slots = c->slots & TETRA_FOLLOW_ALL_SLOTS;
-            info->freq = tetraFollow_carrierFreq(f->home, c->mainFreq,
-                                                 c->freq);
+            info->freq = tetraFollow_carrierFreq(f->home, c->mainFreq, c->freq);
         }
     }
 

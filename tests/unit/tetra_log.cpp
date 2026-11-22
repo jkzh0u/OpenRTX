@@ -28,8 +28,9 @@ TEST_CASE("TETRA log lines carry the time", "[tetra][log]")
 
     tetraLog_printf(12345, "sync %s", "locked");
     tetraLog_printf(3600001, "call %u", 7u);
-    REQUIRE(drain() == "    12.345  sync locked\n"
-                       "  3600.001  call 7\n");
+    REQUIRE(drain()
+            == "    12.345  sync locked\n"
+               "  3600.001  call 7\n");
     REQUIRE(drain().empty());
 }
 
@@ -44,8 +45,7 @@ TEST_CASE("TETRA log truncates long lines", "[tetra][log]")
     REQUIRE(out.back() == '\n');
 }
 
-TEST_CASE("TETRA log drops lines the line cannot keep up with",
-          "[tetra][log]")
+TEST_CASE("TETRA log drops lines the line cannot keep up with", "[tetra][log]")
 {
     tetraLog_init(nullptr, 0);
     std::string text(87, 'a'); // 100 bytes a line with the time
@@ -85,12 +85,13 @@ TEST_CASE("TETRA log keeps a history to send on request", "[tetra][log]")
 
         tetraLog_requestHistory();
         tetraLog_printf(3000, "three");
-        REQUIRE(drain(7) == "     3.000  three\n"
-                            "--- stored log, 50 bytes ---\n"
-                            "     1.000  one\n"
-                            "     2.000  two\n"
-                            "     3.000  three\n"
-                            "--- end of stored log ---\n");
+        REQUIRE(drain(7)
+                == "     3.000  three\n"
+                   "--- stored log, 50 bytes ---\n"
+                   "     1.000  one\n"
+                   "     2.000  two\n"
+                   "     3.000  three\n"
+                   "--- end of stored log ---\n");
     }
 
     SECTION("only the newest lines once full, from a line start")

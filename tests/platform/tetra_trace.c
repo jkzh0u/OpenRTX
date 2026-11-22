@@ -344,15 +344,19 @@ static bool onRetune(void *user, const struct tetra_retune *r)
         if (!ok && fr.main)
             tetraLog_printf(ms(), "retune: main carrier: declined");
         else if (!ok && r->call_id != lastDeclined)
-            tetraLog_printf(ms(), "retune: call %u to carrier %u = %s slots "
-                            "0x%x: declined", r->call_id, r->carrier,
-                            mhz(r->freq_hz), r->timeslots);
+            tetraLog_printf(ms(),
+                            "retune: call %u to carrier %u = %s slots "
+                            "0x%x: declined",
+                            r->call_id, r->carrier, mhz(r->freq_hz),
+                            r->timeslots);
         else if (ok && fr.main)
             tetraLog_printf(ms(), "retune: main carrier >> %s", mhz(t.freq));
         else if (ok)
-            tetraLog_printf(ms(), "retune: call %u to carrier %u slots 0x%x "
-                            ">> %s%s", r->call_id, r->carrier, t.slots,
-                            mhz(t.freq), t.away ? "" : " (main)");
+            tetraLog_printf(ms(),
+                            "retune: call %u to carrier %u slots 0x%x "
+                            ">> %s%s",
+                            r->call_id, r->carrier, t.slots, mhz(t.freq),
+                            t.away ? "" : " (main)");
         lastDeclined = (!ok && !fr.main) ? r->call_id : 0xffff;
         return ok;
     }
@@ -398,12 +402,13 @@ static void reportTarget(void)
         && tetraFollow_join(&follower, NULL, (long long)(now * 1000))) {
         struct tetraFollowTarget j = tetraFollow_target(&follower);
         if (radioLog)
-            tetraLog_printf(ms(), "follow: join call %u on carrier %u >> %s "
-                            "slots 0x%x", follower.callId, follower.carrier,
-                            mhz(j.freq), j.slots);
+            tetraLog_printf(ms(),
+                            "follow: join call %u on carrier %u >> %s "
+                            "slots 0x%x",
+                            follower.callId, follower.carrier, mhz(j.freq),
+                            j.slots);
         else
-            printf("%8.3f  join call %u late, resync\n", now,
-                   follower.callId);
+            printf("%8.3f  join call %u late, resync\n", now, follower.callId);
         tetra_tmo_resync(&tmo);
     }
     t = tetraFollow_target(&follower);
@@ -524,15 +529,17 @@ int main(int argc, char *argv[])
                 verbose = true;
                 break;
             default:
-                fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-L] [-c channels.bin] "
+                fprintf(stderr,
+                        "usage: %s [-f MHz] [-n] [-v] [-L] [-c channels.bin] "
                         "[-p SSI[:N]]... recording.wav\n",
                         argv[0]);
                 return 2;
         }
     }
     if (optind != argc - 1) {
-        fprintf(stderr, "usage: %s [-f MHz] [-n] [-v] [-L] [-c channels.bin] "
-                        "[-p SSI[:N]]... recording.wav\n",
+        fprintf(stderr,
+                "usage: %s [-f MHz] [-n] [-v] [-L] [-c channels.bin] "
+                "[-p SSI[:N]]... recording.wav\n",
                 argv[0]);
         return 2;
     }

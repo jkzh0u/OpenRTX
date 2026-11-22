@@ -24,7 +24,8 @@
 #error "CHLIST_IMAGE must name the channel list image"
 #endif
 
-namespace {
+namespace
+{
 
 struct ChlistLoader {
     std::vector<uint8_t> image;

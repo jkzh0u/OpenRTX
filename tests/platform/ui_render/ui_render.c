@@ -91,8 +91,8 @@ static int scale = 4;
 /* Defined elsewhere in the firmware, not built here */
 state_t state;
 bool macro_latched;
-const uint32_t freq_steps[] = { 1000,  5000,  6250,   10000,  12500,
-                                15000, 20000, 25000,  50000,  100000 };
+const uint32_t freq_steps[] = { 1000,  5000,  6250,  10000, 12500,
+                                15000, 20000, 25000, 50000, 100000 };
 
 unsigned int getHeapSize()
 {
@@ -106,9 +106,12 @@ unsigned int getCurrentFreeHeap()
 
 const hwInfo_t *platform_getHwInfo()
 {
-    static const hwInfo_t info = { .name = "c62", .uhf_band = 1,
-                                   .vhf_band = 1, .uhf_maxFreq = 480,
-                                   .uhf_minFreq = 400, .vhf_maxFreq = 174,
+    static const hwInfo_t info = { .name = "c62",
+                                   .uhf_band = 1,
+                                   .vhf_band = 1,
+                                   .uhf_maxFreq = 480,
+                                   .uhf_minFreq = 400,
+                                   .vhf_maxFreq = 174,
                                    .vhf_minFreq = 137 };
     return &info;
 }
@@ -383,17 +386,16 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.timeTick = now - 30000;
     tetra.roamState = 0;
     tetra.nNeighbours = 3;
-    tetra.neighbour[0] = (struct tetraStatusNeighbour){ prevFreq, 3801, 2,
-                                                        2, false };
-    tetra.neighbour[1] = (struct tetraStatusNeighbour){ cellFreq + 50000,
-                                                        3805, 3, 1, false };
+    tetra.neighbour[0] = (struct tetraStatusNeighbour){ prevFreq, 3801, 2, 2,
+                                                        false };
+    tetra.neighbour[1] = (struct tetraStatusNeighbour){ cellFreq + 50000, 3805,
+                                                        3, 1, false };
     tetra.neighbour[2] = (struct tetraStatusNeighbour){ 0, 1234, 0xffff, 0,
                                                         true };
     tetra.nMeasured = 3;
     tetra.measured[0] = (struct tetraStatusMeasured){ cellFreq, -84 };
     tetra.measured[1] = (struct tetraStatusMeasured){ prevFreq, -97 };
-    tetra.measured[2] = (struct tetraStatusMeasured){ cellFreq + 50000,
-                                                      -109 };
+    tetra.measured[2] = (struct tetraStatusMeasured){ cellFreq + 50000, -109 };
     tetra.measuredTime = now - 12000;
     draw("tetra-15-field-test", SCREEN_FIELD_TEST);
     scroll = 7;
@@ -503,7 +505,6 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.phaseErr = 12;
     tetra.carrierHz = -234;
 }
-
 
 /* ---- Menus ---- */
 

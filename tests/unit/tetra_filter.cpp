@@ -14,8 +14,7 @@ static const uint32_t RED_ALARM = 60002, TRANSIT_CONTROL = 101011,
                       LINE1_CALLS = 100010, LINE2_CALLS = 100020,
                       RUN_112 = 100112, UNKNOWN = 9001, DISPATCHER = 500001;
 
-TEST_CASE("TETRA filter lets everything through by default",
-          "[tetra][filter]")
+TEST_CASE("TETRA filter lets everything through by default", "[tetra][filter]")
 {
     tetraFilter f;
     tetraFilter_init(&f);
@@ -66,8 +65,7 @@ TEST_CASE("TETRA filter passes point to point calls by either radio",
     REQUIRE(tetraFilter_call(&f, 6, RUN_112, DISPATCHER, false));
 }
 
-TEST_CASE("TETRA filter holds back what it cannot place",
-          "[tetra][filter]")
+TEST_CASE("TETRA filter holds back what it cannot place", "[tetra][filter]")
 {
     tetraFilter f;
     tetraFilter_init(&f);

@@ -43,9 +43,8 @@ struct Radio {
     void run(tetraRoam &r, long long ms)
     {
         for (long long end = now + ms; now < end; now += 30) {
-            tetraRoamStep s = tetraRoam_tick(&r, now, locked(),
-                                             locked() && !deaf, busy,
-                                             level(tuned));
+            tetraRoamStep s = tetraRoam_tick(
+                &r, now, locked(), locked() && !deaf, busy, level(tuned));
             if (s.action == TETRA_ROAM_PROBE) {
                 probes.push_back(s.freq);
                 tetraRoam_probed(&r, s.freq, level(s.freq));
@@ -137,7 +136,7 @@ TEST_CASE("TETRA roaming moves to a clearly stronger neighbour",
         radio.rssi = { { A, -89 }, { B, -80 }, { C, -98 } };
         radio.run(r, TETRA_ROAM_CHECK_MS + 300); // one check: B, once
         REQUIRE(radio.tunes.empty());
-        radio.deaf = true; // nothing decodes any more
+        radio.deaf = true;                       // nothing decodes any more
         radio.run(r, 60);
         REQUIRE(radio.tunes == std::vector<uint32_t>({ B }));
     }
@@ -271,7 +270,8 @@ TEST_CASE("TETRA roaming searches for the best signal on request",
 
     SECTION("the serving cell is about as strong: stay")
     {
-        radio.rssi = { { A, -80 }, { B, -90 },
+        radio.rssi = { { A, -80 },
+                       { B, -90 },
                        { C, -80 + TETRA_ROAM_SEARCH_MARGIN_DB - 1 } };
         tetraRoam_search(&r, radio.now);
         radio.run(r, 1000);
