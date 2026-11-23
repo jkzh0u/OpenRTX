@@ -498,6 +498,14 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
                                                ch->fm.rxToneEn, false));
             break;
 
+#ifdef CONFIG_ROGER_BEEP
+        case FM_ROGER_BEEP:
+            sniprintf(buf, max_len, "%s",
+                      last_state.settings.rogerBeep ? currentLanguage->on
+                                                    : currentLanguage->off);
+            break;
+#endif
+
         case FM_TX_TONE:
         case FM_RX_TONE: {
             uint8_t idx = (index == FM_TX_TONE) ? ch->fm.txTone

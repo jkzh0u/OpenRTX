@@ -6,7 +6,9 @@
 
 #include "interfaces/platform.h"
 #include "interfaces/delays.h"
+#include "hwconfig.h"
 #include "interfaces/radio.h"
+#include "core/state.h"
 #include "rtx/OpMode_FM.hpp"
 #include "rtx/rtx.h"
 
@@ -129,6 +131,11 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
 
     if(!platform_getPttStatus() && (status->opStatus == TX))
     {
+        #ifdef CONFIG_ROGER_BEEP
+        if(state.settings.rogerBeep)
+            radio_rogerBeep();
+        #endif
+
         audioPath_release(txAudioPath);
         radio_disableRtx();
 

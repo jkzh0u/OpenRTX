@@ -176,7 +176,10 @@ enum settingsFMItems
     FM_POWER,
     FM_TONE_MODE,
     FM_TX_TONE,
-    FM_RX_TONE
+    FM_RX_TONE,
+#ifdef CONFIG_ROGER_BEEP
+    FM_ROGER_BEEP,
+#endif
 };
 
 /**

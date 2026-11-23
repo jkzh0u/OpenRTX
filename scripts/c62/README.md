@@ -999,6 +999,7 @@ The main screen shows, from the top:
 | Tone mode | None, Encode (send the tone), Decode (open only on the tone), Both |
 | TX tone | The CTCSS tone sent, 67.0 to 254.1 Hz |
 | RX tone | The CTCSS tone the squelch waits for |
+| Roger beep | On: two short rising tones are sent when you let go of PTT, so others know you have finished. Off at first. Saved |
 
 Width, power and tones belong to the channel in use: in VFO mode they
 stay with the VFO, on a memory channel they last until you leave it (the

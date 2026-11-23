@@ -422,6 +422,32 @@ rssi_t radio_getRssi()
     return bk4819_get_rssi(&c62_bk4819);
 }
 
+void radio_rogerBeep()
+{
+    /* Two rising tones, Hz, each this long */
+    static const uint16_t tones[] = { 1000, 1500 };
+    static const unsigned toneMs = 90;
+
+    if (radioStatus != TX)
+        return;
+
+    for (size_t i = 0; i < ARRAY_SIZE(tones); i++) {
+        /* TX audio muted while the tone changes (REG_50 bit 15), then the
+         * tone generator added to the modulation */
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_50, 0xBB20);
+        BK4819_writeReg(
+            &c62_bk4819, BK4819_REG_71,
+            (uint16_t)(((uint32_t)tones[i] * 1048576u + 50000u) / 100000u));
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_70,
+                        BK4819_REG_70_MASK_ENABLE_TONE1
+                            | (66u << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_50, 0x3B20);
+        delayMs(toneMs);
+    }
+
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_70, 0);
+}
+
 enum opstatus radio_getStatus()
 {
     return radioStatus;

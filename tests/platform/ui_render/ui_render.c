@@ -620,6 +620,7 @@ static void menuScenes(void)
     last_state.channel.fm.txToneEn = 1;
     last_state.channel.fm.rxToneEn = 0;
     menu("menu-07-fm", _ui_drawSettingsFM, 0);
+    menu("menu-07b-fm-end", _ui_drawSettingsFM, settings_fm_num - 1);
     last_state.channel = before;
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
     menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);

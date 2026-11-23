@@ -108,6 +108,14 @@ void radio_setRxOffset(int32_t hz);
  */
 rssi_t radio_getRssi();
 
+#ifdef CONFIG_ROGER_BEEP
+/**
+ * Send a roger beep, a short tone marking the end of a transmission, while
+ * transmitting. Blocks for its length, about 0.2 s.
+ */
+void radio_rogerBeep();
+#endif
+
 /**
  * Get the current operating status of the radio module.
  *

@@ -195,7 +195,10 @@ const char* settings_fm_items[] =
     "Power",
     "Tone mode",
     "TX tone",
-    "RX tone"
+    "RX tone",
+#ifdef CONFIG_ROGER_BEEP
+    "Roger beep",
+#endif
 };
 
 #ifdef CONFIG_TETRA
@@ -937,6 +940,13 @@ static void _ui_changeFmSetting(uint8_t item, int step)
                              state.channel.fm.txToneEn,
                              state.channel.fm.txTone, queueFlags);
             break;
+
+#ifdef CONFIG_ROGER_BEEP
+        case FM_ROGER_BEEP:
+            // Up on, Down off, as the TETRA settings
+            state.settings.rogerBeep = (step > 0) ? 1 : 0;
+            break;
+#endif
 
         case FM_RX_TONE:
             state.channel.fm.rxTone = (uint8_t)((state.channel.fm.rxTone

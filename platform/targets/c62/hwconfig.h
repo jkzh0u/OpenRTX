@@ -36,6 +36,8 @@ extern "C" {
 #define CONFIG_UI_MACRO_GRID
 /* FM main screen drawn like the TETRA one (ui_modes.c) */
 #define CONFIG_UI_FM_SCREEN
+/* FM roger beep, from the BK4819's tone generator */
+#define CONFIG_ROGER_BEEP
 
 /* Battery type */
 #define CONFIG_BAT_LIION
