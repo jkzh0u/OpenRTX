@@ -10,6 +10,7 @@
 #include <inttypes.h>
 #include "core/utils.h"
 #include "ui/ui_default.h"
+#include "core/roger_beep.h"
 #include "interfaces/nvmem.h"
 #include "interfaces/cps_io.h"
 #include "interfaces/platform.h"
@@ -501,8 +502,7 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
 #ifdef CONFIG_ROGER_BEEP
         case FM_ROGER_BEEP:
             sniprintf(buf, max_len, "%s",
-                      last_state.settings.rogerBeep ? currentLanguage->on
-                                                    : currentLanguage->off);
+                      rogerBeep_name(last_state.settings.rogerBeep));
             break;
 #endif
 

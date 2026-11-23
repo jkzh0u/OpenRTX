@@ -110,10 +110,12 @@ rssi_t radio_getRssi();
 
 #ifdef CONFIG_ROGER_BEEP
 /**
- * Send a roger beep, a short tone marking the end of a transmission, while
- * transmitting. Blocks for its length, about 0.2 s.
+ * While transmitting, add a tone to the transmitted audio, for roger beeps
+ * (core/roger_beep.h).
+ *
+ * @param hz: tone frequency, Hz; 0 turns the tone off.
  */
-void radio_rogerBeep();
+void radio_setTxTone(uint16_t hz);
 #endif
 
 /**

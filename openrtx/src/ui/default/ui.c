@@ -65,6 +65,7 @@
 #include "hwconfig.h"
 #include "core/voicePromptUtils.h"
 #include "core/beeps.h"
+#include "core/roger_beep.h"
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
@@ -943,8 +944,9 @@ static void _ui_changeFmSetting(uint8_t item, int step)
 
 #ifdef CONFIG_ROGER_BEEP
         case FM_ROGER_BEEP:
-            // Up on, Down off, as the TETRA settings
-            state.settings.rogerBeep = (step > 0) ? 1 : 0;
+            state.settings.rogerBeep =
+                (uint8_t)((state.settings.rogerBeep + ROGER_BEEP_STYLES + step)
+                          % ROGER_BEEP_STYLES);
             break;
 #endif
 

@@ -46,8 +46,7 @@ typedef struct
             vpPhoneticSpell : 1,  // Phonetic spell enabled
             macroMenuLatch  : 1,  // Automatic latch of macro menu
             tetraAfcOff     : 1,  // TETRA frequency correction off
-            rogerBeep       : 1,  // FM: tone at the end of a transmission
-            _reserved       : 1;
+            _reserved       : 2;
     bool    m17_can_rx;           // Check M17 CAN on RX
     char    m17_dest[10];         // M17 destination
     bool    showBatteryIcon;      // Battery display true: icon, false: percentage
@@ -68,6 +67,9 @@ typedef struct
             tetraJoinOff     : 1,  // Do not join calls late on other carriers
             _tetraReserved   : 3;
     uint8_t tetraFilter;          // Talkgroup filter last picked
+#endif
+#ifdef CONFIG_ROGER_BEEP
+    uint8_t rogerBeep;            // FM roger beep style, 0 off (roger_beep.h)
 #endif
 }
 __attribute__((packed)) settings_t;
@@ -92,7 +94,6 @@ static const settings_t default_settings =
     0,                            // Phonetic spell off
     1,                            // Automatic latch of macro menu enabled
     0,                            // TETRA frequency correction on
-    0,                            // No roger beep
     0,                            // not used
     false,                        // Check M17 CAN on RX
     "",                           // Empty M17 destination
@@ -108,6 +109,9 @@ static const settings_t default_settings =
     0,                            // Join calls late
     0,                            // not used
     0,                            // Talkgroup filter: All
+#endif
+#ifdef CONFIG_ROGER_BEEP
+    0,                            // No roger beep
 #endif
 };
 

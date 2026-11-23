@@ -68,6 +68,7 @@ set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
     "$ROOT/tests/platform/ui_render/ui_render.c" \
     "$ROOT/openrtx/src/core/graphics.c" \
     "$ROOT/openrtx/src/core/utils.c" \
+    "$ROOT/openrtx/src/core/roger_beep.c" \
     "$ROOT/openrtx/src/ui/default/ui_main.c" \
     "$ROOT/openrtx/src/ui/default/ui_menu.c" \
     "$ROOT/openrtx/src/ui/default/ui_modes.c" \

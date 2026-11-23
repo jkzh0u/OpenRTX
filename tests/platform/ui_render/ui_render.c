@@ -151,6 +151,17 @@ long long getTick()
     return now;
 }
 
+/* For roger_beep.c, which plays nothing here */
+void delayMs(unsigned int mseconds)
+{
+    (void)mseconds;
+}
+
+void delayUs(unsigned int useconds)
+{
+    (void)useconds;
+}
+
 static bool pttStatus;
 static bool fmRxOpen;
 

@@ -9,6 +9,7 @@
 #include "hwconfig.h"
 #include "interfaces/radio.h"
 #include "core/state.h"
+#include "core/roger_beep.h"
 #include "rtx/OpMode_FM.hpp"
 #include "rtx/rtx.h"
 
@@ -132,8 +133,7 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
     if(!platform_getPttStatus() && (status->opStatus == TX))
     {
         #ifdef CONFIG_ROGER_BEEP
-        if(state.settings.rogerBeep)
-            radio_rogerBeep();
+        rogerBeep_play(state.settings.rogerBeep, radio_setTxTone);
         #endif
 
         audioPath_release(txAudioPath);
