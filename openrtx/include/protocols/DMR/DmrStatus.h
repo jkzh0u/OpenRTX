@@ -42,12 +42,12 @@ struct dmrStatusCall {
 };
 
 struct dmrStatus {
-    bool locked;            /**< Locked to a DMR signal */
-    enum dmrSync sync;      /**< What sent it: base station, mobile... */
+    bool locked;          /**< Locked to a DMR signal */
+    enum dmrSync sync;    /**< What sent it: base station, mobile... */
     bool ccKnown;
-    uint8_t colourCode;     /**< Of the last burst decoded */
-    long long lastData;     /**< Tick of the last data or idle burst */
-    uint8_t lastDataType;   /**< Its data type */
+    uint8_t colourCode;   /**< Of the last burst decoded */
+    long long lastData;   /**< Tick of the last data or idle burst */
+    uint8_t lastDataType; /**< Its data type */
     uint8_t lastDataSlot;
     /** Each timeslot's call (index 1 and 2; 0 for a single transmitter) */
     struct dmrStatusCall slot[3];

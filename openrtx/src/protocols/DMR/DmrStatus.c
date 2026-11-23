@@ -80,8 +80,8 @@ static void addRecent(const struct dmrStatusCall *c)
     /* The same call again (talk and pause) replaces its entry */
     for (uint8_t i = 0; i < status.nRecent; i++) {
         const struct dmrCall *o = &status.recent[i].call;
-        if (o->ids && e.call.ids && o->dst == e.call.dst
-            && o->src == e.call.src && o->group == e.call.group) {
+        if (o->ids && e.call.ids && o->dst == e.call.dst && o->src == e.call.src
+            && o->group == e.call.group) {
             memmove(&status.recent[i], &status.recent[i + 1],
                     (status.nRecent - i - 1) * sizeof(status.recent[0]));
             status.nRecent--;

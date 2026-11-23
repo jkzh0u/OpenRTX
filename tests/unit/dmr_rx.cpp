@@ -252,12 +252,11 @@ struct Tx {
             uint8_t lc[12], raw[128];
             lcBytes(c, lc);
             dmrFec_embeddedLcEncode(lc, raw);
-            uint16_t emb = dmrFec_qr1676Encode(
-                (uint8_t)(cc << 3 | (lcss[n] & 3)));
+            uint16_t emb =
+                dmrFec_qr1676Encode((uint8_t)(cc << 3 | (lcss[n] & 3)));
             put(emb >> 8, 8);
             if (n >= 1 && n <= 4)
-                bits.insert(bits.end(), raw + 32 * (n - 1),
-                            raw + 32 * n);
+                bits.insert(bits.end(), raw + 32 * (n - 1), raw + 32 * n);
             else
                 put(0, 32);
             put(emb & 0xff, 8);
@@ -285,8 +284,8 @@ double rrcPulse(double t)
  * symbol rate off by ppm; deviation of an outer symbol in input units.
  */
 std::vector<int16_t> modulate(const std::vector<uint8_t> &bits, int lead,
-                              double ppm, double outer, double dc,
-                              double noise, bool invert, unsigned seed = 3)
+                              double ppm, double outer, double dc, double noise,
+                              bool invert, unsigned seed = 3)
 {
     std::vector<double> sym;
     for (size_t i = 0; i + 1 < bits.size(); i += 2) {
@@ -334,9 +333,7 @@ std::vector<uint8_t> bsCall(const Lc &c, uint8_t cc, int superframes,
         pair([&] { tx.idle(cc, BS_VOICE); });
     if (headers) {
         for (int i = 0; i < 3; i++)
-            pair([&] {
-                tx.lcBurst(cc, DMR_DT_VOICE_LC_HEADER, c, BS_VOICE);
-            });
+            pair([&] { tx.lcBurst(cc, DMR_DT_VOICE_LC_HEADER, c, BS_VOICE); });
     }
     for (int f = 0; f < superframes; f++) {
         for (int n = 0; n < 6; n++)
@@ -344,9 +341,7 @@ std::vector<uint8_t> bsCall(const Lc &c, uint8_t cc, int superframes,
     }
     if (terminator) {
         for (int i = 0; i < 2; i++)
-            pair([&] {
-                tx.lcBurst(cc, DMR_DT_TERMINATOR_LC, c, BS_VOICE);
-            });
+            pair([&] { tx.lcBurst(cc, DMR_DT_TERMINATOR_LC, c, BS_VOICE); });
     }
     for (int i = 0; i < 6; i++)
         pair([&] { tx.idle(cc, BS_VOICE); });
@@ -360,23 +355,27 @@ struct Rx {
 
     Rx()
     {
-        dmrLink_init(&link, [](void *u, const dmrEvent *ev) {
-            static_cast<Rx *>(u)->events.push_back(*ev);
-            if (getenv("DMR_DEBUG")) {
-                if (ev->type == DMR_EV_CALL) {
-                    const dmrCall &c = ev->u.call.call;
-                    printf("call %d slot %d cc %d ids %d %u -> %u enc %d "
-                           "late %d\n", ev->u.call.what, c.slot, c.colourCode,
-                           c.ids, c.src, c.dst, c.encrypted, c.lateEntry);
-                } else if (ev->type == DMR_EV_LOCK) {
-                    printf("lock %d sync %d\n", ev->u.lock.locked,
-                           ev->u.lock.sync);
-                } else {
-                    printf("data slot %d cc %d dt %d\n", ev->u.data.slot,
-                           ev->u.data.colourCode, ev->u.data.dataType);
+        dmrLink_init(
+            &link,
+            [](void *u, const dmrEvent *ev) {
+                static_cast<Rx *>(u)->events.push_back(*ev);
+                if (getenv("DMR_DEBUG")) {
+                    if (ev->type == DMR_EV_CALL) {
+                        const dmrCall &c = ev->u.call.call;
+                        printf("call %d slot %d cc %d ids %d %u -> %u enc %d "
+                               "late %d\n",
+                               ev->u.call.what, c.slot, c.colourCode, c.ids,
+                               c.src, c.dst, c.encrypted, c.lateEntry);
+                    } else if (ev->type == DMR_EV_LOCK) {
+                        printf("lock %d sync %d\n", ev->u.lock.locked,
+                               ev->u.lock.sync);
+                    } else {
+                        printf("data slot %d cc %d dt %d\n", ev->u.data.slot,
+                               ev->u.data.colourCode, ev->u.data.dataType);
+                    }
                 }
-            }
-        }, this);
+            },
+            this);
     }
 
     void run(const std::vector<int16_t> &s)
@@ -413,8 +412,8 @@ TEST_CASE("DMR base station group call", "[dmr][rx]")
     Lc c{ true, 3020, 3021234, 0 };
     Rx rx;
 
-    rx.run(modulate(bsCall(c, 1, 3, true, true), 1234, 40, 6000, 500, 300,
-                    false));
+    rx.run(
+        modulate(bsCall(c, 1, 3, true, true), 1234, 40, 6000, 500, 300, false));
 
     dmrCall e = rx.ended();
     REQUIRE(e.slot == 1);
@@ -434,8 +433,8 @@ TEST_CASE("DMR late entry from the embedded link control", "[dmr][rx]")
     Lc c{ false, 1234567, 7654321, DMR_OPT_PRIVACY };
     Rx rx;
 
-    rx.run(modulate(bsCall(c, 7, 4, false, false), 77, -30, 5000, -800,
-                    250, false));
+    rx.run(modulate(bsCall(c, 7, 4, false, false), 77, -30, 5000, -800, 250,
+                    false));
 
     auto start = rx.calls(DMR_CALL_START);
     REQUIRE(start.size() == 1);

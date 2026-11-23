@@ -248,8 +248,8 @@ void OpMode_DMR::update(rtxStatus_t *const rtx, const bool newCfg)
     }
 
     dmrLink_process(&receiver, block.data, (unsigned)block.len);
-    dmrStatus_setDemod(receiver.error, dmrLink_inverted(&receiver), receiver.goodBursts,
-                       receiver.badBursts);
+    dmrStatus_setDemod(receiver.error, dmrLink_inverted(&receiver),
+                       receiver.goodBursts, receiver.badBursts);
 
 #ifdef CONFIG_TETRA_LOG
     if (getTick() - lastSignalLog >= LOG_SIGNAL_MS) {
@@ -258,7 +258,8 @@ void OpMode_DMR::update(rtxStatus_t *const rtx, const bool newCfg)
              "bad%s",
              radio_getRssi(), receiver.locked ? "locked" : "no lock",
              (unsigned)(receiver.error * 100.0f),
-             (unsigned long)receiver.goodBursts, (unsigned long)receiver.badBursts,
+             (unsigned long)receiver.goodBursts,
+             (unsigned long)receiver.badBursts,
              dmrLink_inverted(&receiver) ? ", inverted" : "");
     }
 #endif

@@ -66,9 +66,9 @@ struct dmrCall {
 };
 
 enum dmrEventType {
-    DMR_EV_LOCK,  /**< Lock to a signal gained or lost */
-    DMR_EV_CALL,  /**< A call started, was named, or ended */
-    DMR_EV_DATA,  /**< A data burst (CSBK, data, idle...) */
+    DMR_EV_LOCK, /**< Lock to a signal gained or lost */
+    DMR_EV_CALL, /**< A call started, was named, or ended */
+    DMR_EV_DATA, /**< A data burst (CSBK, data, idle...) */
 };
 
 enum dmrCallWhat {

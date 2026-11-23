@@ -9,9 +9,9 @@
 #include "protocols/DMR/DmrLink.h"
 
 /* Burst layout (ETSI TS 102 361-1, 9.1): bit positions */
-#define INFO1 0     /* 98 bits of information */
+#define INFO1 0  /* 98 bits of information */
 #define SLOT_TYPE1 98
-#define SYNC 108    /* 48 bits: sync, or EMB + embedded signalling */
+#define SYNC 108 /* 48 bits: sync, or EMB + embedded signalling */
 #define EMB1 108
 #define EMBEDDED 116
 #define EMB2 148
@@ -168,8 +168,8 @@ static void namedCall(struct dmrLink *l, struct dmrLinkSlot *s, uint8_t slot,
 
     if (s->active) {
         struct dmrCall *o = &s->call;
-        if (o->ids && (o->dst != c.dst || o->src != c.src
-                       || o->group != c.group)) {
+        if (o->ids
+            && (o->dst != c.dst || o->src != c.src || o->group != c.group)) {
             /* Another call: the terminator was missed */
             endCall(l, s);
         } else if (o->ids && o->colourCode == c.colourCode
@@ -191,8 +191,8 @@ static void namedCall(struct dmrLink *l, struct dmrLinkSlot *s, uint8_t slot,
 }
 
 /** Voice heard on a slot whose call is not named yet */
-static void unnamedCall(struct dmrLink *l, struct dmrLinkSlot *s,
-                        uint8_t slot, uint8_t cc)
+static void unnamedCall(struct dmrLink *l, struct dmrLinkSlot *s, uint8_t slot,
+                        uint8_t cc)
 {
     if (s->active)
         return;
@@ -295,9 +295,9 @@ static void dataBurst(struct dmrLink *l, const struct dmrBurst *b,
     switch (dt) {
         case DMR_DT_VOICE_LC_HEADER:
         case DMR_DT_TERMINATOR_LC: {
-            const uint8_t *mask = (dt == DMR_DT_VOICE_LC_HEADER)
-                                    ? maskHeader
-                                    : maskTerminator;
+            const uint8_t *mask = (dt == DMR_DT_VOICE_LC_HEADER) ?
+                                      maskHeader :
+                                      maskTerminator;
             for (int i = 0; i < 3; i++)
                 info[9 + i] ^= mask[i];
             bool lcOk = dmrFec_rs129Check(info);

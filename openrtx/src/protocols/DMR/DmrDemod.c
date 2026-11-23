@@ -28,16 +28,16 @@
 #define PERIOD_SINGLE (288 * SPS)
 
 /* Sync search */
-#define SEARCH_SCORE 0.8f  /* Correlation to start a candidate, unlocked */
-#define TRACK_SCORE 0.6f   /* Correlation of a sync where one is expected */
-#define SEARCH_ERRORS 0    /* Sync symbols of the wrong sign, unlocked */
+#define SEARCH_SCORE 0.8f /* Correlation to start a candidate, unlocked */
+#define TRACK_SCORE 0.6f  /* Correlation of a sync where one is expected */
+#define SEARCH_ERRORS 0   /* Sync symbols of the wrong sign, unlocked */
 #define TRACK_ERRORS 4
 /* RMS spread of the sync symbols' magnitude, as a fraction of the level:
  * they are all outer symbols, where noise has any magnitude */
 #define SEARCH_SPREAD 0.3f
 #define TRACK_SPREAD 0.5f
-#define PEAK_SAMPLES 80    /* Keep looking for a better peak this long */
-#define WINDOW 8           /* Samples around the expected sync, locked */
+#define PEAK_SAMPLES 80 /* Keep looking for a better peak this long */
+#define WINDOW 8        /* Samples around the expected sync, locked */
 
 /* Bursts without a sync before the lock is lost: a voice superframe has
  * one in 6 bursts of its timeslot */
@@ -364,8 +364,8 @@ void dmrDemod_process(struct dmrDemod *d, const int16_t *samples, unsigned n)
                      + (uint32_t)((BURST_SYMBOLS - 1 - SYNC_LAST) * SPS);
         if (cur == end) {
             emitBurst(d);
-            unsigned maxMissed = (d->family == DMR_SYNC_BS) ? MISSED_BS
-                                                            : MISSED_SINGLE;
+            unsigned maxMissed = (d->family == DMR_SYNC_BS) ? MISSED_BS :
+                                                              MISSED_SINGLE;
             if (d->missed >= maxMissed) {
                 d->locked = false;
                 d->candidate = false;

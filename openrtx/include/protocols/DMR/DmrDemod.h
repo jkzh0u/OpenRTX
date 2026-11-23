@@ -85,14 +85,14 @@ struct dmrDemod {
     float peakLevel, peakDc;
 
     /* Burst timing, once locked */
-    uint32_t syncAt;  /**< Centre of the last sync symbol of the next burst */
-    bool syncFound;   /**< syncAt came from a sync, not the flywheel */
-    bool decided;     /**< Whether this burst has a sync is known */
+    uint32_t syncAt; /**< Centre of the last sync symbol of the next burst */
+    bool syncFound;  /**< syncAt came from a sync, not the flywheel */
+    bool decided;    /**< Whether this burst has a sync is known */
     enum dmrSync family;
     int syncSign;
     float syncScore;
-    uint32_t period;  /**< Samples between bursts */
-    unsigned missed;  /**< Bursts without a sync in a row */
+    uint32_t period; /**< Samples between bursts */
+    unsigned missed; /**< Bursts without a sync in a row */
     uint32_t bursts;
     float level, dc;
 

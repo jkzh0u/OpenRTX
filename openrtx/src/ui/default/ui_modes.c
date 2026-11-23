@@ -120,8 +120,8 @@ struct mdPiece {
 };
 
 /** Print pieces centred on a line, two spaces apart */
-static void _ui_mdPieces(point_t pos, fontSize_t font,
-                         const struct mdPiece *p, size_t n)
+static void _ui_mdPieces(point_t pos, fontSize_t font, const struct mdPiece *p,
+                         size_t n)
 {
     uint16_t gap = _ui_mdTextWidth(font, "  ");
     uint16_t total = 0;
@@ -292,8 +292,7 @@ static void _ui_drawFmInfo(void)
                  (unsigned long)(mw / 1000));
     else
         snprintf(p[n].text, sizeof(p[n].text), "%lu.%luW",
-                 (unsigned long)(mw / 1000),
-                 (unsigned long)(mw % 1000 / 100));
+                 (unsigned long)(mw / 1000), (unsigned long)(mw % 1000 / 100));
     p[n++].color = mdMuted;
 
     point_t pos = layout.line1_pos;
@@ -361,11 +360,11 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
      * -127 + level * 66 / 15 dBm (OpMode_FM) */
     uint8_t sql = last_state.settings.sqlLevel;
     unsigned slevel = rssiToSlevel(last_state.rssi);
-    unsigned mark = (sql == 0) ? 0
-                               : rssiToSlevel((rssi_t)(-127 + sql * 66 / 15));
+    unsigned mark = (sql == 0) ? 0 :
+                                 rssiToSlevel((rssi_t)(-127 + sql * 66 / 15));
     if (tx)
-        _ui_mdMeter("SIG", slevel, 11, _ui_mdTraffic(slevel, 7, 4), mark,
-                    "MIC", platform_getMicLevel(), 255, mdTx);
+        _ui_mdMeter("SIG", slevel, 11, _ui_mdTraffic(slevel, 7, 4), mark, "MIC",
+                    platform_getMicLevel(), 255, mdTx);
     else
         _ui_mdMeter("SIG", slevel, 11,
                     rx ? mdVoice : _ui_mdTraffic(slevel, 7, 4), mark, "SQL",
@@ -446,8 +445,8 @@ static void _ui_drawDmrMeter(const struct dmrStatus *ds)
 
     /* Full at 12% symbol error or better, empty at 40% */
     if (ds->locked && ds->symbolError < 40)
-        quality = (ds->symbolError <= 12) ? 255
-                                          : (40 - ds->symbolError) * 255 / 28;
+        quality = (ds->symbolError <= 12) ? 255 :
+                                            (40 - ds->symbolError) * 255 / 28;
     _ui_mdMeter("SIG", slevel, 11, _ui_mdTraffic(slevel, 7, 4), 0, "DEC",
                 quality, 255, _ui_mdTraffic(quality, 170, 90));
 }
@@ -486,12 +485,12 @@ void _ui_drawDmrMain(ui_state_t *ui_state, bool memory)
         sym.y -= (gfx_getFontHeight(FONT_SIZE_12PT)
                   - gfx_getFontHeight(layout.line1_font))
                / 2;
-        gfx_drawSymbol(sym, layout.line1_symbol_size, TEXT_ALIGN_LEFT,
-                       dstColor, SYMBOL_CALL_RECEIVED);
+        gfx_drawSymbol(sym, layout.line1_symbol_size, TEXT_ALIGN_LEFT, dstColor,
+                       SYMBOL_CALL_RECEIVED);
         _ui_mdCallDst(text, sizeof(text), c);
         _ui_mdBigLine(l1, FONT_SIZE_12PT,
-                      gfx_getFontHeight(layout.line1_font) + 2, NULL,
-                      dstColor, text, dstColor);
+                      gfx_getFontHeight(layout.line1_font) + 2, NULL, dstColor,
+                      text, dstColor);
 
         gfx_drawSymbol(l2, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
                        color_white, SYMBOL_CALL_MADE);
@@ -562,8 +561,8 @@ void _ui_drawDmrMain(ui_state_t *ui_state, bool memory)
     if (n > 0)
         _ui_mdPieces(l1, FONT_SIZE_6PT, p, n);
 
-    uint32_t hz = (ds.tunedHz != 0) ? ds.tunedHz
-                                    : last_state.channel.rx_frequency;
+    uint32_t hz = (ds.tunedHz != 0) ? ds.tunedHz :
+                                      last_state.channel.rx_frequency;
     _ui_mdFreq(freq, sizeof(freq), hz);
 
     if (!ds.locked)
@@ -619,11 +618,10 @@ void _ui_drawDmrRecent(ui_state_t *ui_state)
     uint16_t h = gfx_getFontHeight(FONT_SIZE_8PT);
     uint16_t hs = gfx_getFontHeight(FONT_SIZE_6PT);
     uint16_t row = h + hs + 6;
-    uint16_t first = (ui_state->menu_selected < ds.nRecent)
-                       ? ui_state->menu_selected
-                       : ds.nRecent - 1;
-    point_t pos = { layout.horizontal_pad,
-                    (uint16_t)(layout.top_h + h + 4) };
+    uint16_t first = (ui_state->menu_selected < ds.nRecent) ?
+                         ui_state->menu_selected :
+                         ds.nRecent - 1;
+    point_t pos = { layout.horizontal_pad, (uint16_t)(layout.top_h + h + 4) };
 
     for (uint8_t i = first; i < ds.nRecent; i++) {
         if (pos.y + hs + 2 > CONFIG_SCREEN_HEIGHT)
@@ -640,11 +638,9 @@ void _ui_drawDmrRecent(ui_state_t *ui_state)
         point_t sub = { pos.x, (uint16_t)(pos.y + hs + 3) };
         if (r->call.ids)
             snprintf(line, sizeof(line), "from %lu  %s",
-                     (unsigned long)r->call.src,
-                     _ui_mdSlotName(r->call.slot));
+                     (unsigned long)r->call.src, _ui_mdSlotName(r->call.slot));
         else
-            snprintf(line, sizeof(line), "%s",
-                     _ui_mdSlotName(r->call.slot));
+            snprintf(line, sizeof(line), "%s", _ui_mdSlotName(r->call.slot));
         gfx_print(sub, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, mdMuted, "%s", line);
         pos.y += row;
     }
