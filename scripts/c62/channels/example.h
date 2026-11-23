@@ -29,13 +29,15 @@ CPS_CHANNEL("TETRA Site 2", 390037500, OPMODE_TETRA)
 /*
  * FM channels with all their settings: name, receive and transmit
  * frequency in Hz (transmit 0: receive only), width (12500 or 25000 Hz),
- * and receive and transmit CTCSS tones in tenths of Hz (0: none). For a
+ * and receive and transmit tones: CTCSS in tenths of Hz, a DCS code as D023N
+ * (normal) or D023I (inverted), or 0 for none. For a
  * repeater, transmit is the input frequency and the transmit tone is the
  * one it needs.
  */
 FM_CHANNEL("2m Calling", 146520000, 146520000, 25000, 0, 0)
 FM_CHANNEL("70cm Rptr", 443150000, 448150000, 12500, 1035, 1035)
 FM_CHANNEL("Marine 16", 156800000, 0, 25000, 0, 0)
+FM_CHANNEL("GMRS 1 DCS", 462562500, 462562500, 12500, D023N, D023N)
 
 /*
  * TETRA talkgroup filters, chosen on the radio with # and *, in this

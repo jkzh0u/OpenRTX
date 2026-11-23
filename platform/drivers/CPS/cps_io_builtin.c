@@ -108,6 +108,10 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
         channel->fm.rxTone = c.rxTone & 0x7f;
         channel->fm.txToneEn = (c.txTone >> 7) & 1;
         channel->fm.txTone = c.txTone & 0x7f;
+        channel->rxDcs = (c.toneFlags & CHLIST_RX_DCS) ? 1 : 0;
+        channel->txDcs = (c.toneFlags & CHLIST_TX_DCS) ? 1 : 0;
+        channel->rxDcsInv = (c.toneFlags & CHLIST_RX_DCS_INV) ? 1 : 0;
+        channel->txDcsInv = (c.toneFlags & CHLIST_TX_DCS_INV) ? 1 : 0;
     }
     strncpy(channel->name, c.name, sizeof(channel->name) - 1);
 #else

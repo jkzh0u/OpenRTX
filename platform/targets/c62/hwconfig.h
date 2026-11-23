@@ -38,6 +38,8 @@ extern "C" {
 #define CONFIG_UI_FM_SCREEN
 /* FM roger beep, from the BK4819's tone generator */
 #define CONFIG_ROGER_BEEP
+/* FM DCS codes as well as CTCSS tones */
+#define CONFIG_DCS
 
 /* Battery type */
 #define CONFIG_BAT_LIION

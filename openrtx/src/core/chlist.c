@@ -204,6 +204,7 @@ bool chlist_channel(size_t i, struct chlistChannel *out)
     out->flags = r[14];
     out->rxTone = r[15];
     out->txTone = r[16];
+    out->toneFlags = r[17]; /* 0 in images from before DCS */
     return true;
 }
 

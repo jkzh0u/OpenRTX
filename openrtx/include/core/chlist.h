@@ -74,7 +74,14 @@ struct chlistChannel {
     uint8_t flags;
     uint8_t rxTone;
     uint8_t txTone;
+    uint8_t toneFlags; /**< CHLIST_RX_DCS... */
 };
+
+/* Tone flags of a channel: its tones are DCS codes, and inverted */
+#define CHLIST_RX_DCS 0x01
+#define CHLIST_TX_DCS 0x02
+#define CHLIST_RX_DCS_INV 0x04
+#define CHLIST_TX_DCS_INV 0x08
 
 struct chlistId {
     uint32_t ssi;

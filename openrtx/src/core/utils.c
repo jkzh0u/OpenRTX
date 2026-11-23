@@ -83,6 +83,22 @@ uint8_t rssiToSlevel(const rssi_t rssi)
     return (uint8_t)(127 + rssi) / 6;
 }
 
+uint32_t dcsCodeWord(uint16_t code, bool inverted)
+{
+    uint32_t data = 0x800u | (code & 0x1ffu);
+    uint32_t word = data;
+
+    /* Golay(23,12) parity: generator 0xc75, reflected 0x8ea, bit by bit */
+    for (int i = 0; i < 12; i++) {
+        word <<= 1;
+        if (word & 0x1000u)
+            word ^= 0x08eau;
+    }
+
+    uint32_t cw = data | ((word & 0x0ffeu) << 11);
+    return inverted ? (cw ^ 0x7fffffu) : cw;
+}
+
 uint8_t ctcssFreqToIndex(const uint16_t freq)
 {
     for(uint8_t idx = 0; idx < CTCSS_FREQ_NUM; idx += 1)

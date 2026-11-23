@@ -997,8 +997,8 @@ The main screen shows, from the top:
 | Width | 12.5 kHz (narrow, most repeaters today) or 25 kHz |
 | Power | 1, 2.5 or 5 W. New channels and the VFO start at 5 W |
 | Tone mode | None, Encode (send the tone), Decode (open only on the tone), Both |
-| TX tone | The CTCSS tone sent, 67.0 to 254.1 Hz |
-| RX tone | The CTCSS tone the squelch waits for |
+| TX tone | The tone sent: a CTCSS tone, 67.0 to 254.1 Hz, or a DCS code, D023N to D754N, then the inverted D023I to D754I |
+| RX tone | The tone the squelch waits for, from the same list. A DCS code opens it whether it arrives normal or inverted |
 | Talk permit | A tone in the radio's own speaker when you press PTT, telling you to talk, as on Motorola radios: Off (at first), Beep, Double, Motorola (Motorola's trunking talk permit: four 910 Hz bursts, getting longer), Triple (three short 1000 Hz beeps), Melody (four quick notes, G C G E) or Chime. Not transmitted; the transmitter keys up just after it, 0.1 to 0.2 s later. Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
@@ -1017,8 +1017,8 @@ FM_CHANNEL("Marine 16", 156800000, 0, 25000, 0, 0)
 
 with the name, the receive and the transmit frequency in Hz (a repeater's
 input; 0 for receive only), the width in Hz, 12500 or 25000, and the
-receive and transmit CTCSS tones in tenths of Hz, 885 for 88.5 Hz, or 0
-for none. `chlist.py` checks the tones against the standard list and
+receive and transmit tones: CTCSS in tenths of Hz (885 for 88.5 Hz), a
+DCS code as `D023N` (normal) or `D023I` (inverted), or 0 for none. `chlist.py` checks the tones against the standard list and
 `--show` prints the result. `CPS_CHANNEL(..., OPMODE_FM)` channels stay
 receive only, 25 kHz, without tones.
 

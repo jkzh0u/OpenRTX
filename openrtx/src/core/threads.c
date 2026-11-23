@@ -32,6 +32,24 @@ pthread_mutex_t rtx_mutex;
 /**
  * \internal Thread managing user input and UI
  */
+
+/**
+ * A channel's tone for the rtx configuration: a CTCSS frequency, or with
+ * CONFIG_DCS a DCS code (core/cps.h, RTX_TONE_DCS).
+ */
+static uint16_t toneConfig(uint8_t index, bool dcs, bool inverted)
+{
+#ifdef CONFIG_DCS
+    if (dcs)
+        return RTX_TONE_DCS | (inverted ? RTX_TONE_DCS_INV : 0)
+             | dcs_code[index % DCS_CODE_NUM];
+#else
+    (void)dcs;
+    (void)inverted;
+#endif
+    return ctcss_tone[index % CTCSS_FREQ_NUM];
+}
+
 void *ui_threadFunc(void *arg)
 {
     (void) arg;
@@ -86,9 +104,13 @@ void *ui_threadFunc(void *arg)
             rtx_cfg.txPower     = state.channel.power;
             rtx_cfg.sqlLevel    = state.settings.sqlLevel;
             rtx_cfg.rxToneEn    = state.channel.fm.rxToneEn;
-            rtx_cfg.rxTone      = ctcss_tone[state.channel.fm.rxTone];
+            rtx_cfg.rxTone      = toneConfig(state.channel.fm.rxTone,
+                                             state.channel.rxDcs,
+                                             state.channel.rxDcsInv);
             rtx_cfg.txToneEn    = state.channel.fm.txToneEn;
-            rtx_cfg.txTone      = ctcss_tone[state.channel.fm.txTone];
+            rtx_cfg.txTone      = toneConfig(state.channel.fm.txTone,
+                                             state.channel.txDcs,
+                                             state.channel.txDcsInv);
             rtx_cfg.toneEn      = state.tone_enabled;
 
             // Enable Tx if channel allows it and we are in UI main screen

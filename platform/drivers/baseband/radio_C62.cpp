@@ -259,8 +259,54 @@ void radio_setOpmode(const enum opmode mode)
     radioMode = mode;
 }
 
+/**
+ * Set the CTCSS/DCS generator and detector for a tone of the rtx
+ * configuration: a CTCSS frequency in tenths of Hz, or a DCS code
+ * (RTX_TONE_DCS, core/cps.h).
+ *
+ * @param tone: the tone.
+ * @param transmit: for transmitting, else for receiving.
+ */
+static void setTone(uint16_t tone, bool transmit)
+{
+#ifdef CONFIG_DCS
+    if (tone & RTX_TONE_DCS) {
+        uint32_t cw = dcsCodeWord(tone & 0x1ff, (tone & RTX_TONE_DCS_INV) != 0);
+        /*
+         * CDCSS (mode bit 10 clear), 23-bit code (bit 11 clear), the codeword
+         * as given (an inverted code is
+         * already inverted), no auto bandwidth, TX gain 51; REG_07 2775 is
+         * the 134.4 bit/s clock; REG_08 takes the codeword's low then
+         * high 12 bits
+         */
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_51,
+                        BK4819_REG51_TX_CTCDSS_ENABLE | BITV(51, 0));
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_07, 2775);
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_08, cw & 0xfff);
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_08,
+                        0x8000 | ((cw >> 12) & 0xfff));
+        return;
+    }
+#endif
+    if (transmit)
+        bk4819_enable_tx_ctcss(&c62_bk4819, tone);
+    else
+        bk4819_enable_rx_ctcss(&c62_bk4819, tone);
+}
+
 bool radio_checkRxDigitalSquelch()
 {
+#ifdef CONFIG_DCS
+    /*
+     * DCS: the code programmed, received as it is (REG_0C bit 14) or
+     * inverted (bit 15). Both open the squelch: the discriminator's
+     * polarity decides which one a code arrives as.
+     */
+    if (config != NULL && config->rxToneEn && (config->rxTone & RTX_TONE_DCS))
+        return (BK4819_readReg(&c62_bk4819, BK4819_REG_0C)
+                & (BK4819_FLAG_CDCSS_PCR | BK4819_FLAG_CDCSS_PNR))
+            != 0;
+#endif
     return bk4819_get_ctcss(&c62_bk4819);
 }
 
@@ -302,7 +348,7 @@ void radio_enableRx()
     } else {
         bk4819_SetFilterBandwidth(&c62_bk4819, config->bandwidth);
         if (config->rxToneEn)
-            bk4819_enable_rx_ctcss(&c62_bk4819, config->rxTone);
+            setTone(config->rxTone, false);
     }
 
     bk4819_rx_on(&c62_bk4819);
@@ -331,7 +377,7 @@ void radio_enableTx()
     if (flatMode(radioMode))
         applyM17Fields(true);
     else if (config->txToneEn)
-        bk4819_enable_tx_ctcss(&c62_bk4819, config->txTone);
+        setTone(config->txTone, true);
 
     if (config->txFrequency < 174000000) {
         gpioDev_set(&c62_bk4819_gpio, GPIO_VHF_TX_PA);

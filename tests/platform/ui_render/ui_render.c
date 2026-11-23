@@ -193,6 +193,19 @@ bool rtx_rxSquelchOpen()
 
 const uint16_t ctcss_tone[] = { 670 };
 
+/* As in core/cps.c */
+const uint16_t dcs_code[DCS_CODE_NUM] = {
+    0023, 0025, 0026, 0031, 0032, 0036, 0043, 0047, 0051, 0053, 0054, 0065,
+    0071, 0072, 0073, 0074, 0114, 0115, 0116, 0122, 0125, 0131, 0132, 0134,
+    0143, 0145, 0152, 0155, 0156, 0162, 0165, 0172, 0174, 0205, 0212, 0223,
+    0225, 0226, 0243, 0244, 0245, 0246, 0251, 0252, 0255, 0261, 0263, 0265,
+    0266, 0271, 0274, 0306, 0311, 0315, 0325, 0331, 0332, 0343, 0346, 0351,
+    0356, 0364, 0365, 0371, 0411, 0412, 0413, 0423, 0431, 0432, 0445, 0446,
+    0452, 0454, 0455, 0462, 0464, 0465, 0466, 0503, 0506, 0516, 0523, 0526,
+    0532, 0546, 0565, 0606, 0612, 0624, 0627, 0631, 0632, 0654, 0662, 0664,
+    0703, 0712, 0723, 0731, 0732, 0734, 0743, 0754
+};
+
 /* ---- Display: the frame buffer to a PNG file ---- */
 
 void display_init()
@@ -575,6 +588,19 @@ static void fmScenes(void)
     scene("fm-4-transmitting", true);
     pttStatus = false;
 
+    /* A DCS channel: D023N both ways */
+    last_state.channel.rxDcs = 1;
+    last_state.channel.txDcs = 1;
+    last_state.channel.fm.txTone = 0;
+    last_state.channel.fm.rxTone = 0;
+    last_state.rssi = -127;
+    strcpy(last_state.channel.name, "GMRS DCS");
+    last_state.channel.rx_frequency = 462562500;
+    last_state.channel.tx_frequency = 462562500;
+    scene("fm-5-dcs-memory", true);
+    last_state.channel.rxDcs = 0;
+    last_state.channel.txDcs = 0;
+
     last_state.channel = saved;
     strcpy(last_state.channel.name, savedName);
     last_state.rssi = -85;
@@ -633,6 +659,10 @@ static void menuScenes(void)
     last_state.channel.fm.rxToneEn = 0;
     menu("menu-07-fm", _ui_drawSettingsFM, 0);
     menu("menu-07b-fm-end", _ui_drawSettingsFM, settings_fm_num - 1);
+    last_state.channel.rxDcs = 1;
+    last_state.channel.rxDcsInv = 1;
+    last_state.channel.fm.rxTone = 103;
+    menu("menu-07c-fm-dcs", _ui_drawSettingsFM, 5);
     last_state.channel = before;
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
     menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);

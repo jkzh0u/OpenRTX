@@ -89,6 +89,24 @@ enum CTCSSfreq
  */
 extern const uint16_t ctcss_tone[];
 
+/** Standard DCS codes */
+#define DCS_CODE_NUM 104
+
+/**
+ * DCS code table: the codes as numbers whose octal digits are the code, e.g.
+ * 023 for D023.
+ */
+extern const uint16_t dcs_code[];
+
+/*
+ * In the rtx configuration (rtxStatus_t rxTone and txTone, 15 bits), a DCS
+ * code is RTX_TONE_DCS, plus RTX_TONE_DCS_INV for an inverted code, plus the
+ * code (octal digits, as in dcs_code[]). Any other value is a CTCSS tone in
+ * tenths of Hz.
+ */
+#define RTX_TONE_DCS 0x4000
+#define RTX_TONE_DCS_INV 0x2000
+
 /**
  * Transmit power of a new channel (the VFO at first start, channel list
  * channels), mW: the C62's full power, 1 W on other radios.
@@ -239,7 +257,11 @@ typedef struct
 
     uint8_t bandwidth      : 2,    //< Bandwidth
             rx_only        : 1,    //< 1 means RX-only channel
-            _unused        : 5;    //< Padding to 8 bits
+            rxDcs          : 1,    //< FM: rxTone is a DCS code index (CONFIG_DCS)
+            txDcs          : 1,    //< FM: txTone is a DCS code index
+            rxDcsInv       : 1,    //< FM: inverted (I) RX DCS code
+            txDcsInv       : 1,    //< FM: inverted (I) TX DCS code
+            _unused        : 1;    //< Padding to 8 bits
 
     uint32_t power;                //< Tx power, in mW
 

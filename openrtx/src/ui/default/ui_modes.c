@@ -214,13 +214,6 @@ static void _ui_mdLines(point_t *big, point_t *small)
 #endif
 }
 
-/** Tone index as text, e.g. 67.0 */
-static void _ui_mdTone(char *buf, size_t len, uint8_t index)
-{
-    uint16_t tone = ctcss_tone[(index < CTCSS_FREQ_NUM) ? index : 0];
-    snprintf(buf, len, "%u.%u", tone / 10, tone % 10);
-}
-
 /**
  * The FM settings in effect, small, on line 1: channel width, tones,
  * repeater shift and power.
@@ -230,16 +223,19 @@ static void _ui_drawFmInfo(void)
     const channel_t *ch = &last_state.channel;
     struct mdPiece p[4];
     size_t n = 0;
-    char t[8], r[8];
+    char t[10], r[10];
 
     snprintf(p[n].text, sizeof(p[n].text), "%s",
              (ch->bandwidth == BW_12_5) ? "12.5k" : "25k");
     p[n++].color = mdMuted;
 
-    _ui_mdTone(t, sizeof(t), ch->fm.txTone);
-    _ui_mdTone(r, sizeof(r), ch->fm.rxTone);
-    if (ch->fm.txToneEn && ch->fm.rxToneEn && ch->fm.txTone == ch->fm.rxTone)
-        snprintf(p[n].text, sizeof(p[n].text), "TSQ %s", t);
+    _ui_toneName(t, sizeof(t), ch->fm.txTone, ch->txDcs, ch->txDcsInv);
+    _ui_toneName(r, sizeof(r), ch->fm.rxTone, ch->rxDcs, ch->rxDcsInv);
+    bool same = (ch->fm.txTone == ch->fm.rxTone) && (ch->txDcs == ch->rxDcs)
+             && (!ch->txDcs || ch->txDcsInv == ch->rxDcsInv);
+    if (ch->fm.txToneEn && ch->fm.rxToneEn && same)
+        snprintf(p[n].text, sizeof(p[n].text), "%s%s", ch->txDcs ? "" : "TSQ ",
+                 t);
     else if (ch->fm.txToneEn && ch->fm.rxToneEn)
         snprintf(p[n].text, sizeof(p[n].text), "T%s R%s", t, r);
     else if (ch->fm.txToneEn)

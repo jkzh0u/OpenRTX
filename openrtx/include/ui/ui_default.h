@@ -289,6 +289,18 @@ extern const char *settings_tetra_items[];
 extern const uint8_t settings_tetra_num;
 #endif
 extern const char *backup_restore_items[];
+
+/**
+ * A channel's FM tone as text: a CTCSS tone, e.g. 88.5, or a DCS code,
+ * e.g. D023N (CONFIG_DCS).
+ */
+void _ui_toneName(char *buf, size_t len, uint8_t index, bool dcs, bool inv);
+
+/**
+ * Step an FM tone through the CTCSS tones, then (CONFIG_DCS) the DCS codes,
+ * normal then inverted.
+ */
+void _ui_stepTone(uint8_t *index, bool *dcs, bool *inv, int step);
 extern const char *info_items[];
 extern const char *authors[];
 extern const uint8_t menu_num;

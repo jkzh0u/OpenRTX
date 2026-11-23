@@ -10,6 +10,7 @@
 #include "core/datatypes.h"
 #include <stdint.h>
 #include <stddef.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -77,6 +78,16 @@ void stripTrailingZeroes(char *str);
  * @return S level, from S0 to S11
  */
 uint8_t rssiToSlevel(const rssi_t rssi);
+
+/**
+ * The 23-bit DCS codeword of a code: the code's 9 bits, a fixed 100, and
+ * the Golay(23,12) parity, first sent in bit 0.
+ *
+ * @param code: DCS code, its octal digits as in dcs_code[] (e.g. 023).
+ * @param inverted: the inverted (I) code, every bit flipped.
+ * @return the codeword.
+ */
+uint32_t dcsCodeWord(uint16_t code, bool inverted);
 
 /**
  * Retrieve the CTCSS tone index given its frequency in tenths of Hz.

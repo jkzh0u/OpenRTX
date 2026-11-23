@@ -451,6 +451,40 @@ int _ui_getM17ValueName(char *buf, uint8_t max_len, uint8_t index)
 }
 #endif
 
+void _ui_toneName(char *buf, size_t len, uint8_t index, bool dcs, bool inv)
+{
+#ifdef CONFIG_DCS
+    if (dcs) {
+        sniprintf(buf, len, "D%03o%c", dcs_code[index % DCS_CODE_NUM],
+                  inv ? 'I' : 'N');
+        return;
+    }
+#else
+    (void)dcs;
+    (void)inv;
+#endif
+    uint16_t tone = ctcss_tone[index % CTCSS_FREQ_NUM];
+    sniprintf(buf, len, "%d.%d", tone / 10, tone % 10);
+}
+
+void _ui_stepTone(uint8_t *index, bool *dcs, bool *inv, int step)
+{
+#ifdef CONFIG_DCS
+    const int count = CTCSS_FREQ_NUM + 2 * DCS_CODE_NUM;
+    int pos = !*dcs  ? (*index % CTCSS_FREQ_NUM)
+            : !*inv ? CTCSS_FREQ_NUM + (*index % DCS_CODE_NUM)
+                    : CTCSS_FREQ_NUM + DCS_CODE_NUM + (*index % DCS_CODE_NUM);
+#else
+    const int count = CTCSS_FREQ_NUM;
+    int pos = *index % CTCSS_FREQ_NUM;
+#endif
+    pos = (pos + count + step) % count;
+    *dcs = pos >= CTCSS_FREQ_NUM;
+    *inv = pos >= CTCSS_FREQ_NUM + DCS_CODE_NUM;
+    *index = (uint8_t)(!*dcs ? pos
+                       : (pos - CTCSS_FREQ_NUM) % DCS_CODE_NUM);
+}
+
 int _ui_getFMEntryName(char* buf, uint8_t max_len, uint8_t index)
 {
     if (index >= settings_fm_num)
@@ -513,10 +547,12 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
 
         case FM_TX_TONE:
         case FM_RX_TONE: {
-            uint8_t idx = (index == FM_TX_TONE) ? ch->fm.txTone
-                                                : ch->fm.rxTone;
-            uint16_t tone = ctcss_tone[idx % CTCSS_FREQ_NUM];
-            sniprintf(buf, max_len, "%d.%d", (tone / 10), (tone % 10));
+            if (index == FM_TX_TONE)
+                _ui_toneName(buf, max_len, ch->fm.txTone, ch->txDcs,
+                             ch->txDcsInv);
+            else
+                _ui_toneName(buf, max_len, ch->fm.rxTone, ch->rxDcs,
+                             ch->rxDcsInv);
             break;
         }
     }

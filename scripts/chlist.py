@@ -21,7 +21,8 @@ openrtx/include/protocols/TETRA/TetraIds.h:
 with C comments. CPS_CHANNEL channels are receive only, 25 kHz, without
 tones. FM_CHANNEL is an FM channel with all its settings: tx_hz the
 transmit frequency (0: receive only), width_hz 12500 or 25000, and the
-CTCSS tones in tenths of Hz (885 for 88.5 Hz), 0 for none.
+tones: CTCSS in tenths of Hz (885 for 88.5 Hz), a DCS code as D023N
+(normal) or D023I (inverted), or 0 for none.
 TF_PRIORITY(n), n from 1 (lowest) to 15, gives a
 talkgroup's calls priority over others; alarm talkgroups have 15 unless
 given another. The image (openrtx/include/core/chlist.h) is flashed apart
@@ -47,6 +48,19 @@ MODE_NAMES = {v: k[7:] for k, v in OPMODES.items()}
 BW_12_5 = 0
 BW_25 = 1
 TONE_ON = 0x80
+# Tone flags byte of a channel (openrtx/include/core/chlist.h)
+RX_DCS, TX_DCS, RX_DCS_INV, TX_DCS_INV = 0x01, 0x02, 0x04, 0x08
+DCS = (0o23, 0o25, 0o26, 0o31, 0o32, 0o36, 0o43, 0o47, 0o51, 0o53, 0o54, 0o65,
+       0o71, 0o72, 0o73, 0o74, 0o114, 0o115, 0o116, 0o122, 0o125, 0o131,
+       0o132, 0o134, 0o143, 0o145, 0o152, 0o155, 0o156, 0o162, 0o165, 0o172,
+       0o174, 0o205, 0o212, 0o223, 0o225, 0o226, 0o243, 0o244, 0o245, 0o246,
+       0o251, 0o252, 0o255, 0o261, 0o263, 0o265, 0o266, 0o271, 0o274, 0o306,
+       0o311, 0o315, 0o325, 0o331, 0o332, 0o343, 0o346, 0o351, 0o356, 0o364,
+       0o365, 0o371, 0o411, 0o412, 0o413, 0o423, 0o431, 0o432, 0o445, 0o446,
+       0o452, 0o454, 0o455, 0o462, 0o464, 0o465, 0o466, 0o503, 0o506, 0o516,
+       0o523, 0o526, 0o532, 0o546, 0o565, 0o606, 0o612, 0o624, 0o627, 0o631,
+       0o632, 0o654, 0o662, 0o664, 0o703, 0o712, 0o723, 0o731, 0o732, 0o734,
+       0o743, 0o754)
 # CTCSS tones, tenths of Hz: the index is what the image keeps
 # (openrtx/src/core/cps.c)
 CTCSS = (670, 693, 719, 744, 770, 797, 825, 854, 885, 915, 948, 974, 1000,
@@ -216,15 +230,22 @@ def number(arg, line, filters=None):
 
 
 def tone(arg, line):
-    """A CTCSS tone in tenths of Hz, 0 for none, as the image keeps it."""
+    """A tone as the image keeps it: (byte, DCS, inverted). CTCSS in tenths
+    of Hz, a DCS code as D023N or D023I, or 0 for none."""
+    m = re.fullmatch(r"\s*D([0-7]{3})([NIni]?)\s*", arg)
+    if m:
+        code = int(m.group(1), 8)
+        if code not in DCS:
+            raise ListError(f"line {line}: {arg}: not a standard DCS code")
+        return TONE_ON | DCS.index(code), True, m.group(2).upper() == "I"
     v = number(arg, line)
     if v == 0:
-        return 0
+        return 0, False, False
     if v not in CTCSS:
         near = min(CTCSS, key=lambda t: abs(t - v))
         raise ListError(f"line {line}: {arg}: not a CTCSS tone (tenths of "
                         f"Hz; nearest {near // 10}.{near % 10} Hz is {near})")
-    return TONE_ON | CTCSS.index(v)
+    return TONE_ON | CTCSS.index(v), False, False
 
 
 def ssi(arg, line):
@@ -264,7 +285,7 @@ def parse(text):
             if not 1 <= freq < 1 << 32:
                 raise ListError(f"line {line}: bad frequency {args[1]}")
             channels.append((freq, freq, string(args[0], line), mode, BW_25,
-                             RX_ONLY, 0, 0))
+                             RX_ONLY, 0, 0, 0))
         elif name == "FM_CHANNEL":
             rx = number(args[1], line)
             tx = number(args[2], line)
@@ -276,11 +297,14 @@ def parse(text):
             if width not in (12500, 25000):
                 raise ListError(f"line {line}: width {args[3]}: 12500 or "
                                 f"25000")
+            rxt, rxd, rxi = tone(args[4], line)
+            txt, txd, txi = tone(args[5], line)
+            tflags = ((RX_DCS if rxd else 0) | (TX_DCS if txd else 0)
+                      | (RX_DCS_INV if rxi else 0) | (TX_DCS_INV if txi else 0))
             channels.append((rx, tx if tx else rx, string(args[0], line),
                              OPMODES["OPMODE_FM"],
                              BW_12_5 if width == 12500 else BW_25,
-                             0 if tx else RX_ONLY, tone(args[4], line),
-                             tone(args[5], line)))
+                             0 if tx else RX_ONLY, rxt, txt, tflags))
         elif name == "TETRA_ID":
             v = number(args[2], line, filters)
             ids.append((ssi(args[0], line), string(args[1], line),
@@ -314,9 +338,9 @@ def build(lists):
         return offsets[s]
 
     body = bytearray()
-    for rx, tx, name, mode, bw, flags, rxt, txt in channels:
-        body += struct.pack("<IIIBBBBB3x", rx, tx, ref(name), mode, bw, flags,
-                            rxt, txt)
+    for rx, tx, name, mode, bw, flags, rxt, txt, tflags in channels:
+        body += struct.pack("<IIIBBBBBB2x", rx, tx, ref(name), mode, bw, flags,
+                            rxt, txt, tflags)
     for name in filter_names:
         body += struct.pack("<I", ref(name))
     for ident, name, mask, prio in ids:
@@ -359,18 +383,23 @@ def show(data):
           f"{nl} location areas, {nr} ranges")
     fnames = ["All"]
     for i in range(nc):
-        rx, tx, name, mode, bw, flags, rxt, txt = struct.unpack_from(
-            "<IIIBBBBB3x", data, at)
+        rx, tx, name, mode, bw, flags, rxt, txt, tflags = struct.unpack_from(
+            "<IIIBBBBBB2x", data, at)
         at += 20
         extra = ""
         if mode == OPMODES["OPMODE_FM"]:
-            def t(v):
-                if not v & TONE_ON or (v & 0x7F) >= len(CTCSS):
+            def t(v, dcs, inv):
+                if not v & TONE_ON:
+                    return "-"
+                if dcs and (v & 0x7F) < len(DCS):
+                    return f"D{DCS[v & 0x7F]:03o}{'I' if inv else 'N'}"
+                if (v & 0x7F) >= len(CTCSS):
                     return "-"
                 c = CTCSS[v & 0x7F]
                 return f"{c // 10}.{c % 10}"
             extra = (f" {'12.5' if bw == BW_12_5 else '25'} kHz"
-                     f" tones {t(rxt)}/{t(txt)}")
+                     f" tones {t(rxt, tflags & RX_DCS, tflags & RX_DCS_INV)}"
+                     f"/{t(txt, tflags & TX_DCS, tflags & TX_DCS_INV)}")
             if flags & RX_ONLY:
                 extra += " RX only"
             elif tx != rx:

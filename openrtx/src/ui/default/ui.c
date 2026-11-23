@@ -933,15 +933,19 @@ static void _ui_changeFmSetting(uint8_t item, int step)
                              queueFlags | vpqIncludeDescriptions);
             break;
 
-        case FM_TX_TONE:
-            state.channel.fm.txTone = (uint8_t)((state.channel.fm.txTone
-                                                 + CTCSS_FREQ_NUM + step)
-                                                % CTCSS_FREQ_NUM);
+        case FM_TX_TONE: {
+            uint8_t idx = state.channel.fm.txTone;
+            bool dcs = state.channel.txDcs, inv = state.channel.txDcsInv;
+            _ui_stepTone(&idx, &dcs, &inv, step);
+            state.channel.fm.txTone = idx;
+            state.channel.txDcs = dcs;
+            state.channel.txDcsInv = inv;
             vp_announceCTCSS(state.channel.fm.rxToneEn,
                              state.channel.fm.rxTone,
                              state.channel.fm.txToneEn,
                              state.channel.fm.txTone, queueFlags);
             break;
+        }
 
 #ifdef CONFIG_ROGER_BEEP
         case FM_TALK_PERMIT:
@@ -957,15 +961,19 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 #endif
 
-        case FM_RX_TONE:
-            state.channel.fm.rxTone = (uint8_t)((state.channel.fm.rxTone
-                                                 + CTCSS_FREQ_NUM + step)
-                                                % CTCSS_FREQ_NUM);
+        case FM_RX_TONE: {
+            uint8_t idx = state.channel.fm.rxTone;
+            bool dcs = state.channel.rxDcs, inv = state.channel.rxDcsInv;
+            _ui_stepTone(&idx, &dcs, &inv, step);
+            state.channel.fm.rxTone = idx;
+            state.channel.rxDcs = dcs;
+            state.channel.rxDcsInv = inv;
             vp_announceCTCSS(state.channel.fm.rxToneEn,
                              state.channel.fm.rxTone,
                              state.channel.fm.txToneEn,
                              state.channel.fm.txTone, queueFlags);
             break;
+        }
 
         default:
             break;
