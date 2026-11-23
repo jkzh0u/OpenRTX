@@ -153,11 +153,12 @@ static uint16_t fmFields[ARRAY_SIZE(m17Fields)];
 
 /**
  * Digital modes receive through the flat, wide M17 audio path: M17, and
- * TETRA (receive only).
+ * TETRA and DMR (receive only).
  */
 static bool flatMode(enum opmode mode)
 {
-    return (mode == OPMODE_M17) || (mode == OPMODE_TETRA);
+    return (mode == OPMODE_M17) || (mode == OPMODE_TETRA)
+        || (mode == OPMODE_DMR);
 }
 
 /**
@@ -311,7 +312,8 @@ void radio_enableRx()
 
 void radio_enableTx()
 {
-    if (config->txDisable == 1 || radioMode == OPMODE_TETRA)
+    if (config->txDisable == 1 || radioMode == OPMODE_TETRA
+        || radioMode == OPMODE_DMR)
         return;
 
     gpioDev_clear(&c62_bk4819_gpio, GPIO_VHF_RX_LNA);
