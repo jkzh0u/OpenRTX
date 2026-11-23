@@ -11,8 +11,14 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
 - receives **FM** and **M17**, and **TETRA** downlinks ("T" mode): it decodes
   calls, plays clear speech, shows short messages, follows calls to other
   carriers and moves between cells of the network by itself (section 5);
-- reads a **channel list** you flash next to the firmware, with TETRA
-  **talkgroup names** and **filters** chosen on the radio (section 6): one
+- has an **FM** screen showing width, tones, repeater shift and power, with
+  a signal meter marking the squelch level, and an FM settings page
+  (section 10);
+- receives **DMR** ("D" mode): who calls whom on each timeslot, the colour
+  code and the recent calls, without the voice (section 11);
+- reads a **channel list** you flash next to the firmware, with FM channels
+  complete with tones and repeater shift, TETRA **talkgroup names** and
+  **filters** chosen on the radio (section 6): one
   firmware for everyone, each with their own list. An example list and a
   full one for the Toronto Transit Commission network are included;
 - **saves its settings** and the channel in use a few seconds after a
@@ -24,7 +30,7 @@ OpenRTX for the Retevis C62, with a TETRA receiver. This build:
 - builds with Docker (section 1), and its screens can be previewed on a
   computer (section 7).
 
-It is receive only in T mode.
+It is receive only in T and D modes.
 
 ## Quick start
 
@@ -94,7 +100,7 @@ own does the same, without the side key.
 
 | Side key + | Does |
 |---|---|
-| **5** | Change mode: FM, M17, T (TETRA) |
+| **5** | Change mode: FM, M17, T (TETRA), D (DMR) |
 | **1** / **2** / **3** | FM: CTCSS off, encode, decode or both / tone down / tone up |
 | **4** | FM: bandwidth 12.5 or 25 kHz |
 | **6** | Transmit power |
@@ -119,6 +125,16 @@ holds that talkgroup and **ESC** goes back to the list.
 
 A short press of **#**, **\*** or **0** acts when you let go of the key, so
 that holding it does only the long press.
+
+In D mode, on the main screen:
+
+| Button | Does |
+|---|---|
+| **#** | Timeslot shown: both, TS1 only, TS2 only |
+| **\*** | Show only the colour code being heard, or any colour code again |
+| **0** | Recent calls. **Up** / **Down** to scroll, **ESC** or **0** to go back |
+
+The filters show in yellow in the top left while they hide calls.
 
 **Menu** > **Field test** shows what the receiver knows, like the service
 screen of a TETRA radio. **Up** / **Down** to scroll, **Enter** to search
@@ -667,7 +683,9 @@ CPS_CHANNEL("TETRA Site 1", 390012500, OPMODE_TETRA)
 ```
 
 with the name (ASCII, 12 characters show on screen), the frequency in Hz
-and `OPMODE_FM`, `OPMODE_M17` or `OPMODE_TETRA`. Channels are receive only.
+and `OPMODE_FM`, `OPMODE_M17`, `OPMODE_TETRA` or `OPMODE_DMR`. These
+channels are receive only. `FM_CHANNEL` gives an FM channel a transmit
+frequency, width and tones (section 10).
 
 Turn the list into an image and check it, with Python 3 and nothing else:
 
@@ -785,7 +803,9 @@ assumed to follow it), and defines these filters:
 `scripts/c62/ui_render.sh` draws the main screen on your computer with the
 firmware's own UI code, at the C62's 160x128, and writes PNG files: TETRA
 searching, locked, a channel number being typed, the best signal search,
-SDS, a call, a followed call and an encrypted call.
+SDS, a call, a followed call and an encrypted call; FM idle, receiving,
+on a repeater and transmitting; DMR listening, idle, calls and the recent
+calls; the menus.
 With `-c` it also draws memory mode for each channel of a list and uses
 its talkgroup names; `-t` sets the group and talker of the example calls:
 
@@ -960,3 +980,124 @@ On the TTC recording of 2026-11-19 (Malvern, LA 30, and Finch, LA 28):
 | Standing still | stays on Malvern 1 for 120 s, 99% locked, every speech frame heard |
 | Malvern fading 30 dB over a minute | moves to Finch 1 at -95 dBm, still locked, then follows Finch's calls to Finch 3 |
 | Malvern gone within a second | on Finch 1 1.5 s later |
+
+## 10. FM mode
+
+FM is the analog mode, for repeaters, simplex, weather radio and so on.
+The main screen shows, from the top:
+
+- line 1, small: the channel width (12.5k or 25k), the tones (`TSQ 88.5`
+  when both ways use the same tone, else `T` and `R` with each), the
+  repeater shift in yellow (`+5.0M`, `-600k`), and the transmit power, or
+  `RX only`;
+- the channel name in memory mode, or the frequency in VFO mode, large:
+  white when idle, **green** while the squelch is open, **red** while
+  transmitting;
+- below it the channel number and frequency, or in VFO mode the transmit
+  frequency of a split channel or the tuning step; `Receiving S7` while a
+  signal opens the squelch, `Transmitting` or the transmit frequency while
+  transmitting;
+- the meter: **VOL** (volume knob), **SIG** (signal in S units, with a
+  yellow tick where the squelch opens) and **SQL** (squelch level), or
+  **MIC** (microphone level) while transmitting.
+
+**Menu** > **Settings** > **FM**: select a line, press **green**, then
+**Up** / **Down** change it; **green** again or **red** to finish.
+
+| Setting | Values |
+|---|---|
+| Squelch | Off, or the signal level that opens it, -123 to -61 dBm (the side key with **Up** / **Down** too) |
+| Width | 12.5 kHz (narrow, most repeaters today) or 25 kHz |
+| Power | 1, 2.5 or 5 W |
+| Tone mode | None, Encode (send the tone), Decode (open only on the tone), Both |
+| TX tone | The CTCSS tone sent, 67.0 to 254.1 Hz |
+| RX tone | The CTCSS tone the squelch waits for |
+
+Width, power and tones belong to the channel in use: in VFO mode they
+stay with the VFO, on a memory channel they last until you leave it (the
+channel list is read only). Squelch is a radio setting, saved.
+
+FM channels with their settings come from the channel list, with
+`FM_CHANNEL` (section 6):
+
+```c
+FM_CHANNEL("2m Calling", 146520000, 146520000, 25000, 0, 0)
+FM_CHANNEL("70cm Rptr", 443150000, 448150000, 12500, 1035, 1035)
+FM_CHANNEL("Marine 16", 156800000, 0, 25000, 0, 0)
+```
+
+with the name, the receive and the transmit frequency in Hz (a repeater's
+input; 0 for receive only), the width in Hz, 12500 or 25000, and the
+receive and transmit CTCSS tones in tenths of Hz, 885 for 88.5 Hz, or 0
+for none. `chlist.py` checks the tones against the standard list and
+`--show` prints the result. `CPS_CHANNEL(..., OPMODE_FM)` channels stay
+receive only, 25 kHz, without tones.
+
+Transmitting needs a licence for the band and frequency you use.
+
+## 11. DMR mode
+
+D mode receives DMR (ETSI TS 102 361), the digital two-slot system of
+amateur repeaters and many business and public service networks. It
+shows who calls whom, on which timeslot and colour code; it does not play
+the voice. DMR speech is coded with AMBE+2, a proprietary codec that
+OpenRTX does not include, so the radio stays silent in D mode. Encrypted
+calls are marked as such. Receive only: PTT does nothing.
+
+Select it with a long **5** (or the side key + **5**) until the screen
+shows `D`, or put the frequency in the channel list:
+
+```c
+CPS_CHANNEL("DMR Rptr", 443850000, OPMODE_DMR)
+```
+
+For a repeater, use its **output** frequency, the one it transmits on.
+
+The main screen:
+
+- **listening**, in grey: no DMR signal yet;
+- when a repeater or radio is heard, line 1 shows the last call and how
+  long ago (or `Repeater idle` / `Simplex`) and the colour code in green;
+  the channel or frequency is large; below it, in VFO mode, each
+  timeslot's state (`TS1 call`, `TS2 idle`);
+- during a call: the talkgroup (`TG 3020`) or the radio called
+  (`To 3027001`) large in blue, the talking radio's ID below it, then the
+  timeslot, colour code and `late` if the call was joined after its start,
+  and the time talking. `Encrypted` in orange for a call with privacy on,
+  `Emergency` in red for an emergency call. A finished call stays 3 s;
+- the meter: **VOL**, **SIG** and **DEC**, the decoding quality (green when
+  clean, red when the symbols are hard to tell apart).
+
+A call shows as soon as voice is heard, as `Voice` and `unknown`, and is
+named within half a second from the link control in the voice: calls
+joined late are named too. **0** lists the recent calls with their
+talking radio, timeslot and age; the same talkgroup and radio again
+replace their entry.
+
+**Menu** > **Settings** > **DMR** holds the filters that **#** and **\***
+set on the main screen:
+
+| Setting | Values |
+|---|---|
+| Timeslot | Both, TS1, TS2: calls on the other timeslot are not shown |
+| Colour code | Any, or 0 to 15: calls of other colour codes are not shown (several repeaters can share a frequency with different colour codes) |
+
+They are saved with the other settings. A transmission from a single
+radio (simplex) has no timeslot and is always shown.
+
+The receive log (section 5, Receive log) gets a line for each DMR call
+and a signal line every 10 s, starting with `dmr`:
+
+```
+dmr lock: base station
+dmr TS1 CC1 call TG 3020 from 3021234
+dmr TS1 call end TG 3020 from 3021234
+dmr signal -84 dBm, locked, symbol error 9%, bursts 1532 ok 4 bad
+```
+
+DMR uses the same receive path as M17 and TETRA. The decoder was tested on
+simulated signals (unit test `DMR Receive Test`), not yet on a radio or a
+recording. `C62_DMR=OFF` builds the firmware without it. Trunked systems
+(Capacity Plus, Connect Plus, Tier III) move calls between frequencies:
+only the frequency tuned is received.
+
