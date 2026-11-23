@@ -548,6 +548,7 @@ static void fmScenes(void)
     strcpy(last_state.channel.name, "Calling 2m");
     last_state.channel_index = 2;
     last_state.settings.sqlLevel = 4;
+    last_state.step_index = 4; /* 12.5 kHz, as at first start */
     last_state.rssi = -127;
     scene("fm-1-idle", false);
     scene("fm-1b-idle-memory", true);
