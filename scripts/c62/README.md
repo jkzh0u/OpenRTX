@@ -999,7 +999,7 @@ The main screen shows, from the top:
 | Tone mode | None, Encode (send the tone), Decode (open only on the tone), Both |
 | TX tone | The CTCSS tone sent, 67.0 to 254.1 Hz |
 | RX tone | The CTCSS tone the squelch waits for |
-| Talk permit | A tone in the radio's own speaker when you press PTT, telling you to talk, as on Motorola radios: Off (at first), Beep, Double, Motorola (three fast high beeps, "dit-dit-dit", like Motorola radios), Moto clear (the same and one more beep, which on Motorola trunked systems means the call is not encrypted) or Chime. Not transmitted; the transmitter keys up just after it, 0.1 to 0.2 s later. Saved |
+| Talk permit | A tone in the radio's own speaker when you press PTT, telling you to talk, as on Motorola radios: Off (at first), Beep, Double, Motorola (Motorola's trunking talk permit: four 910 Hz bursts, getting longer), Triple (three short 1000 Hz beeps), Melody (four quick notes, G C G E) or Chime. Not transmitted; the transmitter keys up just after it, 0.1 to 0.2 s later. Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
 Width, power and tones belong to the channel in use: in VFO mode they

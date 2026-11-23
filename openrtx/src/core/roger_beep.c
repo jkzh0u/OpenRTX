@@ -91,15 +91,22 @@ static void mdcBurst(rogerBeepTone tone)
 static const struct step tpBeep[] = { { 1000, 100 } };
 static const struct step tpDouble[] = { { 1400, 50 }, { 0, 30 }, { 1400, 50 } };
 /*
- * Motorola's talk permit: three fast high beeps, "dit-dit-dit". On trunked
- * systems one more beep after it means the call is not encrypted ("clear").
+ * Measured from recordings of three radios: Motorola's trunking talk permit
+ * (910 Hz, four bursts getting longer), three short 1000 Hz beeps, and four
+ * notes, G C G E.
  */
 static const struct step tpMoto[] = {
-    { 1800, 30 }, { 0, 25 }, { 1800, 30 }, { 0, 25 }, { 1800, 30 },
+    { 910, 26 }, { 0, 21 }, { 910, 27 }, { 0, 21 },
+    { 910, 51 }, { 0, 31 }, { 910, 77 },
 };
-static const struct step tpMotoClear[] = {
-    { 1800, 30 }, { 0, 25 }, { 1800, 30 }, { 0, 25 },
-    { 1800, 30 }, { 0, 90 }, { 1800, 30 },
+static const struct step tpTriple[] = {
+    { 1000, 23 }, { 0, 17 }, { 1000, 23 }, { 0, 17 }, { 1000, 23 },
+};
+static const struct step tpMelody[] = {
+    { 1568, 30 },
+    { 1047, 40 },
+    { 1568, 40 },
+    { 1319, 40 },
 };
 static const struct step tpChime[] = { { 1500, 60 }, { 1000, 90 } };
 
@@ -112,7 +119,8 @@ static const struct {
     { "Beep", tpBeep, sizeof(tpBeep) / sizeof(tpBeep[0]) },
     { "Double", tpDouble, sizeof(tpDouble) / sizeof(tpDouble[0]) },
     { "Motorola", tpMoto, sizeof(tpMoto) / sizeof(tpMoto[0]) },
-    { "Moto clear", tpMotoClear, sizeof(tpMotoClear) / sizeof(tpMotoClear[0]) },
+    { "Triple", tpTriple, sizeof(tpTriple) / sizeof(tpTriple[0]) },
+    { "Melody", tpMelody, sizeof(tpMelody) / sizeof(tpMelody[0]) },
     { "Chime", tpChime, sizeof(tpChime) / sizeof(tpChime[0]) },
 };
 

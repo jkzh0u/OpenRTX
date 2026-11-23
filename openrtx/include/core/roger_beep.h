@@ -27,7 +27,7 @@ extern "C" {
 #define ROGER_BEEP_STYLES 9
 
 /** Talk permit styles, 0 (off) included */
-#define TALK_PERMIT_STYLES 6
+#define TALK_PERMIT_STYLES 7
 
 /** Sample rate of talkPermit_render(), Hz */
 #define TALK_PERMIT_RATE 8000
