@@ -69,9 +69,12 @@
 #include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
-#ifdef CONFIG_TETRA_LOG
-#include "protocols/TETRA/TetraLog.h"
 #endif
+#ifdef CONFIG_DMR_RX
+#include "protocols/DMR/DmrStatus.h"
+#endif
+#if defined(CONFIG_TETRA) && defined(CONFIG_TETRA_LOG)
+#include "protocols/TETRA/TetraLog.h"
 #endif
 
 /* UI main screen functions, their implementation is in "ui_main.c" */
@@ -146,6 +149,9 @@ const char *settings_items[] =
 #ifdef CONFIG_TETRA
     "TETRA",
 #endif
+#ifdef CONFIG_DMR_RX
+    "DMR",
+#endif
     "Accessibility",
     "Default Settings"
 };
@@ -190,9 +196,21 @@ const char * settings_m17_items[] =
 
 const char* settings_fm_items[] =
 {
-    "CTCSS Tone",
-    "CTCSS En."
+    "Squelch",
+    "Width",
+    "Power",
+    "Tone mode",
+    "TX tone",
+    "RX tone"
 };
+
+#ifdef CONFIG_DMR_RX
+const char *settings_dmr_items[] =
+{
+    "Timeslot",
+    "Colour code"
+};
+#endif
 
 #ifdef CONFIG_TETRA
 const char *settings_tetra_items[] =
@@ -299,6 +317,9 @@ const uint8_t settings_radio_num = sizeof(settings_radio_items)/sizeof(settings_
 const uint8_t settings_m17_num = sizeof(settings_m17_items)/sizeof(settings_m17_items[0]);
 #endif
 const uint8_t settings_fm_num = sizeof(settings_fm_items) / sizeof(settings_fm_items[0]);
+#ifdef CONFIG_DMR_RX
+const uint8_t settings_dmr_num = sizeof(settings_dmr_items) / sizeof(settings_dmr_items[0]);
+#endif
 const uint8_t settings_accessibility_num = sizeof(settings_accessibility_items)/sizeof(settings_accessibility_items[0]);
 #ifdef CONFIG_TETRA
 const uint8_t settings_tetra_num = sizeof(settings_tetra_items)/sizeof(settings_tetra_items[0]);
@@ -872,6 +893,160 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
 }
 #endif
 
+#ifdef CONFIG_DMR_RX
+/* In ui_modes.c and ui_menu.c */
+extern void _ui_drawDmrRecent(ui_state_t *ui_state);
+extern void _ui_drawSettingsDmr(ui_state_t *ui_state);
+
+/**
+ * Hand the DMR filters (Settings > DMR, # and *) to the receiver.
+ */
+static void _ui_dmrApplySettings(void)
+{
+    dmrStatus_setFilter(state.settings.dmrSlotFilter,
+                        state.settings.dmrColourCode);
+}
+
+/**
+ * Change a DMR setting.
+ *
+ * @param item: enum settingsDmrItems.
+ * @param step: +1 or -1.
+ */
+static void _ui_changeDmrSetting(uint8_t item, int step)
+{
+    switch (item) {
+        case DMR_TIMESLOT:
+            state.settings.dmrSlotFilter =
+                (uint8_t)((state.settings.dmrSlotFilter + 3 + step) % 3);
+            break;
+        case DMR_COLOUR_CODE:
+            state.settings.dmrColourCode =
+                (uint8_t)((state.settings.dmrColourCode + 17 + step) % 17);
+            break;
+        default:
+            return;
+    }
+    _ui_dmrApplySettings();
+}
+
+/**
+ * DMR keys on the main screens:
+ * - #: timeslot shown, both, 1 or 2;
+ * - *: only the colour code heard, or any again;
+ * - 0: recent calls.
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_dmrKeys(kbd_msg_t msg)
+{
+    if((state.channel.mode != OPMODE_DMR) || msg.long_press)
+        return false;
+
+    if(msg.keys & KEY_HASH)
+    {
+        _ui_changeDmrSetting(DMR_TIMESLOT, 1);
+        return true;
+    }
+    if(msg.keys & KEY_STAR)
+    {
+        struct dmrStatus ds;
+        dmr_getStatus(&ds);
+        if(state.settings.dmrColourCode != 0)
+            state.settings.dmrColourCode = 0;
+        else if(ds.ccKnown)
+            state.settings.dmrColourCode = ds.colourCode + 1;
+        _ui_dmrApplySettings();
+        return true;
+    }
+    if(msg.keys & KEY_0)
+    {
+        ui_state.last_main_state = state.ui_screen;
+        ui_state.menu_selected = 0;
+        state.ui_screen = DMR_RECENT;
+        return true;
+    }
+    return false;
+}
+#endif
+
+int _ui_handleToneSelectScroll(bool direction_up);
+
+/**
+ * Change an FM setting (Settings > FM). Width, power and tones are the
+ * current channel's, as with the side key shortcuts.
+ *
+ * @param item: enum settingsFMItems.
+ * @param step: +1 or -1.
+ */
+static void _ui_changeFmSetting(uint8_t item, int step)
+{
+    static const uint32_t powers[] = { 1000, 2500, 5000 };
+    enum vpQueueFlags queueFlags = vp_getVoiceLevelQueueFlags();
+    size_t i;
+
+    switch(item)
+    {
+        case FM_SQUELCH:
+            if((step < 0) && (state.settings.sqlLevel > 0))
+                state.settings.sqlLevel--;
+            else if((step > 0) && (state.settings.sqlLevel < 15))
+                state.settings.sqlLevel++;
+            vp_announceSquelch(state.settings.sqlLevel, queueFlags);
+            break;
+
+        case FM_WIDTH:
+            state.channel.bandwidth = (state.channel.bandwidth == BW_12_5)
+                                    ? BW_25 : BW_12_5;
+            vp_announceBandwidth(state.channel.bandwidth, queueFlags);
+            break;
+
+        case FM_POWER:
+            // Nearest level, then the next one up or down
+            for(i = 0; i < 2 && state.channel.power > powers[i]; i++)
+                ;
+            if((step > 0) && (i < 2))
+                i++;
+            else if((step < 0) && (i > 0))
+                i--;
+            state.channel.power = powers[i];
+            vp_announcePower(state.channel.power, queueFlags);
+            break;
+
+        case FM_TONE_MODE:
+            _ui_handleToneSelectScroll(step > 0);
+            vp_announceCTCSS(state.channel.fm.rxToneEn,
+                             state.channel.fm.rxTone,
+                             state.channel.fm.txToneEn,
+                             state.channel.fm.txTone,
+                             queueFlags | vpqIncludeDescriptions);
+            break;
+
+        case FM_TX_TONE:
+            state.channel.fm.txTone = (uint8_t)((state.channel.fm.txTone
+                                                 + CTCSS_FREQ_NUM + step)
+                                                % CTCSS_FREQ_NUM);
+            vp_announceCTCSS(state.channel.fm.rxToneEn,
+                             state.channel.fm.rxTone,
+                             state.channel.fm.txToneEn,
+                             state.channel.fm.txTone, queueFlags);
+            break;
+
+        case FM_RX_TONE:
+            state.channel.fm.rxTone = (uint8_t)((state.channel.fm.rxTone
+                                                 + CTCSS_FREQ_NUM + step)
+                                                % CTCSS_FREQ_NUM);
+            vp_announceCTCSS(state.channel.fm.rxToneEn,
+                             state.channel.fm.rxTone,
+                             state.channel.fm.txToneEn,
+                             state.channel.fm.txTone, queueFlags);
+            break;
+
+        default:
+            break;
+    }
+}
+
 static void _ui_fsm_insertVFONumber(kbd_msg_t msg, bool *sync_rtx)
 {
     // Advance input position
@@ -1107,21 +1282,30 @@ int _ui_handleToneSelectScroll(bool direction_up)
 }
 
 /**
- * Next radio mode: FM, M17, TETRA. Side key + 5, or a long 5 on the main
- * screens.
+ * Next radio mode: FM, M17, TETRA, DMR (the ones built in). Side key + 5,
+ * or a long 5 on the main screens.
  */
 static void _ui_cycleMode(bool *sync_rtx, enum vpQueueFlags queueFlags)
 {
-    #ifdef CONFIG_M17
-    if(state.channel.mode == OPMODE_FM)
-        state.channel.mode = OPMODE_M17;
-    #ifdef CONFIG_TETRA
-    else if(state.channel.mode == OPMODE_M17)
-        state.channel.mode = OPMODE_TETRA;
-    #endif
-    else //catch any invalid states so they don't get locked out
-    #endif
-        state.channel.mode = OPMODE_FM;
+    static const uint8_t modes[] = {
+        OPMODE_FM,
+        #ifdef CONFIG_M17
+        OPMODE_M17,
+        #endif
+        #ifdef CONFIG_TETRA
+        OPMODE_TETRA,
+        #endif
+        #ifdef CONFIG_DMR_RX
+        OPMODE_DMR,
+        #endif
+    };
+    size_t count = sizeof(modes) / sizeof(modes[0]);
+    size_t i = 0;
+
+    // An unknown mode goes back to the first, so that it is not locked out
+    while((i < count) && (modes[i] != state.channel.mode))
+        i++;
+    state.channel.mode = modes[(i + 1) % count];
     *sync_rtx = true;
     vp_announceRadioMode(state.channel.mode, queueFlags);
 }
@@ -1238,6 +1422,10 @@ static bool _ui_memNumberKeys(kbd_msg_t msg, bool *sync_rtx)
 
     #ifdef CONFIG_TETRA
     if((digit == 0) && !typing && (state.channel.mode == OPMODE_TETRA))
+        return false;
+    #endif
+    #ifdef CONFIG_DMR_RX
+    if((digit == 0) && !typing && (state.channel.mode == OPMODE_DMR))
         return false;
     #endif
 
@@ -1647,6 +1835,9 @@ void ui_init()
             tetraIds_stepFilter(1);
     }
 #endif
+#ifdef CONFIG_DMR_RX
+    _ui_dmrApplySettings();
+#endif
 }
 
 void ui_drawSplashScreen()
@@ -1900,6 +2091,13 @@ void ui_updateFSM(bool *sync_rtx)
                     }
                     else
                     #endif
+                    #ifdef CONFIG_DMR_RX
+                    if(_ui_dmrKeys(msg))
+                    {
+                        // DMR filters or recent calls
+                    }
+                    else
+                    #endif
                     if(msg.keys & KEY_ENTER)
                     {
                         // Save current main state
@@ -2133,6 +2331,13 @@ void ui_updateFSM(bool *sync_rtx)
                     }
                     else
                     #endif
+                    #ifdef CONFIG_DMR_RX
+                    if(_ui_dmrKeys(msg))
+                    {
+                        // DMR filters or recent calls
+                    }
+                    else
+                    #endif
                     if(msg.keys & KEY_ENTER)
                     {
                         // Save current main state
@@ -2204,6 +2409,29 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
             // Top menu screen
+            #ifdef CONFIG_DMR_RX
+            // DMR recent calls: Up and Down scroll
+            case DMR_RECENT:
+                if(msg.long_press)
+                    break;
+                if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+                {
+                    if(ui_state.menu_selected > 0)
+                        ui_state.menu_selected--;
+                }
+                else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+                {
+                    struct dmrStatus ds;
+                    dmr_getStatus(&ds);
+                    if(ui_state.menu_selected + 1 < ds.nRecent)
+                        ui_state.menu_selected++;
+                }
+                else if(msg.keys & (KEY_ESC | KEY_0 | KEY_ENTER))
+                {
+                    state.ui_screen = ui_state.last_main_state;
+                }
+                break;
+            #endif
             #ifdef CONFIG_TETRA
             // TETRA recent calls: Enter holds the selected one
             case TETRA_RECENT:
@@ -2435,6 +2663,11 @@ void ui_updateFSM(bool *sync_rtx)
 #ifdef CONFIG_TETRA
                         case S_TETRA:
                             state.ui_screen = SETTINGS_TETRA;
+                            break;
+#endif
+#ifdef CONFIG_DMR_RX
+                        case S_DMR:
+                            state.ui_screen = SETTINGS_DMR;
                             break;
 #endif
                         case S_ACCESSIBILITY:
@@ -2914,64 +3147,30 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
 #endif
+            // FM settings: Enter, then Up / Down change the value
             case SETTINGS_FM:
-                if (ui_state.edit_mode)
+                if(ui_state.edit_mode &&
+                   (msg.keys & (KEY_UP | KEY_DOWN | KNOB_LEFT | KNOB_RIGHT |
+                                KEY_LEFT | KEY_RIGHT)))
                 {
-                    if (msg.keys & KEY_ESC)
-                        ui_state.edit_mode = false;
-
-                    switch (ui_state.menu_selected)
-                    {
-                        case CTCSS_Tone:
-                            if (msg.keys & KEY_DOWN || msg.keys & KNOB_LEFT)
-                            {
-                                if (state.channel.fm.txTone == 0)
-                                {
-                                    state.channel.fm.txTone =
-                                        CTCSS_FREQ_NUM - 1;
-                                }
-                                else
-                                {
-                                    state.channel.fm.txTone--;
-                                }
-                            }
-                            else if (msg.keys & KEY_UP || msg.keys & KNOB_RIGHT)
-                            {
-                                state.channel.fm.txTone++;
-                            } else if (msg.keys & KEY_ENTER) {
-                                ui_state.edit_mode = false;
-                            }
-                            state.channel.fm.txTone %= CTCSS_FREQ_NUM;
-                            state.channel.fm.rxTone = state.channel.fm.txTone;
-                            *sync_rtx = true;
-                            break;
-                        case CTCSS_Enabled:
-                            if (msg.keys & KEY_DOWN || msg.keys & KNOB_LEFT)
-                            {
-                                _ui_handleToneSelectScroll(true);
-                            } else if (msg.keys & KEY_UP || msg.keys & KNOB_RIGHT)
-                            {
-                                _ui_handleToneSelectScroll(false);
-                            } else if (msg.keys & KEY_ENTER) {
-                                ui_state.edit_mode = false;
-                            }
-
-                            *sync_rtx = true;
-                            break;
-                    }
+                    int step = (msg.keys & (KEY_UP | KNOB_RIGHT | KEY_RIGHT))
+                             ? 1 : -1;
+                    _ui_changeFmSetting(ui_state.menu_selected, step);
+                    *sync_rtx = true;
                 }
-                else if (msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+                else if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
                     _ui_menuUp(settings_fm_num);
-                else if (msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+                else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
                     _ui_menuDown(settings_fm_num);
-                else if (msg.keys & KEY_ENTER)
+                else if(msg.keys & KEY_ENTER)
                     ui_state.edit_mode = !ui_state.edit_mode;
-                else if (msg.keys & KEY_ESC)
-                    _ui_menuBack(MENU_SETTINGS);
-                else if (msg.keys & KEY_ENTER)
-                    ui_state.edit_mode = !ui_state.edit_mode;
-                else if (msg.keys & KEY_ESC)
-                    _ui_menuBack(MENU_SETTINGS);
+                else if(msg.keys & KEY_ESC)
+                {
+                    if(ui_state.edit_mode)
+                        ui_state.edit_mode = false;
+                    else
+                        _ui_menuBack(MENU_SETTINGS);
+                }
                 break;
 
             case SETTINGS_ACCESSIBILITY:
@@ -3040,6 +3239,27 @@ void ui_updateFSM(bool *sync_rtx)
                     _ui_menuBack(MENU_SETTINGS);
                 break;
 #endif
+#ifdef CONFIG_DMR_RX
+            // DMR settings: Enter, then Up / Down change the value
+            case SETTINGS_DMR:
+                if(ui_state.edit_mode &&
+                   (msg.keys & (KEY_UP | KEY_DOWN | KNOB_LEFT | KNOB_RIGHT |
+                                KEY_LEFT | KEY_RIGHT)))
+                {
+                    int step = (msg.keys & (KEY_UP | KNOB_RIGHT | KEY_RIGHT))
+                             ? 1 : -1;
+                    _ui_changeDmrSetting(ui_state.menu_selected, step);
+                }
+                else if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+                    _ui_menuUp(settings_dmr_num);
+                else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+                    _ui_menuDown(settings_dmr_num);
+                else if(msg.keys & KEY_ENTER)
+                    ui_state.edit_mode = !ui_state.edit_mode;
+                else if(msg.keys & KEY_ESC)
+                    _ui_menuBack(MENU_SETTINGS);
+                break;
+#endif
             case SETTINGS_RESET2DEFAULTS:
                 if(! ui_state.edit_mode){
                     //require a confirmation ENTER, then another
@@ -3059,6 +3279,9 @@ void ui_updateFSM(bool *sync_rtx)
                         state_resetSettingsAndVfo();
 #ifdef CONFIG_TETRA
                         _ui_tetraApplySettings();
+#endif
+#ifdef CONFIG_DMR_RX
+                        _ui_dmrApplySettings();
 #endif
                         _ui_menuBack(MENU_SETTINGS);
                     }
@@ -3125,6 +3348,16 @@ void ui_updateFSM(bool *sync_rtx)
         #ifdef CONFIG_TETRA
         // A TETRA call wakes the screen and keeps it on
         tetraCall = _ui_tetraCallActive();
+        #endif
+        #ifdef CONFIG_DMR_RX
+        // So does a DMR call
+        if(state.channel.mode == OPMODE_DMR)
+        {
+            struct dmrStatus ds;
+            dmr_getStatus(&ds);
+            for(int i = 0; i < 3; i++)
+                tetraCall = tetraCall || ds.slot[i].active;
+        }
         #endif
 
         if (txOngoing || rtx_rxSquelchOpen() || tetraCall ||
@@ -3202,6 +3435,14 @@ bool ui_updateGUI()
             break;
         case TETRA_FIELD_TEST:
             _ui_drawTetraFieldTest(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_DMR_RX
+        case DMR_RECENT:
+            _ui_drawDmrRecent(&ui_state);
+            break;
+        case SETTINGS_DMR:
+            _ui_drawSettingsDmr(&ui_state);
             break;
 #endif
         // Flash backup and restore screen

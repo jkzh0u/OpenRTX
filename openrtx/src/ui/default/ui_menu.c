@@ -464,19 +464,48 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
     if (index >= settings_fm_num)
         return -1;
 
+    const channel_t *ch = &last_state.channel;
+
     switch (index) {
-        case CTCSS_Tone: {
-            uint16_t tone = ctcss_tone[last_state.channel.fm.txTone];
-            sniprintf(buf, max_len, "%d.%d", (tone / 10), (tone % 10));
+        case FM_SQUELCH: {
+            // Opens above -127 + level * 66 / 15 dBm (OpMode_FM)
+            uint8_t level = last_state.settings.sqlLevel;
+            if (level == 0)
+                sniprintf(buf, max_len, "%s", currentLanguage->off);
+            else
+                sniprintf(buf, max_len, "%d dBm", -127 + level * 66 / 15);
             break;
         }
 
-        case CTCSS_Enabled:
+        case FM_WIDTH:
             sniprintf(buf, max_len, "%s",
-                    _ui_getToneEnabledString(last_state.channel.fm.txToneEn,
-                                             last_state.channel.fm.rxToneEn,
-                                             false));
+                      (ch->bandwidth == BW_12_5) ? "12.5 kHz" : "25 kHz");
             break;
+
+        case FM_POWER:
+            if (ch->power % 1000 == 0)
+                sniprintf(buf, max_len, "%lu W",
+                          (unsigned long)(ch->power / 1000));
+            else
+                sniprintf(buf, max_len, "%lu.%lu W",
+                          (unsigned long)(ch->power / 1000),
+                          (unsigned long)(ch->power % 1000 / 100));
+            break;
+
+        case FM_TONE_MODE:
+            sniprintf(buf, max_len, "%s",
+                      _ui_getToneEnabledString(ch->fm.txToneEn,
+                                               ch->fm.rxToneEn, false));
+            break;
+
+        case FM_TX_TONE:
+        case FM_RX_TONE: {
+            uint8_t idx = (index == FM_TX_TONE) ? ch->fm.txTone
+                                                : ch->fm.rxTone;
+            uint16_t tone = ctcss_tone[idx % CTCSS_FREQ_NUM];
+            sniprintf(buf, max_len, "%d.%d", (tone / 10), (tone % 10));
+            break;
+        }
     }
 
     return 0;
@@ -559,6 +588,38 @@ int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
             break;
     }
     sniprintf(buf, max_len, "%s", on ? currentLanguage->on : currentLanguage->off);
+    return 0;
+}
+#endif
+
+#ifdef CONFIG_DMR_RX
+int _ui_getDmrEntryName(char *buf, uint8_t max_len, uint8_t index)
+{
+    if(index >= settings_dmr_num) return -1;
+    sniprintf(buf, max_len, "%s", settings_dmr_items[index]);
+    return 0;
+}
+
+int _ui_getDmrValueName(char *buf, uint8_t max_len, uint8_t index)
+{
+    if(index >= settings_dmr_num) return -1;
+    switch(index)
+    {
+        case DMR_TIMESLOT:
+            if(last_state.settings.dmrSlotFilter == 0)
+                sniprintf(buf, max_len, "Both");
+            else
+                sniprintf(buf, max_len, "TS%u",
+                          last_state.settings.dmrSlotFilter);
+            break;
+        case DMR_COLOUR_CODE:
+            if(last_state.settings.dmrColourCode == 0)
+                sniprintf(buf, max_len, "Any");
+            else
+                sniprintf(buf, max_len, "%u",
+                          last_state.settings.dmrColourCode - 1);
+            break;
+    }
     return 0;
 }
 #endif
@@ -1116,6 +1177,17 @@ void _ui_drawSettingsTetra(ui_state_t* ui_state)
               color_white, "TETRA");
     _ui_drawMenuListValue(ui_state, ui_state->menu_selected,
                           _ui_getTetraEntryName, _ui_getTetraValueName);
+}
+#endif
+
+#ifdef CONFIG_DMR_RX
+void _ui_drawSettingsDmr(ui_state_t* ui_state)
+{
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+              color_white, "DMR");
+    _ui_drawMenuListValue(ui_state, ui_state->menu_selected,
+                          _ui_getDmrEntryName, _ui_getDmrValueName);
 }
 #endif
 
