@@ -710,7 +710,15 @@ static void menuScenes(void)
     menu("menu-04-display", _ui_drawSettingsDisplay, 0);
     menu("menu-05-radio", _ui_drawSettingsRadio, 0);
     menu("menu-06-m17", _ui_drawSettingsM17, 0);
+    /* FM settings on a repeater channel with a tone */
+    channel_t before = last_state.channel;
+    last_state.channel.mode = OPMODE_FM;
+    last_state.channel.bandwidth = BW_12_5;
+    last_state.channel.power = 2500;
+    last_state.channel.fm.txToneEn = 1;
+    last_state.channel.fm.rxToneEn = 0;
     menu("menu-07-fm", _ui_drawSettingsFM, 0);
+    last_state.channel = before;
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
     menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);
     menu("menu-08c-dmr", _ui_drawSettingsDmr, 0);
