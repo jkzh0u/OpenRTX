@@ -5,33 +5,26 @@
  */
 
 /*
- * Main screens of FM (CONFIG_UI_FM_SCREEN) and of DMR receive
- * (CONFIG_DMR_RX), drawn like the TETRA ones: the station large, what is
- * heard above it, and a meter of labelled bars at the bottom. For colour
- * screens of 128 lines or more.
+ * Main screen of FM (CONFIG_UI_FM_SCREEN), drawn like the TETRA one: the
+ * station large, the settings in effect above it, and a meter of labelled
+ * bars at the bottom. For colour screens of 128 lines or more.
  */
 
 #include <stdio.h>
 #include <string.h>
 #include "ui/ui_default.h"
 
-#if defined(CONFIG_UI_FM_SCREEN) || defined(CONFIG_DMR_RX)
+#ifdef CONFIG_UI_FM_SCREEN
 
 #include "core/utils.h"
 #include "interfaces/delays.h"
 #include "interfaces/platform.h"
 #include "rtx/rtx.h"
-#ifdef CONFIG_DMR_RX
-#include "protocols/DMR/DmrStatus.h"
-#endif
 
 /* Colours, as on the TETRA screens */
 static const color_t mdGroup = { 90, 200, 255, 255 };  /* Sky blue */
-static const color_t mdPlace = { 110, 220, 110, 255 }; /* Green */
 static const color_t mdVoice = { 60, 255, 120, 255 };  /* Bright green */
-static const color_t mdTalk = { 255, 191, 0, 255 };    /* Amber */
 static const color_t mdMuted = { 150, 150, 150, 255 }; /* Grey */
-static const color_t mdWarn = { 255, 150, 30, 255 };   /* Orange */
 static const color_t mdTx = { 240, 60, 50, 255 };      /* Red */
 static const color_t mdTrack = { 45, 45, 45, 255 };
 static const color_t mdGood = { 60, 230, 90, 255 };
@@ -139,16 +132,6 @@ static void _ui_mdPieces(point_t pos, fontSize_t font, const struct mdPiece *p,
     }
 }
 
-/** Text in the top bar, left, in the small font of the battery figure */
-static void _ui_mdTopText(const char *label, const char *text, color_t color)
-{
-    point_t pos = { layout.horizontal_pad, (uint16_t)(layout.top_pos.y - 2) };
-    char buf[32];
-
-    snprintf(buf, sizeof(buf), "%s%s", label, text);
-    gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, color, "%s", buf);
-}
-
 /**
  * One labelled bar of the meter: the label on the left, then a track
  * filled to value / max.
@@ -230,8 +213,6 @@ static void _ui_mdLines(point_t *big, point_t *small)
     small->y -= 3;
 #endif
 }
-
-#ifdef CONFIG_UI_FM_SCREEN
 
 /** Tone index as text, e.g. 67.0 */
 static void _ui_mdTone(char *buf, size_t len, uint8_t index)
@@ -372,280 +353,3 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
 }
 
 #endif /* CONFIG_UI_FM_SCREEN */
-
-#ifdef CONFIG_DMR_RX
-
-/** Length of a time as m:ss, or "now" */
-static void _ui_mdDuration(char *buf, size_t len, long long ms)
-{
-    long long s = ms / 1000;
-    snprintf(buf, len, "%lld:%02lld", s / 60, s % 60);
-}
-
-/** How long ago, short: 12s, 4m, 2h */
-static void _ui_mdAge(char *buf, size_t len, long long ms)
-{
-    long long s = ms / 1000;
-    if (s < 60)
-        snprintf(buf, len, "%llds", s);
-    else if (s < 3600)
-        snprintf(buf, len, "%lldm", s / 60);
-    else
-        snprintf(buf, len, "%lldh", s / 3600);
-}
-
-/** Who a call is to: TG 3020, or the radio called */
-static void _ui_mdCallDst(char *buf, size_t len, const struct dmrCall *c)
-{
-    if (!c->ids)
-        snprintf(buf, len, "Voice");
-    else if (c->group)
-        snprintf(buf, len, "TG %lu", (unsigned long)c->dst);
-    else
-        snprintf(buf, len, "To %lu", (unsigned long)c->dst);
-}
-
-/** The timeslot of a call as text */
-static const char *_ui_mdSlotName(uint8_t slot)
-{
-    switch (slot) {
-        case 1:
-            return "TS1";
-        case 2:
-            return "TS2";
-        default:
-            return "Simplex";
-    }
-}
-
-/** The DMR filters, in the top bar, yellow while they hide calls */
-static void _ui_drawDmrTop(void)
-{
-    char text[24] = "";
-    uint8_t slots = last_state.settings.dmrSlotFilter;
-    uint8_t cc = last_state.settings.dmrColourCode;
-
-    if (slots == 0 && cc == 0)
-        return;
-    if (slots != 0)
-        snprintf(text, sizeof(text), "TS%u", slots);
-    if (cc != 0) {
-        size_t n = strlen(text);
-        snprintf(text + n, sizeof(text) - n, "%sCC%u", (n > 0) ? " " : "",
-                 cc - 1);
-    }
-    _ui_mdTopText("", text, yellow_fab413);
-}
-
-/** The DMR meter: volume, signal and decoding quality */
-static void _ui_drawDmrMeter(const struct dmrStatus *ds)
-{
-    unsigned slevel = rssiToSlevel(last_state.rssi);
-    unsigned quality = 0;
-
-    /* Full at 12% symbol error or better, empty at 40% */
-    if (ds->locked && ds->symbolError < 40)
-        quality = (ds->symbolError <= 12) ? 255 :
-                                            (40 - ds->symbolError) * 255 / 28;
-    _ui_mdMeter("SIG", slevel, 11, _ui_mdTraffic(slevel, 7, 4), 0, "DEC",
-                quality, 255, _ui_mdTraffic(quality, 170, 90));
-}
-
-/**
- * DMR main screen. During a call: the talkgroup or radio called large, the
- * talking radio, the timeslot and colour code, and how long it has been
- * talking. Else: what each timeslot is doing, the channel or frequency
- * large, and below it the frequency and the colour code.
- */
-void _ui_drawDmrMain(ui_state_t *ui_state, bool memory)
-{
-    (void)ui_state;
-    struct dmrStatus ds;
-    long long now = getTick();
-    char text[40], freq[16];
-
-    dmr_getStatus(&ds);
-    _ui_drawDmrTop();
-
-    const struct dmrStatusCall *sc = dmr_shownCall(&ds, now);
-    if (sc != NULL) {
-        const struct dmrCall *c = &sc->call;
-        point_t l1 = layout.line1_pos, l2 = layout.line2_pos;
-        point_t l3 = layout.line3_pos, l4 = layout.line4_pos;
-#if CONFIG_SCREEN_HEIGHT > 127
-        l1.y += 3;
-        l2.y += 1;
-        l3.y -= 1;
-        l4.y -= 3;
-#endif
-        bool emergency = c->ids && (c->options & DMR_OPT_EMERGENCY);
-        color_t dstColor = emergency ? mdTx : mdGroup;
-
-        point_t sym = l1;
-        sym.y -= (gfx_getFontHeight(FONT_SIZE_12PT)
-                  - gfx_getFontHeight(layout.line1_font))
-               / 2;
-        gfx_drawSymbol(sym, layout.line1_symbol_size, TEXT_ALIGN_LEFT, dstColor,
-                       SYMBOL_CALL_RECEIVED);
-        _ui_mdCallDst(text, sizeof(text), c);
-        _ui_mdBigLine(l1, FONT_SIZE_12PT,
-                      gfx_getFontHeight(layout.line1_font) + 2, NULL, dstColor,
-                      text, dstColor);
-
-        gfx_drawSymbol(l2, layout.line2_symbol_size, TEXT_ALIGN_LEFT,
-                       color_white, SYMBOL_CALL_MADE);
-        if (c->ids)
-            gfx_print(l2, layout.line2_font, TEXT_ALIGN_CENTER, color_white,
-                      "%lu", (unsigned long)c->src);
-        else
-            gfx_print(l2, layout.line2_font, TEXT_ALIGN_CENTER, mdMuted,
-                      "unknown");
-
-        snprintf(text, sizeof(text), "%s  CC %u%s", _ui_mdSlotName(c->slot),
-                 c->colourCode, c->lateEntry ? "  late" : "");
-        gfx_print(l3, layout.line3_font, TEXT_ALIGN_CENTER, mdPlace, "%s",
-                  text);
-
-        if (emergency) {
-            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER, mdTx,
-                      "Emergency");
-        } else if (c->encrypted) {
-            gfx_drawSymbol(l4, layout.line4_symbol_size, TEXT_ALIGN_LEFT,
-                           mdWarn, SYMBOL_LOCK);
-            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER, mdWarn,
-                      "Encrypted");
-        } else if (sc->active) {
-            char d[24];
-            _ui_mdDuration(d, sizeof(d), now - sc->start);
-            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER, mdTalk,
-                      "Voice %s", d);
-        } else {
-            gfx_print(l4, layout.line4_font, TEXT_ALIGN_CENTER, mdMuted,
-                      "Ended");
-        }
-        _ui_drawDmrMeter(&ds);
-        return;
-    }
-
-    /*
-     * No call. Line 1: the last call heard, or the state of the signal, and
-     * the colour code. Then the station large: the channel, or the
-     * frequency in VFO mode; below it the channel's frequency, or what each
-     * timeslot carries.
-     */
-    point_t big, small;
-    point_t l1 = layout.line1_pos;
-#if CONFIG_SCREEN_HEIGHT > 127
-    l1.y += 2;
-#endif
-    _ui_mdLines(&big, &small);
-
-    struct mdPiece p[3];
-    size_t n = 0;
-    if (ds.nRecent > 0) {
-        char age[16];
-        _ui_mdCallDst(p[n].text, sizeof(p[n].text), &ds.recent[0].call);
-        p[n++].color = mdGroup;
-        _ui_mdAge(age, sizeof(age), now - ds.recent[0].last);
-        snprintf(p[n].text, sizeof(p[n].text), "%s ago", age);
-        p[n++].color = mdMuted;
-    } else if (ds.locked) {
-        snprintf(p[n].text, sizeof(p[n].text), "%s",
-                 (ds.sync == DMR_SYNC_BS) ? "Repeater idle" : "Simplex");
-        p[n++].color = mdMuted;
-    }
-    if (ds.locked && ds.ccKnown) {
-        snprintf(p[n].text, sizeof(p[n].text), "CC %u", ds.colourCode);
-        p[n++].color = mdPlace;
-    }
-    if (n > 0)
-        _ui_mdPieces(l1, FONT_SIZE_6PT, p, n);
-
-    uint32_t hz = (ds.tunedHz != 0) ? ds.tunedHz :
-                                      last_state.channel.rx_frequency;
-    _ui_mdFreq(freq, sizeof(freq), hz);
-
-    if (!ds.locked)
-        _ui_mdBigLine(big, FONT_SIZE_16PT, 0, "D ", mdMuted, "listening",
-                      mdMuted);
-    else
-        _ui_mdBigLine(big, FONT_SIZE_16PT, 0, "D ", mdMuted,
-                      memory ? last_state.channel.name : freq, color_white);
-
-    if (memory) {
-        snprintf(text, sizeof(text), "Ch %u  %s", last_state.channel_index + 1,
-                 freq);
-        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, mdMuted, "%s",
-                  text);
-    } else if (!ds.locked) {
-        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, mdMuted, "%s",
-                  freq);
-    } else if (ds.sync == DMR_SYNC_BS) {
-        /* Each timeslot: amber with a call, grey idle */
-        n = 0;
-        for (uint8_t t = 1; t <= 2; t++) {
-            snprintf(p[n].text, sizeof(p[n].text), "TS%u %s", t,
-                     ds.slot[t].active ? "call" : "idle");
-            p[n++].color = ds.slot[t].active ? mdTalk : mdMuted;
-        }
-        _ui_mdPieces(small, layout.line4_font, p, n);
-    }
-
-    _ui_drawDmrMeter(&ds);
-}
-
-/**
- * Recent DMR calls, newest first: who was called, the talking radio, the
- * timeslot and how long ago. Up and Down scroll.
- */
-void _ui_drawDmrRecent(ui_state_t *ui_state)
-{
-    struct dmrStatus ds;
-    long long now = getTick();
-
-    dmr_getStatus(&ds);
-    gfx_clearScreen();
-    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
-              "DMR calls");
-
-    if (ds.nRecent == 0) {
-        gfx_print(layout.line3_pos, layout.line3_font, TEXT_ALIGN_CENTER,
-                  mdMuted, "None yet");
-        return;
-    }
-
-    /* Two lines a call */
-    uint16_t h = gfx_getFontHeight(FONT_SIZE_8PT);
-    uint16_t hs = gfx_getFontHeight(FONT_SIZE_6PT);
-    uint16_t row = h + hs + 6;
-    uint16_t first = (ui_state->menu_selected < ds.nRecent) ?
-                         ui_state->menu_selected :
-                         ds.nRecent - 1;
-    point_t pos = { layout.horizontal_pad, (uint16_t)(layout.top_h + h + 4) };
-
-    for (uint8_t i = first; i < ds.nRecent; i++) {
-        if (pos.y + hs + 2 > CONFIG_SCREEN_HEIGHT)
-            break;
-        const struct dmrStatusCall *r = &ds.recent[i];
-        char dst[24], age[16], line[40];
-
-        _ui_mdCallDst(dst, sizeof(dst), &r->call);
-        _ui_mdAge(age, sizeof(age), now - r->last);
-        gfx_print(pos, FONT_SIZE_8PT, TEXT_ALIGN_LEFT,
-                  r->call.encrypted ? mdWarn : mdGroup, "%s", dst);
-        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT, mdMuted, "%s", age);
-
-        point_t sub = { pos.x, (uint16_t)(pos.y + hs + 3) };
-        if (r->call.ids)
-            snprintf(line, sizeof(line), "from %lu  %s",
-                     (unsigned long)r->call.src, _ui_mdSlotName(r->call.slot));
-        else
-            snprintf(line, sizeof(line), "%s", _ui_mdSlotName(r->call.slot));
-        gfx_print(sub, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, mdMuted, "%s", line);
-        pos.y += row;
-    }
-}
-
-#endif /* CONFIG_DMR_RX */
-
-#endif /* CONFIG_UI_FM_SCREEN || CONFIG_DMR_RX */

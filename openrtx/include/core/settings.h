@@ -68,12 +68,6 @@ typedef struct
             _tetraReserved   : 3;
     uint8_t tetraFilter;          // Talkgroup filter last picked
 #endif
-#ifdef CONFIG_DMR_RX
-    /* Zero means show all, as for the TETRA fields */
-    uint8_t dmrSlotFilter    : 2,  // DMR timeslot shown: 0 both, 1 or 2
-            _dmrReserved     : 6;
-    uint8_t dmrColourCode;        // DMR colour code shown: 0 any, else CC + 1
-#endif
 }
 __attribute__((packed)) settings_t;
 
@@ -112,11 +106,6 @@ static const settings_t default_settings =
     0,                            // Join calls late
     0,                            // not used
     0,                            // Talkgroup filter: All
-#endif
-#ifdef CONFIG_DMR_RX
-    0,                            // Both timeslots
-    0,                            // not used
-    0,                            // Any colour code
 #endif
 };
 

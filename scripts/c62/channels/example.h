@@ -19,13 +19,12 @@
 
 /*
  * Channels, in memory mode order: name, frequency in Hz, and OPMODE_FM,
- * OPMODE_M17, OPMODE_TETRA or OPMODE_DMR. Receive only, 25 kHz.
+ * OPMODE_M17 or OPMODE_TETRA. Receive only, 25 kHz.
  */
 CPS_CHANNEL("NOAA WX 1", 162550000, OPMODE_FM)
 CPS_CHANNEL("M17 Simplex", 433475000, OPMODE_M17)
 CPS_CHANNEL("TETRA Site 1", 390012500, OPMODE_TETRA)
 CPS_CHANNEL("TETRA Site 2", 390037500, OPMODE_TETRA)
-CPS_CHANNEL("DMR Rptr", 443850000, OPMODE_DMR)
 
 /*
  * FM channels with all their settings: name, receive and transmit

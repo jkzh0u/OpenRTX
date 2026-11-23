@@ -592,38 +592,6 @@ int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
 }
 #endif
 
-#ifdef CONFIG_DMR_RX
-int _ui_getDmrEntryName(char *buf, uint8_t max_len, uint8_t index)
-{
-    if(index >= settings_dmr_num) return -1;
-    sniprintf(buf, max_len, "%s", settings_dmr_items[index]);
-    return 0;
-}
-
-int _ui_getDmrValueName(char *buf, uint8_t max_len, uint8_t index)
-{
-    if(index >= settings_dmr_num) return -1;
-    switch(index)
-    {
-        case DMR_TIMESLOT:
-            if(last_state.settings.dmrSlotFilter == 0)
-                sniprintf(buf, max_len, "Both");
-            else
-                sniprintf(buf, max_len, "TS%u",
-                          last_state.settings.dmrSlotFilter);
-            break;
-        case DMR_COLOUR_CODE:
-            if(last_state.settings.dmrColourCode == 0)
-                sniprintf(buf, max_len, "Any");
-            else
-                sniprintf(buf, max_len, "%u",
-                          last_state.settings.dmrColourCode - 1);
-            break;
-    }
-    return 0;
-}
-#endif
-
 int _ui_getBackupRestoreEntryName(char *buf, uint8_t max_len, uint8_t index)
 {
     if(index >= backup_restore_num) return -1;
@@ -1180,16 +1148,6 @@ void _ui_drawSettingsTetra(ui_state_t* ui_state)
 }
 #endif
 
-#ifdef CONFIG_DMR_RX
-void _ui_drawSettingsDmr(ui_state_t* ui_state)
-{
-    gfx_clearScreen();
-    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
-              color_white, "DMR");
-    _ui_drawMenuListValue(ui_state, ui_state->menu_selected,
-                          _ui_getDmrEntryName, _ui_getDmrValueName);
-}
-#endif
 
 void _ui_drawSettingsReset2Defaults(ui_state_t* ui_state)
 {

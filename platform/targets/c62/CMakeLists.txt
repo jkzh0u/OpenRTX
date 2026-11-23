@@ -92,11 +92,6 @@ option(C62_TETRA_ROAM "TETRA cell tracking" ON)
 option(C62_TETRA_LOG "TETRA receive log over UART" ON)
 set(C62_TETRA_LOG_HISTORY 262144 CACHE STRING
     "TETRA log kept in PSRAM, bytes")
-# C62_DMR: DMR receive mode ("D" after T under key 5): who calls whom on each
-#   timeslot, from the link control (openrtx/include/protocols/DMR/
-#   DmrLink.h). Receive only and silent: DMR speech is AMBE+2, a
-#   proprietary codec. Its log lines go to the TETRA log (C62_TETRA_LOG).
-option(C62_DMR "DMR receive mode" ON)
 set(C62_REG43_SWEEP_MS 1400 CACHE STRING "REG_43 sweep dwell time, ms")
 # C62_CHANNELS: also build the channel list image build_c62/zephyr/
 #   channels.bin from this list, to flash at 0x2c0000 next to the firmware.
@@ -212,16 +207,6 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraSpeech.c)
 endif()
 
-if(C62_DMR)
-  target_sources(app PRIVATE
-    ${OPENRTX_ROOT}/openrtx/src/protocols/DMR/DmrFec.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/DMR/DmrDemod.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/DMR/DmrLink.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/DMR/DmrStatus.c
-    ${OPENRTX_ROOT}/openrtx/src/rtx/OpMode_DMR.cpp)
-  target_compile_definitions(app PRIVATE CONFIG_DMR_RX)
-endif()
-
 # Channels and TETRA names come from the channel list image in flash
 target_sources(app PRIVATE
   ${OPENRTX_ROOT}/openrtx/src/core/chlist.c
@@ -245,7 +230,7 @@ if(C62_CHANNELS)
   add_custom_target(c62_channels ALL DEPENDS ${C62_CHANNELS_BIN})
 endif()
 
-message(STATUS "C62: wide RX ${C62_WIDE_RX}, DMR ${C62_DMR}, TETRA ${C62_TETRA} "
+message(STATUS "C62: wide RX ${C62_WIDE_RX}, TETRA ${C62_TETRA} "
                "(speech ${C62_TETRA_SPEECH}, follow ${C62_TETRA_FOLLOW}, "
                "roam ${C62_TETRA_ROAM}), REG_43 sweep ${C62_REG43_SWEEP}, "
                "baseband dump ${C62_BASEBAND_DUMP} "

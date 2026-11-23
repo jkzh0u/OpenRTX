@@ -71,7 +71,6 @@ set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
     "$ROOT/openrtx/src/ui/default/ui_main.c" \
     "$ROOT/openrtx/src/ui/default/ui_menu.c" \
     "$ROOT/openrtx/src/ui/default/ui_modes.c" \
-    "$ROOT/openrtx/src/protocols/DMR/DmrStatus.c" \
     "$ROOT/openrtx/src/ui/default/ui_strings.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraIds.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraCalls.c" \

@@ -227,7 +227,7 @@ In VFO mode:
 - [ ] A ride with nothing connected, then connect and side key + 0: the
       ride is there, `network time` lines give the clock time
 
-## 6. FM and DMR
+## 6. FM
 
 Same firmware, no new build. FM, on a local repeater or simplex channel:
 
@@ -240,18 +240,6 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       with Up / Down and show on line 1
 - [ ] If you are licensed for it: PTT turns the screen red, MIC moves, a
       second radio hears you (with the tone, if set)
-
-DMR, on the output frequency of a local DMR repeater:
-
-- [ ] Long **5** until `D listening`; on the repeater's frequency it shows
-      `Repeater idle` or the last call, and `CC` with its colour code
-- [ ] During a call: `TG …` and the talking radio's ID, the timeslot, the
-      time talking. Compare with a DMR radio or a hotspot dashboard
-- [ ] Silent during calls (no DMR audio, by design)
-- [ ] **#** steps the timeslot filter, **\*** keeps the colour code heard
-      (yellow top left), **0** lists the recent calls
-- [ ] The log has `dmr` lines; send the log if calls are missed or wrong
-      (`dmr signal` lines give the decoding quality)
 
 ## If something goes wrong
 

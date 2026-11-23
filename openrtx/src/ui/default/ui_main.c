@@ -1602,12 +1602,9 @@ void _ui_drawMainBottom()
 #ifdef CONFIG_UI_FM_SCREEN
 extern void _ui_drawFmMain(ui_state_t *ui_state, bool memory);
 #endif
-#ifdef CONFIG_DMR_RX
-extern void _ui_drawDmrMain(ui_state_t *ui_state, bool memory);
-#endif
 
 /**
- * Main screens drawn by ui_modes.c: FM and DMR.
+ * Main screens drawn by ui_modes.c: FM.
  *
  * @return true if drawn.
  */
@@ -1618,11 +1615,6 @@ static bool _ui_drawModeMain(ui_state_t *ui_state, bool memory)
         #ifdef CONFIG_UI_FM_SCREEN
         case OPMODE_FM:
             _ui_drawFmMain(ui_state, memory);
-            return true;
-        #endif
-        #ifdef CONFIG_DMR_RX
-        case OPMODE_DMR:
-            _ui_drawDmrMain(ui_state, memory);
             return true;
         #endif
         default:

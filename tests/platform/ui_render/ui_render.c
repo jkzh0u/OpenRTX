@@ -41,7 +41,6 @@
 #include "protocols/TETRA/TetraCalls.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
-#include "protocols/DMR/DmrStatus.h"
 #include "core/settings.h"
 #include "core/voicePrompts.h"
 #include "core/voicePromptUtils.h"
@@ -66,7 +65,6 @@ void _ui_drawMainMEM(ui_state_t *ui_state);
 void _ui_drawTetraRecent(ui_state_t *ui_state);
 void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 void _ui_drawTetraFieldTest(ui_state_t *ui_state);
-void _ui_drawDmrRecent(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
 void _ui_drawMenuTop(ui_state_t *ui_state);
@@ -77,7 +75,6 @@ void _ui_drawSettingsM17(ui_state_t *ui_state);
 void _ui_drawSettingsFM(ui_state_t *ui_state);
 void _ui_drawSettingsAccessibility(ui_state_t *ui_state);
 void _ui_drawSettingsTetra(ui_state_t *ui_state);
-void _ui_drawSettingsDmr(ui_state_t *ui_state);
 void _ui_drawSettingsReset2Defaults(ui_state_t *ui_state);
 void _ui_drawMenuInfo(ui_state_t *ui_state);
 void _ui_drawMenuAbout(ui_state_t *ui_state);
@@ -291,8 +288,7 @@ enum screen {
     SCREEN_MEM,
     SCREEN_RECENT,
     SCREEN_DETAIL,
-    SCREEN_FIELD_TEST,
-    SCREEN_DMR_RECENT
+    SCREEN_FIELD_TEST
 };
 
 /* Memory channel number being typed, drawn on the next scene */
@@ -317,8 +313,6 @@ static void draw(const char *name, enum screen screen)
         _ui_drawTetraRecentDetail(&ui);
     else if (screen == SCREEN_FIELD_TEST)
         _ui_drawTetraFieldTest(&ui);
-    else if (screen == SCREEN_DMR_RECENT)
-        _ui_drawDmrRecent(&ui);
     else
         _ui_drawMainVFO(&ui);
     gfx_render();
@@ -574,98 +568,6 @@ static void fmScenes(void)
     last_state.rssi = -85;
 }
 
-/** A DMR receiver event at a time */
-static void dmrEvent(const struct dmrEvent *ev, long long at)
-{
-    dmrStatus_onEvent(ev, at);
-}
-
-static void dmrCallEvent(enum dmrCallWhat what, uint8_t slot, uint32_t dst,
-                         uint32_t src, bool group, bool late, bool enc,
-                         long long at)
-{
-    struct dmrEvent ev;
-    memset(&ev, 0, sizeof(ev));
-    ev.type = DMR_EV_CALL;
-    ev.u.call.what = what;
-    ev.u.call.call.slot = slot;
-    ev.u.call.call.colourCode = 1;
-    ev.u.call.call.ids = (dst != 0);
-    ev.u.call.call.group = group;
-    ev.u.call.call.dst = dst;
-    ev.u.call.call.src = src;
-    ev.u.call.call.lateEntry = late;
-    ev.u.call.call.encrypted = enc;
-    dmrEvent(&ev, at);
-}
-
-/**
- * DMR: listening, a repeater idle, a group call, a private call joined
- * late, encrypted, after the calls, and the recent calls.
- */
-static void dmrScenes(void)
-{
-    channel_t saved = last_state.channel;
-    char savedName[sizeof(last_state.channel.name)];
-    struct dmrEvent ev;
-
-    strcpy(savedName, last_state.channel.name);
-    last_state.channel.mode = OPMODE_DMR;
-    last_state.channel.rx_frequency = 443850000;
-    last_state.channel.tx_frequency = 448850000;
-    strcpy(last_state.channel.name, "DMR Rptr");
-    last_state.channel_index = 6;
-
-    dmrStatus_reset(443850000);
-    last_state.rssi = -127;
-    scene("dmr-1-listening", false);
-
-    memset(&ev, 0, sizeof(ev));
-    ev.type = DMR_EV_LOCK;
-    ev.u.lock.locked = true;
-    ev.u.lock.sync = DMR_SYNC_BS;
-    dmrEvent(&ev, now - 20000);
-    memset(&ev, 0, sizeof(ev));
-    ev.type = DMR_EV_DATA;
-    ev.u.data.slot = 1;
-    ev.u.data.colourCode = 1;
-    ev.u.data.dataType = DMR_DT_IDLE;
-    dmrEvent(&ev, now - 100);
-    dmrStatus_setDemod(0.08f, false, 1200, 3);
-    last_state.rssi = -88;
-    scene("dmr-2-idle", false);
-    scene("dmr-2b-idle-memory", true);
-
-    dmrCallEvent(DMR_CALL_START, 1, 3020, 3021234, true, false, false,
-                 now - 14000);
-    scene("dmr-3-group-call", false);
-    dmrCallEvent(DMR_CALL_END, 1, 3020, 3021234, true, false, false,
-                 now - 9000);
-
-    dmrCallEvent(DMR_CALL_START, 2, 3027001, 3029999, false, true, false,
-                 now - 5000);
-    scene("dmr-4-private-late", true);
-    dmrCallEvent(DMR_CALL_END, 2, 3027001, 3029999, false, true, false,
-                 now - 4500);
-
-    dmrCallEvent(DMR_CALL_START, 1, 91, 2345678, true, false, true, now - 2000);
-    scene("dmr-5-encrypted", false);
-    dmrCallEvent(DMR_CALL_END, 1, 91, 2345678, true, false, true, now - 61000);
-
-    scene("dmr-6-last-heard", false);
-    draw("dmr-7-recent", SCREEN_DMR_RECENT);
-
-    last_state.settings.dmrSlotFilter = 1;
-    last_state.settings.dmrColourCode = 2;
-    scene("dmr-8-filters", false);
-    last_state.settings.dmrSlotFilter = 0;
-    last_state.settings.dmrColourCode = 0;
-
-    last_state.channel = saved;
-    strcpy(last_state.channel.name, savedName);
-    last_state.rssi = -85;
-}
-
 /* ---- Menus ---- */
 
 typedef void (*menuDraw)(ui_state_t *ui_state);
@@ -721,7 +623,6 @@ static void menuScenes(void)
     last_state.channel = before;
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
     menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);
-    menu("menu-08c-dmr", _ui_drawSettingsDmr, 0);
     menu("menu-09-reset", _ui_drawSettingsReset2Defaults, 0);
     menu("menu-10-info", _ui_drawMenuInfo, 0);
     menu("menu-11-about", _ui_drawMenuAbout, 0);
@@ -841,7 +742,6 @@ int main(int argc, char *argv[])
 
     tetraScenes(mcc, mnc, (uint32_t)group, (uint32_t)talker);
     fmScenes();
-    dmrScenes();
     menuScenes();
     if (tetraIds_filterCount() > 1)
         filterScenes();

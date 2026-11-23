@@ -10,8 +10,7 @@ A channel list is a text file of entries, the format of
 platform/drivers/CPS/cps_io_builtin.c and
 openrtx/include/protocols/TETRA/TetraIds.h:
 
-    CPS_CHANNEL("Name", frequency_hz, OPMODE_FM | OPMODE_M17 | OPMODE_TETRA
-                                      | OPMODE_DMR)
+    CPS_CHANNEL("Name", frequency_hz, OPMODE_FM | OPMODE_M17 | OPMODE_TETRA)
     FM_CHANNEL("Name", rx_hz, tx_hz, width_hz, rx_tone, tx_tone)
     TETRA_FILTER(ID, "Name")
     TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY; also
@@ -43,8 +42,7 @@ VERSION = 2
 READ_VERSIONS = (1, 2)  # 1: no priorities
 HEADER_SIZE = 32
 MAX_FILTERS = 30
-OPMODES = {"OPMODE_FM": 1, "OPMODE_DMR": 2, "OPMODE_M17": 3,
-           "OPMODE_TETRA": 4}
+OPMODES = {"OPMODE_FM": 1, "OPMODE_M17": 3, "OPMODE_TETRA": 4}
 MODE_NAMES = {v: k[7:] for k, v in OPMODES.items()}
 BW_12_5 = 0
 BW_25 = 1

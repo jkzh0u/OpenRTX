@@ -56,9 +56,7 @@ enum uiScreen
     TETRA_RECENT,
     TETRA_RECENT_DETAIL,
     TETRA_FIELD_TEST,
-    SETTINGS_TETRA,
-    DMR_RECENT,
-    SETTINGS_DMR
+    SETTINGS_TETRA
 };
 
 enum SetRxTx
@@ -101,9 +99,6 @@ enum settingsItems
     S_FM,
 #ifdef CONFIG_TETRA
     S_TETRA,
-#endif
-#ifdef CONFIG_DMR_RX
-    S_DMR,
 #endif
     S_ACCESSIBILITY,
     S_RESET2DEFAULTS,
@@ -183,14 +178,6 @@ enum settingsFMItems
     FM_TX_TONE,
     FM_RX_TONE
 };
-
-#ifdef CONFIG_DMR_RX
-enum settingsDmrItems
-{
-    DMR_TIMESLOT = 0,
-    DMR_COLOUR_CODE
-};
-#endif
 
 /**
  * Struct containing a set of positions and sizes that get
@@ -296,10 +283,6 @@ extern const char * settings_accessibility_items[];
 #ifdef CONFIG_TETRA
 extern const char *settings_tetra_items[];
 extern const uint8_t settings_tetra_num;
-#endif
-#ifdef CONFIG_DMR_RX
-extern const char *settings_dmr_items[];
-extern const uint8_t settings_dmr_num;
 #endif
 extern const char *backup_restore_items[];
 extern const char *info_items[];
