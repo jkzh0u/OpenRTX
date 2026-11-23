@@ -70,6 +70,7 @@ typedef struct
 #endif
 #ifdef CONFIG_ROGER_BEEP
     uint8_t rogerBeep;            // FM roger beep style, 0 off (roger_beep.h)
+    uint8_t talkPermit;           // FM talk permit tone style, 0 off
 #endif
 }
 __attribute__((packed)) settings_t;
@@ -112,6 +113,7 @@ static const settings_t default_settings =
 #endif
 #ifdef CONFIG_ROGER_BEEP
     0,                            // No roger beep
+    0,                            // No talk permit tone
 #endif
 };
 

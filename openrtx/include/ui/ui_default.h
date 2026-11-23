@@ -178,6 +178,7 @@ enum settingsFMItems
     FM_TX_TONE,
     FM_RX_TONE,
 #ifdef CONFIG_ROGER_BEEP
+    FM_TALK_PERMIT,
     FM_ROGER_BEEP,
 #endif
 };

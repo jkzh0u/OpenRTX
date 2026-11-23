@@ -10,6 +10,9 @@
 #include "interfaces/radio.h"
 #include "core/state.h"
 #include "core/roger_beep.h"
+#include "core/audio_path.h"
+#include "core/audio_stream.h"
+#include <string.h>
 #include "rtx/OpMode_FM.hpp"
 #include "rtx/rtx.h"
 
@@ -69,6 +72,53 @@ void OpMode_FM::disable()
     enterRx   = false;
 }
 
+#ifdef CONFIG_ROGER_BEEP
+/**
+ * Play a talk permit tone in the radio's own speaker, blocking until it
+ * ends, before the transmitter keys up.
+ *
+ * @param style: talk permit style, 0 for none.
+ */
+static void playTalkPermit(uint8_t style)
+{
+    static int16_t tone[TALK_PERMIT_MAX_SAMPLES];
+    static stream_sample_t buf[2 * 240]; // Two halves of 30 ms
+    const size_t half = sizeof(buf) / sizeof(buf[0]) / 2;
+
+    size_t n = talkPermit_render(style, tone, TALK_PERMIT_MAX_SAMPLES);
+    if (n == 0)
+        return;
+
+    pathId path = audioPath_request(SOURCE_MCU, SINK_SPK, PRIO_PROMPT);
+    if (audioPath_getStatus(path) != PATH_OPEN) {
+        audioPath_release(path);
+        return;
+    }
+
+    memset(buf, 0, sizeof(buf));
+    streamId stream = audioStream_start(path, buf, 2 * half, TALK_PERMIT_RATE,
+                                        STREAM_OUTPUT | BUF_CIRC_DOUBLE);
+    if (stream < 0) {
+        audioPath_release(path);
+        return;
+    }
+
+    outputStream_sync(stream, false);
+    // The tone, then two halves of silence so that all of it plays
+    for (size_t pos = 0; pos < n + 2 * half; pos += half) {
+        stream_sample_t *out = outputStream_getIdleBuffer(stream);
+        if (out == NULL)
+            break;
+        for (size_t i = 0; i < half; i++)
+            out[i] = (pos + i < n) ? tone[pos + i] : 0;
+        outputStream_sync(stream, true);
+    }
+
+    audioStream_stop(stream);
+    audioPath_release(path);
+}
+#endif
+
 void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
 {
     (void) newCfg;
@@ -123,6 +173,10 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
     {
         audioPath_release(rxAudioPath);
         radio_disableRtx();
+
+        #ifdef CONFIG_ROGER_BEEP
+        playTalkPermit(state.settings.talkPermit);
+        #endif
 
         txAudioPath = audioPath_request(SOURCE_MIC, SINK_RTX, PRIO_TX);
         radio_enableTx();

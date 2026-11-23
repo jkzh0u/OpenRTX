@@ -87,6 +87,74 @@ static void mdcBurst(rogerBeepTone tone)
     }
 }
 
+/* Talk permit tones */
+static const struct step tpBeep[] = { { 1000, 100 } };
+static const struct step tpDouble[] = { { 1400, 50 }, { 0, 30 }, { 1400, 50 } };
+static const struct step tpMoto[] = {
+    { 1800, 40 }, { 0, 25 }, { 1800, 40 }, { 0, 25 }, { 1800, 60 },
+};
+static const struct step tpChime[] = { { 1500, 60 }, { 1000, 90 } };
+
+static const struct {
+    const char *name;
+    const struct step *steps;
+    size_t n;
+} permits[TALK_PERMIT_STYLES] = {
+    { "Off", NULL, 0 },
+    { "Beep", tpBeep, sizeof(tpBeep) / sizeof(tpBeep[0]) },
+    { "Double", tpDouble, sizeof(tpDouble) / sizeof(tpDouble[0]) },
+    { "Moto", tpMoto, sizeof(tpMoto) / sizeof(tpMoto[0]) },
+    { "Chime", tpChime, sizeof(tpChime) / sizeof(tpChime[0]) },
+};
+
+/* A sine wave, one period in 64 steps, peak 10000 */
+static const int16_t sine[64] = {
+    0,     980,   1951,  2903,  3827,  4714,  5556,  6344,  7071,   7730,
+    8315,  8819,  9239,  9569,  9808,  9952,  10000, 9952,  9808,   9569,
+    9239,  8819,  8315,  7730,  7071,  6344,  5556,  4714,  3827,   2903,
+    1951,  980,   0,     -980,  -1951, -2903, -3827, -4714, -5556,  -6344,
+    -7071, -7730, -8315, -8819, -9239, -9569, -9808, -9952, -10000, -9952,
+    -9808, -9569, -9239, -8819, -8315, -7730, -7071, -6344, -5556,  -4714,
+    -3827, -2903, -1951, -980,
+};
+
+const char *talkPermit_name(uint8_t style)
+{
+    return (style < TALK_PERMIT_STYLES) ? permits[style].name : permits[0].name;
+}
+
+size_t talkPermit_render(uint8_t style, int16_t *out, size_t max)
+{
+    /* Each tone fades in and out over 2 ms: no clicks */
+    const unsigned fade = TALK_PERMIT_RATE / 500;
+    uint32_t phase = 0;
+    size_t n = 0;
+
+    if (style == 0 || style >= TALK_PERMIT_STYLES)
+        return 0;
+
+    for (size_t s = 0; s < permits[style].n; s++) {
+        const struct step *st = &permits[style].steps[s];
+        unsigned len = (unsigned)st->ms * TALK_PERMIT_RATE / 1000;
+        uint32_t inc = (uint32_t)(((uint64_t)st->hz << 32) / TALK_PERMIT_RATE);
+
+        for (unsigned i = 0; i < len && n < max; i++, n++) {
+            if (st->hz == 0) {
+                out[n] = 0;
+                continue;
+            }
+            int32_t v = sine[phase >> 26];
+            unsigned edge = (i < len - 1 - i) ? i : len - 1 - i;
+            if (edge < fade)
+                v = v * (int32_t)edge / (int32_t)fade;
+            out[n] = (int16_t)v;
+            phase += inc;
+        }
+    }
+
+    return n;
+}
+
 const char *rogerBeep_name(uint8_t style)
 {
     return (style < ROGER_BEEP_STYLES) ? styles[style].name : styles[0].name;

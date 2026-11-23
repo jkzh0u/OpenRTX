@@ -198,6 +198,7 @@ const char* settings_fm_items[] =
     "TX tone",
     "RX tone",
 #ifdef CONFIG_ROGER_BEEP
+    "Talk permit",
     "Roger beep",
 #endif
 };
@@ -943,6 +944,12 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 
 #ifdef CONFIG_ROGER_BEEP
+        case FM_TALK_PERMIT:
+            state.settings.talkPermit =
+                (uint8_t)((state.settings.talkPermit + TALK_PERMIT_STYLES + step)
+                          % TALK_PERMIT_STYLES);
+            break;
+
         case FM_ROGER_BEEP:
             state.settings.rogerBeep =
                 (uint8_t)((state.settings.rogerBeep + ROGER_BEEP_STYLES + step)

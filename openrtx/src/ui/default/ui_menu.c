@@ -500,6 +500,11 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
             break;
 
 #ifdef CONFIG_ROGER_BEEP
+        case FM_TALK_PERMIT:
+            sniprintf(buf, max_len, "%s",
+                      talkPermit_name(last_state.settings.talkPermit));
+            break;
+
         case FM_ROGER_BEEP:
             sniprintf(buf, max_len, "%s",
                       rogerBeep_name(last_state.settings.rogerBeep));
