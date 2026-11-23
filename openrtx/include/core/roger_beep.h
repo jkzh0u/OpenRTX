@@ -27,13 +27,13 @@ extern "C" {
 #define ROGER_BEEP_STYLES 9
 
 /** Talk permit styles, 0 (off) included */
-#define TALK_PERMIT_STYLES 5
+#define TALK_PERMIT_STYLES 6
 
 /** Sample rate of talkPermit_render(), Hz */
 #define TALK_PERMIT_RATE 8000
 
 /** Samples of the longest talk permit tone */
-#define TALK_PERMIT_MAX_SAMPLES (TALK_PERMIT_RATE / 4)
+#define TALK_PERMIT_MAX_SAMPLES (TALK_PERMIT_RATE * 3 / 10)
 
 /**
  * Turn the transmit tone on at a frequency, or off.

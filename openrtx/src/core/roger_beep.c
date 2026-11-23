@@ -90,8 +90,16 @@ static void mdcBurst(rogerBeepTone tone)
 /* Talk permit tones */
 static const struct step tpBeep[] = { { 1000, 100 } };
 static const struct step tpDouble[] = { { 1400, 50 }, { 0, 30 }, { 1400, 50 } };
+/*
+ * Motorola's talk permit: three fast high beeps, "dit-dit-dit". On trunked
+ * systems one more beep after it means the call is not encrypted ("clear").
+ */
 static const struct step tpMoto[] = {
-    { 1800, 40 }, { 0, 25 }, { 1800, 40 }, { 0, 25 }, { 1800, 60 },
+    { 1800, 30 }, { 0, 25 }, { 1800, 30 }, { 0, 25 }, { 1800, 30 },
+};
+static const struct step tpMotoClear[] = {
+    { 1800, 30 }, { 0, 25 }, { 1800, 30 }, { 0, 25 },
+    { 1800, 30 }, { 0, 90 }, { 1800, 30 },
 };
 static const struct step tpChime[] = { { 1500, 60 }, { 1000, 90 } };
 
@@ -103,7 +111,8 @@ static const struct {
     { "Off", NULL, 0 },
     { "Beep", tpBeep, sizeof(tpBeep) / sizeof(tpBeep[0]) },
     { "Double", tpDouble, sizeof(tpDouble) / sizeof(tpDouble[0]) },
-    { "Moto", tpMoto, sizeof(tpMoto) / sizeof(tpMoto[0]) },
+    { "Motorola", tpMoto, sizeof(tpMoto) / sizeof(tpMoto[0]) },
+    { "Moto clear", tpMotoClear, sizeof(tpMotoClear) / sizeof(tpMotoClear[0]) },
     { "Chime", tpChime, sizeof(tpChime) / sizeof(tpChime[0]) },
 };
 
