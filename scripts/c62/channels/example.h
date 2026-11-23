@@ -19,12 +19,24 @@
 
 /*
  * Channels, in memory mode order: name, frequency in Hz, and OPMODE_FM,
- * OPMODE_M17 or OPMODE_TETRA. Receive only.
+ * OPMODE_M17, OPMODE_TETRA or OPMODE_DMR. Receive only, 25 kHz.
  */
 CPS_CHANNEL("NOAA WX 1", 162550000, OPMODE_FM)
 CPS_CHANNEL("M17 Simplex", 433475000, OPMODE_M17)
 CPS_CHANNEL("TETRA Site 1", 390012500, OPMODE_TETRA)
 CPS_CHANNEL("TETRA Site 2", 390037500, OPMODE_TETRA)
+CPS_CHANNEL("DMR Rptr", 443850000, OPMODE_DMR)
+
+/*
+ * FM channels with all their settings: name, receive and transmit
+ * frequency in Hz (transmit 0: receive only), width (12500 or 25000 Hz),
+ * and receive and transmit CTCSS tones in tenths of Hz (0: none). For a
+ * repeater, transmit is the input frequency and the transmit tone is the
+ * one it needs.
+ */
+FM_CHANNEL("2m Calling", 146520000, 146520000, 25000, 0, 0)
+FM_CHANNEL("70cm Rptr", 443150000, 448150000, 12500, 1035, 1035)
+FM_CHANNEL("Marine 16", 156800000, 0, 25000, 0, 0)
 
 /*
  * TETRA talkgroup filters, chosen on the radio with # and *, in this

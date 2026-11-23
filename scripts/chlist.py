@@ -10,14 +10,20 @@ A channel list is a text file of entries, the format of
 platform/drivers/CPS/cps_io_builtin.c and
 openrtx/include/protocols/TETRA/TetraIds.h:
 
-    CPS_CHANNEL("Name", frequency_hz, OPMODE_FM | OPMODE_M17 | OPMODE_TETRA)
+    CPS_CHANNEL("Name", frequency_hz, OPMODE_FM | OPMODE_M17 | OPMODE_TETRA
+                                      | OPMODE_DMR)
+    FM_CHANNEL("Name", rx_hz, tx_hz, width_hz, rx_tone, tx_tone)
     TETRA_FILTER(ID, "Name")
     TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY; also
                                                    # | TF_ALARM, TF_PRIORITY(n)
     TETRA_LA(la, "Name")
     TETRA_ID_RANGE(first, last, "Run %u", base, TF(ID))
 
-with C comments. TF_PRIORITY(n), n from 1 (lowest) to 15, gives a
+with C comments. CPS_CHANNEL channels are receive only, 25 kHz, without
+tones. FM_CHANNEL is an FM channel with all its settings: tx_hz the
+transmit frequency (0: receive only), width_hz 12500 or 25000, and the
+CTCSS tones in tenths of Hz (885 for 88.5 Hz), 0 for none.
+TF_PRIORITY(n), n from 1 (lowest) to 15, gives a
 talkgroup's calls priority over others; alarm talkgroups have 15 unless
 given another. The image (openrtx/include/core/chlist.h) is flashed apart
 from the firmware, so one firmware serves everyone:
@@ -37,16 +43,26 @@ VERSION = 2
 READ_VERSIONS = (1, 2)  # 1: no priorities
 HEADER_SIZE = 32
 MAX_FILTERS = 30
-OPMODES = {"OPMODE_FM": 1, "OPMODE_M17": 3, "OPMODE_TETRA": 4}
+OPMODES = {"OPMODE_FM": 1, "OPMODE_DMR": 2, "OPMODE_M17": 3,
+           "OPMODE_TETRA": 4}
 MODE_NAMES = {v: k[7:] for k, v in OPMODES.items()}
+BW_12_5 = 0
 BW_25 = 1
+TONE_ON = 0x80
+# CTCSS tones, tenths of Hz: the index is what the image keeps
+# (openrtx/src/core/cps.c)
+CTCSS = (670, 693, 719, 744, 770, 797, 825, 854, 885, 915, 948, 974, 1000,
+         1035, 1072, 1109, 1148, 1188, 1230, 1273, 1318, 1365, 1413, 1462,
+         1514, 1567, 1598, 1622, 1655, 1679, 1713, 1738, 1773, 1799, 1835,
+         1862, 1899, 1928, 1966, 1995, 2035, 2065, 2107, 2181, 2257, 2291,
+         2336, 2418, 2503, 2541)
 RX_ONLY = 0x01
 TF_ALARM = 1
 MAX_PRIORITY = 15
 SSI_MASK = 0xFFFFFF  # SSIs are 24-bit: priority in bits 24-31
 TF_EVERY = 0x7FFFFFFE
-MACROS = ("CPS_CHANNEL", "TETRA_FILTER", "TETRA_ID", "TETRA_LA",
-          "TETRA_ID_RANGE")
+MACROS = ("CPS_CHANNEL", "FM_CHANNEL", "TETRA_FILTER", "TETRA_ID",
+          "TETRA_LA", "TETRA_ID_RANGE")
 FORMAT_RE = re.compile(r"%(%|[0-]*\d{0,2}u|.?)")
 
 
@@ -201,6 +217,18 @@ def number(arg, line, filters=None):
     return ev(tree)
 
 
+def tone(arg, line):
+    """A CTCSS tone in tenths of Hz, 0 for none, as the image keeps it."""
+    v = number(arg, line)
+    if v == 0:
+        return 0
+    if v not in CTCSS:
+        near = min(CTCSS, key=lambda t: abs(t - v))
+        raise ListError(f"line {line}: {arg}: not a CTCSS tone (tenths of "
+                        f"Hz; nearest {near // 10}.{near % 10} Hz is {near})")
+    return TONE_ON | CTCSS.index(v)
+
+
 def ssi(arg, line):
     """An SSI: 24 bits, the image keeps a priority above them."""
     v = number(arg, line)
@@ -226,8 +254,8 @@ def parse(text):
         raise ListError(f"{len(filters)} filters: at most {MAX_FILTERS}")
 
     for line, name, args in items:
-        want = {"CPS_CHANNEL": 3, "TETRA_FILTER": 2, "TETRA_ID": 3,
-                "TETRA_LA": 2, "TETRA_ID_RANGE": 5}[name]
+        want = {"CPS_CHANNEL": 3, "FM_CHANNEL": 6, "TETRA_FILTER": 2,
+                "TETRA_ID": 3, "TETRA_LA": 2, "TETRA_ID_RANGE": 5}[name]
         if len(args) != want:
             raise ListError(f"line {line}: {name} takes {want} arguments")
         if name == "CPS_CHANNEL":
@@ -239,6 +267,22 @@ def parse(text):
                 raise ListError(f"line {line}: bad frequency {args[1]}")
             channels.append((freq, freq, string(args[0], line), mode, BW_25,
                              RX_ONLY, 0, 0))
+        elif name == "FM_CHANNEL":
+            rx = number(args[1], line)
+            tx = number(args[2], line)
+            width = number(args[3], line)
+            if not 1 <= rx < 1 << 32:
+                raise ListError(f"line {line}: bad frequency {args[1]}")
+            if not 0 <= tx < 1 << 32:
+                raise ListError(f"line {line}: bad frequency {args[2]}")
+            if width not in (12500, 25000):
+                raise ListError(f"line {line}: width {args[3]}: 12500 or "
+                                f"25000")
+            channels.append((rx, tx if tx else rx, string(args[0], line),
+                             OPMODES["OPMODE_FM"],
+                             BW_12_5 if width == 12500 else BW_25,
+                             0 if tx else RX_ONLY, tone(args[4], line),
+                             tone(args[5], line)))
         elif name == "TETRA_ID":
             v = number(args[2], line, filters)
             ids.append((ssi(args[0], line), string(args[1], line),
@@ -317,11 +361,24 @@ def show(data):
           f"{nl} location areas, {nr} ranges")
     fnames = ["All"]
     for i in range(nc):
-        rx, tx, name, mode, bw, flags, _, _ = struct.unpack_from(
+        rx, tx, name, mode, bw, flags, rxt, txt = struct.unpack_from(
             "<IIIBBBBB3x", data, at)
         at += 20
+        extra = ""
+        if mode == OPMODES["OPMODE_FM"]:
+            def t(v):
+                if not v & TONE_ON or (v & 0x7F) >= len(CTCSS):
+                    return "-"
+                c = CTCSS[v & 0x7F]
+                return f"{c // 10}.{c % 10}"
+            extra = (f" {'12.5' if bw == BW_12_5 else '25'} kHz"
+                     f" tones {t(rxt)}/{t(txt)}")
+            if flags & RX_ONLY:
+                extra += " RX only"
+            elif tx != rx:
+                extra += f" TX {tx / 1e6:.5f}"
         print(f"  {i + 1:3}. {s(name):16} {rx / 1e6:11.5f} "
-              f"{MODE_NAMES.get(mode, mode)}")
+              f"{MODE_NAMES.get(mode, mode)}{extra}")
     for i in range(nf):
         fnames.append(s(struct.unpack_from("<I", data, at)[0]))
         at += 4

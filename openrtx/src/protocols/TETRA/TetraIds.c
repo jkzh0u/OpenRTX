@@ -22,6 +22,7 @@
  * location areas and identity ranges
  */
 #define CPS_CHANNEL(...)
+#define FM_CHANNEL(...)
 
 enum {
     TF_ALL_ = 0,
@@ -151,6 +152,7 @@ static const struct tetraIdRange ranges[] = {
 };
 #endif
 
+#undef FM_CHANNEL
 #undef CPS_CHANNEL
 
 /*

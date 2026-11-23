@@ -10,8 +10,10 @@
  * per line:
  *
  *     CPS_CHANNEL("Name", frequency_hz, OPMODE_xxx)
+ *     FM_CHANNEL("Name", rx_hz, tx_hz, width_hz, rx_tone, tx_tone)
  *
- * Channels are receive only, 25 kHz, with the same frequency for TX and RX.
+ * Channels are receive only, 25 kHz, with the same frequency for TX and RX
+ * (FM_CHANNEL: its receive frequency).
  * There are no contacts and no banks, and every write fails. The TETRA_
  * entries in the same header are for TetraIds.c and are ignored here.
  *
@@ -41,6 +43,7 @@ struct builtinChannel {
 /* The sentinel keeps the array valid when the list is empty */
 static const struct builtinChannel channels[] = {
 #define CPS_CHANNEL(name, freq, mode) { (name), (freq), (mode) },
+#define FM_CHANNEL(name, rx, ...) { (name), (rx), OPMODE_FM },
 #define TETRA_FILTER(...)
 #define TETRA_ID(...)
 #define TETRA_LA(...)
@@ -50,6 +53,7 @@ static const struct builtinChannel channels[] = {
 #undef TETRA_LA
 #undef TETRA_ID
 #undef TETRA_FILTER
+#undef FM_CHANNEL
 #undef CPS_CHANNEL
     { NULL, 0, OPMODE_NONE },
 };
@@ -98,6 +102,7 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
     channel->rx_only = (c.flags & CHLIST_RX_ONLY) ? 1 : 0;
     channel->rx_frequency = c.rxHz;
     channel->tx_frequency = c.txHz;
+    channel->power = 1000; /* 1 W, as cps_getDefaultChannel() */
     if (c.mode == OPMODE_FM) {
         channel->fm.rxToneEn = (c.rxTone >> 7) & 1;
         channel->fm.rxTone = c.rxTone & 0x7f;
