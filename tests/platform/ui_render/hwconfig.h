@@ -18,6 +18,8 @@
 #define CONFIG_SCREEN_BRIGHTNESS
 /* Shortcut menu drawn as a grid shaped like the keypad */
 #define CONFIG_UI_MACRO_GRID
+#define CONFIG_UI_FM_SCREEN
+#define CONFIG_DMR_RX
 #define CONFIG_TETRA_LOG
 #define CONFIG_TETRA_AFC
 #define CONFIG_BAT_LIION
