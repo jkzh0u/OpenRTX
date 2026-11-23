@@ -90,6 +90,16 @@ enum CTCSSfreq
 extern const uint16_t ctcss_tone[];
 
 /**
+ * Transmit power of a new channel (the VFO at first start, channel list
+ * channels), mW: the C62's full power, 1 W on other radios.
+ */
+#ifdef PLATFORM_C62
+#define CPS_DEFAULT_POWER 5000
+#else
+#define CPS_DEFAULT_POWER 1000
+#endif
+
+/**
  * Data structure defining an analog-specific channel information such as tones.
  */
 typedef struct

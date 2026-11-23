@@ -102,7 +102,7 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
     channel->rx_only = (c.flags & CHLIST_RX_ONLY) ? 1 : 0;
     channel->rx_frequency = c.rxHz;
     channel->tx_frequency = c.txHz;
-    channel->power = 1000; /* 1 W, as cps_getDefaultChannel() */
+    channel->power = CPS_DEFAULT_POWER; /* As cps_getDefaultChannel() */
     if (c.mode == OPMODE_FM) {
         channel->fm.rxToneEn = (c.rxTone >> 7) & 1;
         channel->fm.rxTone = c.rxTone & 0x7f;

@@ -995,7 +995,7 @@ The main screen shows, from the top:
 |---|---|
 | Squelch | Off, or the signal level that opens it, -123 to -61 dBm (the side key with **Up** / **Down** too) |
 | Width | 12.5 kHz (narrow, most repeaters today) or 25 kHz |
-| Power | 1, 2.5 or 5 W |
+| Power | 1, 2.5 or 5 W. New channels and the VFO start at 5 W |
 | Tone mode | None, Encode (send the tone), Decode (open only on the tone), Both |
 | TX tone | The CTCSS tone sent, 67.0 to 254.1 Hz |
 | RX tone | The CTCSS tone the squelch waits for |
