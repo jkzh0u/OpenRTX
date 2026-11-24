@@ -1,8 +1,13 @@
 name: "Build and test"
 on:
   workflow_dispatch:
+  # Documentation alone does not change what is built or tested
   push:
+    paths-ignore:
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - '**.md'
 
 env:
   BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
@@ -13,9 +18,11 @@ env:
 # branch starts both a push run and a pull_request run: in a shared group,
 # whichever queued first would be cancelled as superseded, and losing the
 # pull_request run means the PR build comment is never updated for that commit.
+# On forks a newer push cancels the run of the one before as well: it is the
+# newest commit that matters there, and stacked runs waste minutes.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.repository != 'OpenRTX/OpenRTX' }}
 
 jobs:
   unit-test:

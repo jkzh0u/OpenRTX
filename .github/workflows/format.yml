@@ -4,6 +4,11 @@ on:
   push:
   pull_request:
 
+# On forks a newer push cancels the check of the one before
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || github.repository != 'OpenRTX/OpenRTX' }}
+
 jobs:
   clang-format:
     runs-on: ubuntu-24.04

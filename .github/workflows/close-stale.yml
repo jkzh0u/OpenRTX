@@ -5,6 +5,9 @@ on:
 
 jobs:
   stale:
+    # Only for the upstream repository's issues and PRs: forks have none, and
+    # a daily run there only wastes minutes
+    if: github.repository == 'OpenRTX/OpenRTX'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/stale@v10

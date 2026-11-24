@@ -9,8 +9,13 @@
 name: "Build C62"
 
 on:
+  # Documentation alone does not change the firmware
   push:
+    paths-ignore:
+      - '**.md'
   pull_request:
+    paths-ignore:
+      - '**.md'
 
 # A newer push to the same branch replaces the build (and the pre-release)
 concurrency:
