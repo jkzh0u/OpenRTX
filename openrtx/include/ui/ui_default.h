@@ -62,7 +62,9 @@ enum uiScreen
     SPECTRUM,
     TONE_PICK,
     BCAST_FM,
-    TETRA_SAVED
+    TETRA_SAVED,
+    TETRA_MESSAGES,
+    TETRA_MESSAGE
 };
 
 /* FM scan: what it does after stopping on a signal (settings.scanResume) */
@@ -95,6 +97,9 @@ enum menuItems
 #endif
 #ifdef CONFIG_TETRA_CALLREC
     M_SAVED_CALLS,
+#endif
+#ifdef CONFIG_TETRA
+    M_MESSAGES,
 #endif
     M_SETTINGS,
     M_INFO,
@@ -333,6 +338,10 @@ typedef struct ui_state_t
     uint16_t tone_pick_pos;
     char tone_pick_digits[4];
     long long tone_pick_tick;
+#ifdef CONFIG_TETRA
+    // Messages: the one selected or shown, 0 the newest
+    uint8_t msg_sel;
+#endif
 #ifdef CONFIG_TETRA_CALLREC
     // Saved calls: the one selected, 0 the newest; a delete waiting for a
     // second long press

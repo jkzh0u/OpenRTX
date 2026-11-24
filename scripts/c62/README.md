@@ -545,7 +545,7 @@ first.
 | Cell tracking | Moves between cells by itself (Cell tracking above) | Stays on the channel you picked. A long **0** still searches once |
 | Alarm beep | An alarm call beeps three times and turns the screen red | Red screen only |
 | Keep filter | Starts with the talkgroup filter you last picked | Starts at `TG All` |
-| Save calls | Keeps the calls heard on the radio (Saved calls below) | Calls are not kept; the instant replay (**P2**) still works |
+| Save calls | Which calls heard are kept on the radio (Saved calls below): All, Marked (talkgroups marked `TF_SAVE` in the channel list), or Filter (the talkgroups the talkgroup filter lets through). Alarm calls are kept in all three. **Up** / **Down** step through them | Off (at first): calls are not kept; the instant replay (**P2**) still works |
 | Freq. correct | Tunes itself so the signal decodes best: the C62 decodes best about 1.6 kHz off the channel frequency, plus its crystal error. Found within about 20 s of decoding and kept across channel changes. Remembered at power off, so the radio starts corrected even on a weak signal. If a strong signal stops decoding for 8 s, it goes back to the remembered correction, then to none, and searches again | Tunes exactly to the channel frequency |
 
 Follow calls and Cell tracking only do something in a firmware built with
@@ -553,8 +553,11 @@ them, which is the default (`C62_TETRA_FOLLOW`, `C62_TETRA_ROAM`).
 
 ### Saved calls
 
-With **Settings** > **TETRA** > Save calls on, every call heard with
-speech is kept on the radio, and **Menu** > **Saved calls** lists them,
+With **Settings** > **TETRA** > Save calls on, the calls heard with
+speech are kept on the radio: all of them, those to talkgroups marked
+`TF_SAVE` in the channel list (Marked), or those the talkgroup filter lets
+through (Filter). Keeping only the ones you care about makes the room last
+much longer. **Menu** > **Saved calls** lists them,
 newest first: the talkgroup by name and the length, then the date and time
 (the network's time, which TTC sends; for calls today, how long ago, like
 `5 min ago`; `#` and a number if the network has not sent the time) and
@@ -580,6 +583,16 @@ written is not saved either.
 
 The channel list image can be at most 64 kB (about 2000 channels): the
 rest of its old area holds the saved calls.
+
+### Messages
+
+**Menu** > **Messages** lists the last 20 short messages (SDS) heard, text
+and status alike, newest first: the sender by name and how long ago, then
+the start of the text. **Green** shows one in full: from, to, when, how
+many times it came (`x3`: the same text from the same sender within 30 s
+counts once), and the text, up to 127 characters, wrapped. **Up** /
+**Down** go through them, **red** goes back. Kept until the radio is
+turned off.
 
 ### Receive log
 
@@ -760,7 +773,8 @@ them, up to 30. `TETRA_ID` gives an SSI (the decimal ID), a name of up to
 all of them, `0` for none, plus `TF_ALARM` for an alarm talkgroup, whose
 calls turn the screen red and sound three beeps, and `TF_PRIORITY(n)`, n
 from 1 (lowest) to 15, for a talkgroup that comes first (Call following,
-priority talkgroups). The call
+priority talkgroups), and `TF_SAVE` for a talkgroup whose calls are saved
+with Save calls set to Marked (Saved calls). The call
 screen, last heard line, recent calls and short messages show the names
 instead of numbers.
 

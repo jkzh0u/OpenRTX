@@ -926,6 +926,135 @@ void _ui_drawTetraSaved(ui_state_t *ui_state)
 #endif
 
 /**
+ * Messages (SDS) received, newest first: on each, the sender and how long
+ * ago, then the start of the text. Menu > Messages.
+ */
+void _ui_drawTetraMessages(ui_state_t *ui_state)
+{
+    const uint16_t rowH = layout.menu_h + 9;
+    uint8_t count = tetraStatus_messageCount();
+    long long now = getTick();
+
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Messages");
+    if (count == 0) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "None yet");
+        gfx_print(layout.line3_pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
+                  tetraMuted, "text and status messages heard");
+        return;
+    }
+
+    uint16_t rows = (CONFIG_SCREEN_HEIGHT - layout.line1_pos.y + layout.menu_h)
+                  / rowH;
+    if (rows == 0)
+        rows = 1;
+    uint8_t sel = ui_state->msg_sel;
+    uint8_t first = (sel >= rows) ? (uint8_t)(sel - rows + 1) : 0;
+    point_t pos = layout.line1_pos;
+
+    for (uint8_t n = first; n < count && n < first + rows; n++) {
+        struct tetraMessage m;
+        if (!tetraStatus_message(n, &m))
+            break;
+        bool selected = n == sel;
+        color_t ink = selected ? color_black : color_white;
+        color_t small = selected ? color_black : tetraMuted;
+        char name[24], age[12], fitted[32];
+
+        if (selected) {
+            point_t bar = { 0, (uint16_t)(pos.y - layout.menu_h + 3) };
+            gfx_drawRect(bar, CONFIG_SCREEN_WIDTH, rowH, color_white, true);
+        }
+
+        _ui_tetraAge(age, sizeof(age), now - m.time);
+        point_t right = { layout.horizontal_pad, pos.y };
+        gfx_print(right, layout.menu_font, TEXT_ALIGN_RIGHT, small, "%s", age);
+        uint16_t room = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad - 6
+                      - _ui_tetraTextWidth(layout.menu_font, age);
+        _ui_tetraSsiName(name, sizeof(name), m.src, false);
+        _ui_tetraFit(fitted, sizeof(fitted), layout.menu_font, room, "", name,
+                     "");
+        point_t left = { layout.horizontal_pad, pos.y };
+        gfx_print(left, layout.menu_font, TEXT_ALIGN_LEFT, ink, "%s", fitted);
+
+        point_t sub = { layout.horizontal_pad, (uint16_t)(pos.y + 9) };
+        _ui_tetraFit(fitted, sizeof(fitted), FONT_SIZE_6PT,
+                     CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad, "",
+                     m.text, "");
+        gfx_print(sub, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, small, "%s", fitted);
+        pos.y += rowH;
+    }
+}
+
+/**
+ * One message in full: from, to and when, then its text wrapped on as many
+ * lines as it takes. Up / Down go to the next and previous ones.
+ */
+void _ui_drawTetraMessage(ui_state_t *ui_state)
+{
+    struct tetraMessage m;
+    char name[24], to[24], age[12], line[128];
+    uint16_t width = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad;
+
+    gfx_clearScreen();
+    if (!tetraStatus_message(ui_state->msg_sel, &m)) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "Gone");
+        return;
+    }
+
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Message %u/%u", ui_state->msg_sel + 1,
+              tetraStatus_messageCount());
+
+    _ui_tetraSsiName(name, sizeof(name), m.src, false);
+    _ui_tetraSsiName(to, sizeof(to), m.dst, false);
+    _ui_tetraAge(age, sizeof(age), getTick() - m.time);
+
+    /* The sender, then to whom and when */
+    point_t pos = layout.line1_pos;
+    char fitted[48];
+    _ui_tetraFit(fitted, sizeof(fitted), FONT_SIZE_8PT, width, "", name, "");
+    gfx_print(pos, FONT_SIZE_8PT, TEXT_ALIGN_LEFT, color_white, "%s", fitted);
+    pos.y += 11;
+    char tail[24];
+    if (m.repeats > 0)
+        snprintf(tail, sizeof(tail), ", %s ago, x%u", age, m.repeats + 1);
+    else
+        snprintf(tail, sizeof(tail), ", %s ago", age);
+    _ui_tetraFit(fitted, sizeof(fitted), FONT_SIZE_6PT, width, "to ", to,
+                 tail);
+    gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, tetraMuted, "%s", fitted);
+
+    /* The text, word wrapped */
+    pos.y += 14;
+    const char *t = m.text;
+    while (*t != '\0' && pos.y < CONFIG_SCREEN_HEIGHT) {
+        while (*t == ' ')
+            t++;
+        size_t n = strlen(t), fit = 0, lastSpace = 0;
+        for (size_t i = 1; i <= n && i < sizeof(line); i++) {
+            snprintf(line, sizeof(line), "%.*s", (int)i, t);
+            if (_ui_tetraTextWidth(FONT_SIZE_8PT, line) > width)
+                break;
+            fit = i;
+            if (t[i] == ' ' || t[i] == '\0')
+                lastSpace = i;
+        }
+        if (fit == 0)
+            break;
+        size_t take = (fit < n && lastSpace > 0) ? lastSpace : fit;
+        snprintf(line, sizeof(line), "%.*s", (int)take, t);
+        gfx_print(pos, FONT_SIZE_8PT, TEXT_ALIGN_LEFT, color_white, "%s",
+                  line);
+        t += take;
+        pos.y += 12;
+    }
+}
+
+/**
  * Recent calls, newest first.
  */
 void _ui_drawTetraRecent(ui_state_t *ui_state)

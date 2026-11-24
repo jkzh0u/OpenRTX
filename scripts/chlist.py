@@ -14,7 +14,8 @@ openrtx/include/protocols/TETRA/TetraIds.h:
     FM_CHANNEL("Name", rx_hz, tx_hz, width_hz, rx_tone, tx_tone)
     TETRA_FILTER(ID, "Name")
     TETRA_ID(ssi, "Name", TF(ID) | TF(OTHER))      # or 0, TF_EVERY; also
-                                                   # | TF_ALARM, TF_PRIORITY(n)
+                                                   # | TF_ALARM, TF_SAVE,
+                                                   # TF_PRIORITY(n)
     TETRA_LA(la, "Name")
     TETRA_ID_RANGE(first, last, "Run %u", base, TF(ID))
 
@@ -70,6 +71,7 @@ CTCSS = (670, 693, 719, 744, 770, 797, 825, 854, 885, 915, 948, 974, 1000,
          2336, 2418, 2503, 2541)
 RX_ONLY = 0x01
 TF_ALARM = 1
+TF_SAVE = 0x80000000  # Calls saved with Save calls set to Marked
 MAX_PRIORITY = 15
 SSI_MASK = 0xFFFFFF  # SSIs are 24-bit: priority in bits 24-31
 TF_EVERY = 0x7FFFFFFE
@@ -185,7 +187,7 @@ def string(arg, line):
 
 def number(arg, line, filters=None):
     """An integer expression: numbers, OPMODE_x, TF(x), TF_EVERY,
-    TF_ALARM, TF_PRIORITY(n), with | + - * << and parentheses.
+    TF_ALARM, TF_SAVE, TF_PRIORITY(n), with | + - * << and parentheses.
     TF_PRIORITY(n) gives n << 32, above the 32-bit filter mask."""
     def tf(m):
         if filters is None or m.group(1) not in filters:
@@ -204,7 +206,8 @@ def number(arg, line, filters=None):
         raise ListError(f"line {line}: TF_PRIORITY needs a number, "
                         f"TF_PRIORITY(1) to TF_PRIORITY({MAX_PRIORITY})")
     expr = re.sub(r"\bTF\s*\(\s*([A-Za-z_]\w*)\s*\)", tf, expr)
-    names = dict(OPMODES, TF_EVERY=TF_EVERY, TF_ALARM=TF_ALARM)
+    names = dict(OPMODES, TF_EVERY=TF_EVERY, TF_ALARM=TF_ALARM,
+                 TF_SAVE=TF_SAVE)
     expr = re.sub(r"\b(\d+|0[xX][0-9a-fA-F]+)[uUlL]*\b", r"\1", expr)
     try:
         tree = ast.parse(expr, mode="eval")
@@ -267,6 +270,9 @@ def parse(text):
                 raise ListError(f"line {line}: TETRA_FILTER(ID, \"Name\")")
             if args[0] in filters:
                 raise ListError(f"line {line}: filter {args[0]} twice")
+            if len(filters) == 30:
+                # Bit 0 is TF_ALARM, bit 31 TF_SAVE
+                raise ListError(f"line {line}: at most 30 filters")
             filters[args[0]] = len(filters) + 1
             filter_names.append(string(args[1], line))
     if len(filters) > MAX_FILTERS:
@@ -412,8 +418,10 @@ def show(data):
     print("  filters: " + ", ".join(fnames))
 
     def masks(m, prio):
-        names = [fnames[b] for b in range(1, len(fnames)) if m >> b & 1]
+        names = [fnames[b] for b in range(1, min(len(fnames), 31))
+                 if m >> b & 1]
         return ", ".join(names + (["alarm"] if m & 1 else [])
+                         + (["save"] if m & TF_SAVE else [])
                          + ([f"priority {prio}"] if prio else []))
 
     for _ in range(ni):

@@ -160,6 +160,27 @@ void tetraStatus_setMeasured(const struct tetraStatusMeasured *m, unsigned n);
  */
 void tetraStatus_endCall(void);
 
+/** Messages (SDS) kept, newest first */
+#define TETRA_MESSAGES_KEPT 20
+
+struct tetraMessage {
+    uint32_t src;    /**< Sender SSI */
+    uint32_t dst;    /**< Addressee: talkgroup or radio */
+    long long time;  /**< Tick it was received */
+    uint8_t repeats; /**< Times the same text came again soon after */
+    char text[128];  /**< Text or "Status n", ASCII */
+};
+
+/** @return the number of messages kept. */
+uint8_t tetraStatus_messageCount(void);
+
+/**
+ * @param n: 0 for the newest message.
+ * @param out: the message.
+ * @return false past the oldest.
+ */
+bool tetraStatus_message(uint8_t n, struct tetraMessage *out);
+
 /**
  * The call heard now, without copying the whole status (for the call
  * recorder, on each speech frame).

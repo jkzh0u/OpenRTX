@@ -42,8 +42,22 @@ extern "C" {
  */
 void tetraCallRec_frame(const uint8_t *bits, uint8_t bfi);
 
-/** Turn saving on or off (Settings > TETRA > Save calls). */
-void tetraCallRec_enable(bool on);
+/** Which calls are saved (Settings > TETRA > Save calls) */
+enum callRecMode {
+    CALLREC_OFF = 0,
+    CALLREC_ALL,    /**< Every call heard with speech */
+    CALLREC_MARKED, /**< Talkgroups marked TF_SAVE in the channel list */
+    CALLREC_FILTER, /**< Talkgroups the talkgroup filter lets through */
+    CALLREC_MODES
+};
+
+/**
+ * Which calls to save (Settings > TETRA > Save calls). Alarm calls are
+ * saved whenever saving is on.
+ *
+ * @param mode: enum callRecMode.
+ */
+void tetraCallRec_enable(uint8_t mode);
 
 /** Play a saved call (UI). @param seq: the call. */
 void tetraCallRec_play(uint32_t seq);

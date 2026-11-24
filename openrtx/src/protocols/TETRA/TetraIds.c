@@ -48,6 +48,7 @@ _Static_assert(TF_COUNT_ - 1 <= TETRA_IDS_MAX_FILTERS, "Too many filters");
  */
 #define TF(id) (1ul << TF_##id)
 #define TF_ALARM 1ul
+#define TF_SAVE 0x80000000ul
 /* Above the 32-bit mask: priority 1 to 15, split off by TETRA_ID() */
 #define TF_PRIORITY(n) ((uint64_t)(n) << 32)
 #define PRIORITY_OF(f) ((uint8_t)((uint64_t)(f) >> 32))
@@ -341,6 +342,11 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter)
         return false;
 
     return (filtersOf(ssi) & (1ul << filter)) != 0;
+}
+
+bool tetraIds_isSaved(uint32_t ssi)
+{
+    return (filtersOf(ssi) & TF_SAVE) != 0;
 }
 
 bool tetraIds_isAlarm(uint32_t ssi)

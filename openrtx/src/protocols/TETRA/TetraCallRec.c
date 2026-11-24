@@ -16,6 +16,7 @@
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
 #include "interfaces/delays.h"
+#include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
 
 #define WRITER_STACK 2048
@@ -38,6 +39,8 @@ static uint8_t
 
 static pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 static volatile bool enabled;
+static volatile uint8_t saveMode; /* enum callRecMode */
+static bool wanted(uint32_t dst);
 static bool recording;            /* A call in buffer cur */
 static unsigned cur;              /* Buffer recording */
 static struct callStoreInfo info; /* Of the call recording */
@@ -135,8 +138,8 @@ void tetraCallRec_frame(const uint8_t *bits, uint8_t bfi)
         finish();
 
     if (!recording) {
-        if (pending) {
-            /* Both buffers busy: this call is not kept */
+        if (pending || !wanted(dst)) {
+            /* Both buffers busy, or a call not to keep */
             pthread_mutex_unlock(&mutex);
             return;
         }
@@ -222,11 +225,30 @@ static bool spawn(pthread_t *t, size_t size, void *(*fn)(void *))
     return ok;
 }
 
-void tetraCallRec_enable(bool on)
+void tetraCallRec_enable(uint8_t mode)
 {
+    bool on = mode != CALLREC_OFF && mode < CALLREC_MODES;
     if (on && !writerUp)
         writerUp = spawn(&writer, WRITER_STACK, writeCalls);
+    saveMode = on ? mode : CALLREC_OFF;
     enabled = on && writerUp;
+}
+
+/** Whether a call to this talkgroup is to be saved, by the mode */
+static bool wanted(uint32_t dst)
+{
+    switch (saveMode) {
+        case CALLREC_ALL:
+            return true;
+        case CALLREC_MARKED:
+            return dst != 0 && (tetraIds_isSaved(dst) || tetraIds_isAlarm(dst));
+        case CALLREC_FILTER:
+            return dst != 0
+                && (tetraIds_inFilter(dst, tetraIds_selectedFilter())
+                    || tetraIds_isAlarm(dst));
+        default:
+            return false;
+    }
 }
 
 bool tetraCallRec_heardAt(uint32_t seq, long long *tick)

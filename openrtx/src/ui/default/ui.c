@@ -142,6 +142,9 @@ const char *menu_items[] =
 #ifdef CONFIG_TETRA_CALLREC
     "Saved calls",
 #endif
+#ifdef CONFIG_TETRA
+    "Messages",
+#endif
     "Settings",
     "Info",
 #ifdef CONFIG_TETRA
@@ -778,6 +781,8 @@ extern void _ui_drawSettingsTetra(ui_state_t *ui_state);
 extern uint32_t _ui_tetraHoldCandidate(void);
 extern uint32_t _ui_tetraRecentSsi(uint8_t index);
 extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
+extern void _ui_drawTetraMessages(ui_state_t *ui_state);
+extern void _ui_drawTetraMessage(ui_state_t *ui_state);
 extern bool _ui_tetraCallActive(void);
 
 /**
@@ -832,7 +837,11 @@ static void _ui_changeTetraSetting(uint8_t item, bool on)
             break;
 #ifdef CONFIG_TETRA_CALLREC
         case T_SAVE_CALLS:
-            state.settings.tetraSaveCalls = on;
+            // Off, All, Marked, Filter: up the next, down the one before
+            if (on && state.settings.tetraSaveCalls + 1 < CALLREC_MODES)
+                state.settings.tetraSaveCalls++;
+            else if (!on && state.settings.tetraSaveCalls > 0)
+                state.settings.tetraSaveCalls--;
             break;
 #endif
 #ifdef CONFIG_TETRA_AFC
@@ -3600,6 +3609,12 @@ void ui_updateFSM(bool *sync_rtx)
                             _ui_bcastOpen(sync_rtx);
                             break;
 #endif
+#ifdef CONFIG_TETRA
+                        case M_MESSAGES:
+                            ui_state.msg_sel = 0;
+                            state.ui_screen = TETRA_MESSAGES;
+                            break;
+#endif
 #ifdef CONFIG_TETRA_CALLREC
                         case M_SAVED_CALLS:
                             ui_state.saved_sel = 0;
@@ -4292,6 +4307,38 @@ void ui_updateFSM(bool *sync_rtx)
                 break;
             #endif
 
+            #ifdef CONFIG_TETRA
+            // Messages: up / down select, green opens one, red goes back
+            case TETRA_MESSAGES:
+            case TETRA_MESSAGE:
+            {
+                uint8_t count = tetraStatus_messageCount();
+                if(msg.long_press || msg.keys == 0)
+                    break;
+                if(msg.keys & (KEY_UP | KNOB_LEFT))
+                {
+                    if(ui_state.msg_sel > 0)
+                        ui_state.msg_sel--;
+                }
+                else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
+                {
+                    if(ui_state.msg_sel + 1 < count)
+                        ui_state.msg_sel++;
+                }
+                else if((msg.keys & KEY_ENTER) && count > 0
+                        && state.ui_screen == TETRA_MESSAGES)
+                    state.ui_screen = TETRA_MESSAGE;
+                else if(msg.keys & KEY_ESC)
+                {
+                    if(state.ui_screen == TETRA_MESSAGE)
+                        state.ui_screen = TETRA_MESSAGES;
+                    else
+                        _ui_menuBack(MENU_TOP);
+                }
+                break;
+            }
+            #endif
+
             case SETTINGS_ACCESSIBILITY:
                 if(msg.keys & KEY_LEFT || (ui_state.edit_mode &&
                    (msg.keys & KEY_DOWN || msg.keys & KNOB_LEFT)))
@@ -4610,6 +4657,14 @@ bool ui_updateGUI()
 #ifdef CONFIG_TETRA_CALLREC
         case TETRA_SAVED:
             _ui_drawTetraSaved(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_TETRA
+        case TETRA_MESSAGES:
+            _ui_drawTetraMessages(&ui_state);
+            break;
+        case TETRA_MESSAGE:
+            _ui_drawTetraMessage(&ui_state);
             break;
 #endif
 #ifdef CONFIG_MEMCH

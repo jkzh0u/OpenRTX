@@ -24,6 +24,11 @@ static struct tetraStatus status; /* Under statusMutex */
 static long long lastCall;        /* Tick of the last call activity */
 static long long lastVoice;       /* Tick of the last traffic slot */
 static struct tetraFocus focus;   /* The call played and shown */
+/* Messages received, a ring: the next one goes at msgNext */
+#define MESSAGE_REPEAT_MS 30000
+static struct tetraMessage messages[TETRA_MESSAGES_KEPT];
+static uint8_t msgNext;
+static uint8_t msgCount;
 
 bool tetraStatus_callNow(uint16_t *callId, uint32_t *dst, uint32_t *talker,
                          bool *group, uint16_t *la)
@@ -104,6 +109,50 @@ static void onSds(const struct tetra_sds *s)
     toAscii(status.sds, sizeof(status.sds), text);
     status.sdsSrc = s->src_ssi;
     status.sdsTime = getTick();
+
+    /* The history, with up to 127 characters of the text: the same text
+     * from the same sender soon after counts as a repeat */
+    char full[sizeof(messages[0].text)];
+    toAscii(full, sizeof(full), text);
+    struct tetraMessage *last =
+        &messages[(msgNext + TETRA_MESSAGES_KEPT - 1) % TETRA_MESSAGES_KEPT];
+    if (msgCount > 0 && last->src == s->src_ssi && strcmp(last->text, full) == 0
+        && status.sdsTime - last->time < MESSAGE_REPEAT_MS) {
+        if (last->repeats < 255)
+            last->repeats++;
+        return;
+    }
+    struct tetraMessage *m = &messages[msgNext];
+    m->src = s->src_ssi;
+    m->dst = s->dst_ssi;
+    m->time = status.sdsTime;
+    m->repeats = 0;
+    memcpy(m->text, full, sizeof(m->text));
+    msgNext = (msgNext + 1) % TETRA_MESSAGES_KEPT;
+    if (msgCount < TETRA_MESSAGES_KEPT)
+        msgCount++;
+}
+
+uint8_t tetraStatus_messageCount(void)
+{
+    pthread_mutex_lock(&statusMutex);
+    uint8_t n = msgCount;
+    pthread_mutex_unlock(&statusMutex);
+    return n;
+}
+
+bool tetraStatus_message(uint8_t n, struct tetraMessage *out)
+{
+    bool ok = false;
+
+    pthread_mutex_lock(&statusMutex);
+    if (n < msgCount) {
+        *out = messages[(msgNext + TETRA_MESSAGES_KEPT - 1 - n)
+                        % TETRA_MESSAGES_KEPT];
+        ok = true;
+    }
+    pthread_mutex_unlock(&statusMutex);
+    return ok;
 }
 
 /** Neighbour cells, load and time, for the field test screen */

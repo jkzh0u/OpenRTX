@@ -131,6 +131,13 @@ TETRA_FILTER(SECURITY, "Security")
  * TETRA_LA(39, "Eglinton east")
  */
 
+/*
+ * TF_SAVE marks a talkgroup whose calls are saved with Settings > TETRA >
+ * Save calls set to Marked, e.g.
+ *
+ * TETRA_ID(101011, "Transit Control", TF(RIDING) | TF(CONTROL) | TF_SAVE)
+ */
+
 /* Systemwide: alarms come through every filter, with an alert */
 TETRA_ID(60002, "Red Alarm", TF_EVERY | TF_ALARM)
 TETRA_ID(60101, "911 Announce", TF_EVERY | TF_ALARM)

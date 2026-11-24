@@ -265,6 +265,8 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       or two go by in T mode, then **Menu** > **Saved calls**: they are
       listed with talkgroup, date and time; **green** plays one. Turn the
       radio off and on: they are still there
+- [ ] Messages: after a while in T mode, **Menu** > **Messages** lists the
+      short messages heard; **green** shows one in full
 - [ ] Instant replay: after a transmission on FM or T, press **P2**: it
       plays again, `Replay 1/1` at the top; **P2** twice goes back further
 - [ ] If you are licensed for it: DTMF, hold PTT and press **1** **2** **3**

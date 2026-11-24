@@ -37,7 +37,9 @@ extern "C" {
  * Adding TF_PRIORITY(n), n from 1 (lowest) to 15, gives a talkgroup's
  * calls priority: they take over from calls of lower priority, and the
  * radio stays on the main carrier for a while after them (TetraFollow.h).
- * Alarm talkgroups have priority 15 unless given another.
+ * Alarm talkgroups have priority 15 unless given another. Adding TF_SAVE
+ * marks a talkgroup whose calls are saved with Settings > TETRA > Save
+ * calls set to Marked (TetraCallRec.h).
  *
  *     TETRA_LA(39, "Line 5 east")
  *
@@ -96,6 +98,13 @@ bool tetraIds_inFilter(uint32_t ssi, size_t filter);
  * @return true if it is an alarm talkgroup (TF_ALARM).
  */
 bool tetraIds_isAlarm(uint32_t ssi);
+
+/**
+ * @param ssi: talkgroup or radio.
+ * @return true if its calls are to be saved with Save calls set to Marked
+ * (TF_SAVE).
+ */
+bool tetraIds_isSaved(uint32_t ssi);
 
 /**
  * @param ssi: talkgroup or radio identity.

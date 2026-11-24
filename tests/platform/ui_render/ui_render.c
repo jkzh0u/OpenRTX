@@ -76,6 +76,8 @@ void _ui_drawSpectrum(ui_state_t *ui_state);
 void _ui_drawBcast(ui_state_t *ui_state);
 void _ui_drawReplay(void);
 void _ui_drawTetraSaved(ui_state_t *ui_state);
+void _ui_drawTetraMessages(ui_state_t *ui_state);
+void _ui_drawTetraMessage(ui_state_t *ui_state);
 void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
@@ -201,6 +203,32 @@ uint8_t audio_getNoiseReductionLoad(bool *overload)
     if (overload != NULL)
         *overload = false;
     return 27;
+}
+
+/* TETRA messages: a few, as on the network */
+static uint8_t msgCount;
+
+uint8_t tetraStatus_messageCount(void)
+{
+    return msgCount;
+}
+
+bool tetraStatus_message(uint8_t n, struct tetraMessage *out)
+{
+    static const struct tetraMessage msgs[3] = {
+        { 6053, 101011, 0, 2,
+          "Delay northbound at St Clair, trains holding "
+          "at Eglinton, about 10 min. Shuttle buses "
+          "requested" },
+        { 40106, 100010, 0, 0, "Status 32769" },
+        { 5217, 100004, 0, 0, "Yard move complete, track 4 clear" },
+    };
+    static const long long ago[3] = { 120000, 840000, 3900000 };
+    if (n >= msgCount || n >= 3)
+        return false;
+    *out = msgs[n];
+    out->time = now - ago[n];
+    return true;
 }
 
 /* Saved TETRA calls: three, the middle one playing */
@@ -479,6 +507,8 @@ enum screen {
     SCREEN_SPECTRUM,
     SCREEN_BCAST,
     SCREEN_SAVED,
+    SCREEN_MESSAGES,
+    SCREEN_MESSAGE,
     SCREEN_NONE
 };
 
@@ -522,7 +552,13 @@ static void draw(const char *name, enum screen screen)
         _ui_drawFastCopy(&ui);
     else if (screen == SCREEN_SPECTRUM)
         _ui_drawSpectrum(&ui);
-    else if (screen == SCREEN_SAVED) {
+    else if (screen == SCREEN_MESSAGES) {
+        ui.msg_sel = 1;
+        _ui_drawTetraMessages(&ui);
+    } else if (screen == SCREEN_MESSAGE) {
+        ui.msg_sel = 0;
+        _ui_drawTetraMessage(&ui);
+    } else if (screen == SCREEN_SAVED) {
         ui.saved_sel = 1;
         _ui_drawTetraSaved(&ui);
     } else if (screen == SCREEN_NONE) {
@@ -595,6 +631,14 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.phaseErr = 12;
     tetra.carrierHz = -234;
     scene("tetra-2-cell", false);
+    /* Messages: none yet, the list, one in full */
+    msgCount = 0;
+    draw("tetra-17-messages-empty", SCREEN_MESSAGES);
+    msgCount = 3;
+    draw("tetra-17b-messages", SCREEN_MESSAGES);
+    draw("tetra-17c-message", SCREEN_MESSAGE);
+    msgCount = 0;
+
     /* Saved calls: none yet, three, one playing */
     savedCount = 0;
     draw("tetra-16-saved-empty", SCREEN_SAVED);

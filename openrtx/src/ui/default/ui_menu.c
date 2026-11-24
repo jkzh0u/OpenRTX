@@ -12,6 +12,7 @@
 #include "ui/ui_default.h"
 #include "core/roger_beep.h"
 #include "core/vox.h"
+#include "protocols/TETRA/TetraCallRec.h"
 #include "interfaces/audio.h"
 #ifdef CONFIG_MEMCH
 #include "core/memch.h"
@@ -941,9 +942,16 @@ int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
             on = !last_state.settings.tetraAlarmOff;
             break;
 #ifdef CONFIG_TETRA_CALLREC
-        case T_SAVE_CALLS:
-            on = last_state.settings.tetraSaveCalls;
-            break;
+        case T_SAVE_CALLS: {
+            static const char *modes[CALLREC_MODES] = { NULL, "All", "Marked",
+                                                        "Filter" };
+            uint8_t m = last_state.settings.tetraSaveCalls;
+            if (m == 0 || m >= CALLREC_MODES)
+                sniprintf(buf, max_len, "%s", currentLanguage->off);
+            else
+                sniprintf(buf, max_len, "%s", modes[m]);
+            return 0;
+        }
 #endif
 #ifdef CONFIG_TETRA_AFC
         case T_AFC:
