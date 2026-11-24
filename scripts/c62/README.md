@@ -999,11 +999,24 @@ The main screen shows, from the top:
 | Width | 12.5 kHz (narrow, most repeaters today) or 25 kHz |
 | Power | 1, 2.5 or 5 W. New channels and the VFO start at 5 W |
 | Tone mode | None, Encode (send the tone), Decode (open only on the tone), Both |
-| TX tone | The tone sent: a CTCSS tone, 67.0 to 254.1 Hz, or a DCS code, D023N to D754N, then the inverted D023I to D754I |
+| TX tone | The tone sent: Off, a CTCSS tone, 67.0 to 254.1 Hz, or a DCS code, D023N to D754N, then the inverted D023I to D754I. **Green** opens the list of them (below) |
 | RX tone | The tone the squelch waits for, from the same list. A DCS code opens it whether it arrives normal or inverted |
 | Talk permit | A tone in the radio's own speaker when you press PTT, telling you to talk, as on Motorola radios: Off (at first), Beep, Double, Motorola (Motorola's trunking talk permit: four 910 Hz bursts, getting longer), Triple (three short 1000 Hz beeps), Melody (four quick notes, G C G E) or Chime. Not transmitted; the transmitter keys up just after it, 0.1 to 0.2 s later. Saved |
 | Scan resume | What scan does after stopping on a signal: Carrier (at first: goes on 2 s after the signal ends), Time (goes on after 5 s, signal or not) or Stop (the scan ends there). Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
+
+**Green** on TX tone or RX tone opens a page listing every choice: Off,
+then the CTCSS tones, then the DCS codes normal (`DCS`), then inverted
+(`DCS inv`). The one in use says `in use` in amber. Picking Off turns that
+direction's tone off, picking a tone turns it on, so Tone mode follows.
+
+| Key | Does |
+|---|---|
+| **Up** / **Down** | One up or down |
+| **\*** / **#** | The previous / next group: Off, CTCSS, DCS, DCS inv |
+| Numbers | Go to the first tone of the group starting with them: `8` `8` for 88.5, `1` `0` `3` for 103.5; in a DCS group `0` `2` `3` for D023. On Off they look in the CTCSS tones. Forgotten after 2 s |
+| **Green** | Use the one selected |
+| **Red** | Back, without changing it |
 
 Width, power and tones belong to the channel in use: in VFO mode they
 stay with the VFO, on a memory channel they last until you leave it (the

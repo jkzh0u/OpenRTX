@@ -59,7 +59,8 @@ enum uiScreen
     SETTINGS_TETRA,
     FAST_COPY,
     SETTINGS_MEMORY,
-    SPECTRUM
+    SPECTRUM,
+    TONE_PICK
 };
 
 /* FM scan: what it does after stopping on a signal (settings.scanResume) */
@@ -304,6 +305,12 @@ typedef struct ui_state_t
     bool mem_delete_armed;
     const char *mem_status;
 #endif
+    // Tone picker: TX or RX tone, the choice selected (_ui_tonePick...()),
+    // digits typed to jump and when the last one was
+    bool tone_pick_tx;
+    uint16_t tone_pick_pos;
+    char tone_pick_digits[4];
+    long long tone_pick_tick;
 #ifdef CONFIG_SCAN
     // FM scan: running, its direction (+1 or -1), listening or stopped on a
     // signal, when it last hopped or stopped, when the squelch was last
@@ -373,6 +380,35 @@ void _ui_toneName(char *buf, size_t len, uint8_t index, bool dcs, bool inv);
  * normal then inverted.
  */
 void _ui_stepTone(uint8_t *index, bool *dcs, bool *inv, int step);
+
+/*
+ * Tone picker: every choice in one list, Off, the CTCSS tones, then the
+ * DCS codes normal and inverted, a position standing for each.
+ */
+
+/** @return the number of choices. */
+uint16_t _ui_tonePickCount(void);
+
+/** @return the position of a channel's tone setting. */
+uint16_t _ui_tonePickPos(bool enabled, uint8_t index, bool dcs, bool inv);
+
+/** The tone setting at a position. */
+void _ui_tonePickGet(uint16_t pos, bool *enabled, uint8_t *index, bool *dcs,
+                     bool *inv);
+
+/** @return the first position of the group of a position. */
+uint16_t _ui_tonePickGroup(uint16_t pos);
+
+/**
+ * @param pos: position now, whose group is searched (Off: the CTCSS tones).
+ * @param digits: digits typed: the whole Hz of a CTCSS tone, or the octal
+ * digits of a DCS code.
+ * @return the first position in the group starting with them, or -1.
+ */
+int _ui_tonePickFind(uint16_t pos, const char *digits);
+
+/** Draw the picker. */
+void _ui_drawTonePick(ui_state_t *ui_state);
 extern const char *info_items[];
 extern const char *authors[];
 extern const uint8_t menu_num;

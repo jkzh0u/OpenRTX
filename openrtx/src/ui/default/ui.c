@@ -908,6 +908,121 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
 
 int _ui_handleToneSelectScroll(bool direction_up);
 
+/* Tone picker: digits typed to jump are forgotten after this long */
+#define TONE_PICK_DIGITS_MS 2000
+
+/**
+ * Green on TX tone or RX tone in Settings > FM: the list of every tone,
+ * on the one in use.
+ */
+static void _ui_tonePickOpen(bool tx)
+{
+    const channel_t *ch = &state.channel;
+
+    ui_state.tone_pick_tx = tx;
+    ui_state.tone_pick_pos = tx ? _ui_tonePickPos(ch->fm.txToneEn,
+                                                  ch->fm.txTone, ch->txDcs,
+                                                  ch->txDcsInv)
+                                : _ui_tonePickPos(ch->fm.rxToneEn,
+                                                  ch->fm.rxTone, ch->rxDcs,
+                                                  ch->rxDcsInv);
+    ui_state.tone_pick_digits[0] = '\0';
+    state.ui_screen = TONE_PICK;
+}
+
+/** The choice selected becomes the channel's TX or RX tone */
+static void _ui_tonePickApply(void)
+{
+    bool en, dcs, inv;
+    uint8_t idx;
+
+    _ui_tonePickGet(ui_state.tone_pick_pos, &en, &idx, &dcs, &inv);
+    if(ui_state.tone_pick_tx)
+    {
+        state.channel.fm.txToneEn = en;
+        if(en)
+        {
+            state.channel.fm.txTone = idx;
+            state.channel.txDcs = dcs;
+            state.channel.txDcsInv = inv;
+        }
+    }
+    else
+    {
+        state.channel.fm.rxToneEn = en;
+        if(en)
+        {
+            state.channel.fm.rxTone = idx;
+            state.channel.rxDcs = dcs;
+            state.channel.rxDcsInv = inv;
+        }
+    }
+}
+
+/**
+ * Keys of the tone picker: up and down move one, * and # to the previous
+ * or next group, numbers jump to the tone or code starting with them
+ * (885 for 88.5, 023 for D023), green picks, red goes back.
+ */
+static void _ui_tonePickKey(kbd_msg_t msg, bool *sync_rtx)
+{
+    uint16_t count = _ui_tonePickCount();
+    uint16_t pos = ui_state.tone_pick_pos;
+    long long now = getTick();
+
+    if((msg.keys == 0) || msg.long_press)
+        return;
+
+    if(input_isNumberPressed(msg))
+    {
+        size_t n = strlen(ui_state.tone_pick_digits);
+        if((now - ui_state.tone_pick_tick > TONE_PICK_DIGITS_MS)
+           || (n + 1 >= sizeof(ui_state.tone_pick_digits)))
+            n = 0;
+        ui_state.tone_pick_digits[n] = '0' + input_getPressedNumber(msg);
+        ui_state.tone_pick_digits[n + 1] = '\0';
+        ui_state.tone_pick_tick = now;
+        int found = _ui_tonePickFind(pos, ui_state.tone_pick_digits);
+        if(found >= 0)
+            ui_state.tone_pick_pos = (uint16_t)found;
+        return;
+    }
+
+    ui_state.tone_pick_digits[0] = '\0';
+
+    if(msg.keys & (KEY_UP | KNOB_LEFT))
+        ui_state.tone_pick_pos = (pos + count - 1) % count;
+    else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
+        ui_state.tone_pick_pos = (pos + 1) % count;
+    else if(msg.keys & KEY_STAR)
+    {
+        // The start of this group, or of the one before
+        uint16_t group = _ui_tonePickGroup(pos);
+        if((group == pos) && (pos > 0))
+            group = _ui_tonePickGroup(pos - 1);
+        ui_state.tone_pick_pos = group;
+    }
+    else if(msg.keys & KEY_HASH)
+    {
+        // The start of the next group, round to Off after the last
+        uint16_t group = _ui_tonePickGroup(pos);
+        uint16_t next = pos;
+        while((next < count) && (_ui_tonePickGroup(next) == group))
+            next++;
+        ui_state.tone_pick_pos = (next < count) ? next : 0;
+    }
+    else if(msg.keys & KEY_ENTER)
+    {
+        _ui_tonePickApply();
+        *sync_rtx = true;
+        state.ui_screen = SETTINGS_FM;
+    }
+    else if(msg.keys & KEY_ESC)
+    {
+        state.ui_screen = SETTINGS_FM;
+    }
+}
+
 /**
  * Change an FM setting (Settings > FM). Width, power and tones are the
  * current channel's, as with the side key shortcuts.
@@ -3719,6 +3834,10 @@ void ui_updateFSM(bool *sync_rtx)
                     _ui_menuUp(settings_fm_num);
                 else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
                     _ui_menuDown(settings_fm_num);
+                else if((msg.keys & KEY_ENTER) && !ui_state.edit_mode
+                        && ((ui_state.menu_selected == FM_TX_TONE)
+                            || (ui_state.menu_selected == FM_RX_TONE)))
+                    _ui_tonePickOpen(ui_state.menu_selected == FM_TX_TONE);
                 else if(msg.keys & KEY_ENTER)
                     ui_state.edit_mode = !ui_state.edit_mode;
                 else if(msg.keys & KEY_ESC)
@@ -3728,6 +3847,10 @@ void ui_updateFSM(bool *sync_rtx)
                     else
                         _ui_menuBack(MENU_SETTINGS);
                 }
+                break;
+
+            case TONE_PICK:
+                _ui_tonePickKey(msg, sync_rtx);
                 break;
 
             case SETTINGS_ACCESSIBILITY:
@@ -4028,6 +4151,9 @@ bool ui_updateGUI()
         // FM settings screen
         case SETTINGS_FM:
             _ui_drawSettingsFM(&ui_state);
+            break;
+        case TONE_PICK:
+            _ui_drawTonePick(&ui_state);
             break;
 #ifdef CONFIG_MEMCH
         case SETTINGS_MEMORY:

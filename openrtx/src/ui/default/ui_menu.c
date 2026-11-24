@@ -488,6 +488,170 @@ void _ui_stepTone(uint8_t *index, bool *dcs, bool *inv, int step)
                        : (pos - CTCSS_FREQ_NUM) % DCS_CODE_NUM);
 }
 
+/*
+ * Tone picker (Settings > FM > TX tone or RX tone): every choice in one
+ * list, Off first, then the CTCSS tones, then with CONFIG_DCS the DCS codes
+ * normal, then inverted. A position in that list stands for a choice.
+ */
+
+/* First position of each group */
+#define TP_CTCSS 1
+#define TP_DCS (TP_CTCSS + CTCSS_FREQ_NUM)
+#define TP_DCS_INV (TP_DCS + DCS_CODE_NUM)
+
+uint16_t _ui_tonePickCount(void)
+{
+#ifdef CONFIG_DCS
+    return TP_DCS_INV + DCS_CODE_NUM;
+#else
+    return TP_DCS;
+#endif
+}
+
+uint16_t _ui_tonePickPos(bool enabled, uint8_t index, bool dcs, bool inv)
+{
+    if (!enabled)
+        return 0;
+#ifdef CONFIG_DCS
+    if (dcs)
+        return (inv ? TP_DCS_INV : TP_DCS) + index % DCS_CODE_NUM;
+#else
+    (void)dcs;
+    (void)inv;
+#endif
+    return TP_CTCSS + index % CTCSS_FREQ_NUM;
+}
+
+void _ui_tonePickGet(uint16_t pos, bool *enabled, uint8_t *index, bool *dcs,
+                     bool *inv)
+{
+    *enabled = pos != 0;
+    *dcs = pos >= TP_DCS;
+    *inv = pos >= TP_DCS_INV;
+    if (pos == 0)
+        *index = 0;
+    else if (!*dcs)
+        *index = (uint8_t)(pos - TP_CTCSS);
+    else
+        *index = (uint8_t)((pos - TP_DCS) % DCS_CODE_NUM);
+}
+
+uint16_t _ui_tonePickGroup(uint16_t pos)
+{
+    if (pos >= TP_DCS_INV)
+        return TP_DCS_INV;
+    if (pos >= TP_DCS)
+        return TP_DCS;
+    if (pos >= TP_CTCSS)
+        return TP_CTCSS;
+    return 0;
+}
+
+int _ui_tonePickFind(uint16_t pos, const char *digits)
+{
+    size_t n = strlen(digits);
+    uint16_t group = _ui_tonePickGroup(pos);
+    uint16_t end = (group == TP_DCS_INV) ? _ui_tonePickCount()
+                 : (group == TP_DCS)     ? TP_DCS_INV
+                                         : TP_DCS;
+    char text[8];
+
+    if (n == 0)
+        return -1;
+    if (group == 0)
+        group = TP_CTCSS;
+
+    for (uint16_t p = group; p < end; p++) {
+        if (p < TP_DCS)
+            sniprintf(text, sizeof(text), "%u",
+                      ctcss_tone[p - TP_CTCSS] / 10);
+#ifdef CONFIG_DCS
+        else
+            sniprintf(text, sizeof(text), "%03o",
+                      dcs_code[(p - TP_DCS) % DCS_CODE_NUM]);
+#endif
+        if (strncmp(text, digits, n) == 0)
+            return p;
+    }
+    return -1;
+}
+
+/** One line of the picker: the choice, and its group on the right */
+static void _ui_tonePickLine(uint16_t pos, char *name, size_t nlen,
+                             const char **group)
+{
+    bool enabled, dcs, inv;
+    uint8_t index;
+
+    _ui_tonePickGet(pos, &enabled, &index, &dcs, &inv);
+    if (!enabled) {
+        sniprintf(name, nlen, "%s", currentLanguage->off);
+        *group = "no tone";
+        return;
+    }
+#ifdef CONFIG_DCS
+    if (dcs) {
+        sniprintf(name, nlen, "D%03o %c", dcs_code[index], inv ? 'I' : 'N');
+        *group = inv ? "DCS inv" : "DCS";
+        return;
+    }
+#endif
+    uint16_t tone = ctcss_tone[index];
+    sniprintf(name, nlen, "%u.%u Hz", tone / 10, tone % 10);
+    *group = "CTCSS";
+}
+
+void _ui_drawTonePick(ui_state_t *ui_state)
+{
+    static const color_t muted = { 150, 150, 150, 255 };
+    const channel_t *ch = &last_state.channel;
+    bool tx = ui_state->tone_pick_tx;
+    uint16_t inUse = tx ? _ui_tonePickPos(ch->fm.txToneEn, ch->fm.txTone,
+                                          ch->txDcs, ch->txDcsInv)
+                        : _ui_tonePickPos(ch->fm.rxToneEn, ch->fm.rxTone,
+                                          ch->rxDcs, ch->rxDcsInv);
+    uint16_t count = _ui_tonePickCount();
+    uint16_t sel = ui_state->tone_pick_pos;
+    point_t pos = layout.line1_pos;
+    uint16_t rows = (CONFIG_SCREEN_HEIGHT - 1 - pos.y) / layout.menu_h + 1;
+    char name[16];
+    const char *group;
+
+    gfx_clearScreen();
+    if (ui_state->tone_pick_digits[0] != '\0')
+        gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+                  yellow_fab413, "Go to %s_", ui_state->tone_pick_digits);
+    else
+        gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+                  color_white, tx ? "TX tone" : "RX tone");
+
+    // The selection in the middle, where it can be
+    uint16_t first = (sel > rows / 2) ? sel - rows / 2 : 0;
+    if (first + rows > count)
+        first = (count > rows) ? count - rows : 0;
+
+    for (uint16_t p = first; p < count && pos.y < CONFIG_SCREEN_HEIGHT;
+         p++) {
+        color_t text = color_white;
+        color_t side = (p == inUse) ? yellow_fab413 : muted;
+
+        _ui_tonePickLine(p, name, sizeof(name), &group);
+        if (p == inUse)
+            group = "in use";
+        if (p == sel) {
+            point_t r = { 0, (uint16_t)(pos.y - layout.menu_h + 3) };
+            gfx_drawRect(r, CONFIG_SCREEN_WIDTH, layout.menu_h, color_white,
+                         true);
+            text = color_black;
+            side = color_black;
+        }
+        gfx_print(pos, layout.menu_font, TEXT_ALIGN_LEFT, text, "%s", name);
+        point_t right = { pos.x, (uint16_t)(pos.y - 1) };
+        gfx_print(right, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT, side, "%s", group);
+        pos.y += layout.menu_h;
+    }
+}
+
 int _ui_getFMEntryName(char* buf, uint8_t max_len, uint8_t index)
 {
     if (index >= settings_fm_num)
@@ -560,7 +724,12 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
 
         case FM_TX_TONE:
         case FM_RX_TONE: {
-            if (index == FM_TX_TONE)
+            // Off unless tone mode sends (TX) or waits for (RX) a tone
+            if (index == FM_TX_TONE && !ch->fm.txToneEn)
+                sniprintf(buf, max_len, "%s", currentLanguage->off);
+            else if (index == FM_RX_TONE && !ch->fm.rxToneEn)
+                sniprintf(buf, max_len, "%s", currentLanguage->off);
+            else if (index == FM_TX_TONE)
                 _ui_toneName(buf, max_len, ch->fm.txTone, ch->txDcs,
                              ch->txDcsInv);
             else
