@@ -407,8 +407,10 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
             afOn = false;
         }
 
+        #ifdef CONFIG_BCAST_FM
         // The transceiver's audio only for the channel: the broadcast radio
-        // alone is heard through the same path
+        // alone is heard through the same path. Without it the path is only
+        // open for the channel, and the audio driver turns that audio on.
         if(audioOpen && (afOn != chanOpen))
         {
             if(chanOpen)
@@ -417,6 +419,7 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
                 radio_disableAfOutput();
             afOn = chanOpen;
         }
+        #endif
 
         sqlOpen = chanOpen && audioOpen;
     }
