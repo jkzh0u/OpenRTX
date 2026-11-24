@@ -108,6 +108,39 @@ void radio_setRxOffset(int32_t hz);
  */
 rssi_t radio_getRssi();
 
+#ifdef CONFIG_FAST_COPY
+/**
+ * Fast copy (core/fast_copy.h): start measuring the frequency of a strong
+ * transmitter next to the radio, with the receive front end off so that
+ * only one that close gets through. While receiving.
+ */
+void radio_fastCopyStart();
+
+/**
+ * @param hz: the frequency measured, Hz.
+ * @return true when a measurement is ready; the scanner then stops until
+ * radio_fastCopyStart() again.
+ */
+bool radio_fastCopyFreq(uint32_t *hz);
+
+/**
+ * Listen on a frequency for a CTCSS tone or DCS code.
+ *
+ * @param hz: frequency, Hz.
+ */
+void radio_fastCopyTone(uint32_t hz);
+
+/**
+ * @param tone: the tone found, in the rtx encoding (CTCSS in tenths of Hz,
+ * or a DCS code with RTX_TONE_DCS, core/cps.h).
+ * @return true if one was found since radio_fastCopyTone().
+ */
+bool radio_fastCopyToneResult(uint16_t *tone);
+
+/** Stop the scanners. Reception is set up again with radio_enableRx(). */
+void radio_fastCopyStop();
+#endif
+
 #ifdef CONFIG_ROGER_BEEP
 /**
  * While transmitting, add a tone to the transmitted audio, for roger beeps

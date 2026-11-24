@@ -20,6 +20,9 @@
 #include "interfaces/delays.h"
 #include "interfaces/platform.h"
 #include "rtx/rtx.h"
+#ifdef CONFIG_FAST_COPY
+#include "core/fast_copy.h"
+#endif
 
 /* Colours, as on the TETRA screens */
 static const color_t mdGroup = { 90, 200, 255, 255 };  /* Sky blue */
@@ -347,5 +350,69 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
                     rx ? mdVoice : _ui_mdTraffic(slevel, 7, 4), mark, "SQL",
                     sql, 15, yellow_fab413);
 }
+
+#ifdef CONFIG_FAST_COPY
+/**
+ * Fast copy: what it is doing, and what it found. A screen of its own, from
+ * a long * in FM.
+ */
+void _ui_drawFastCopy(ui_state_t *ui_state)
+{
+    (void)ui_state;
+    struct fastCopyResult r;
+    point_t big, small;
+    char text[24], freq[16];
+
+    fastCopy_get(&r);
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Fast copy");
+    _ui_mdLines(&big, &small);
+    point_t l1 = layout.line1_pos;
+#if CONFIG_SCREEN_HEIGHT > 127
+    l1.y += 2;
+#endif
+
+    if (r.state == FAST_COPY_FREQ || r.state == FAST_COPY_OFF) {
+        gfx_print(l1, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+                  "key the other radio nearby");
+        _ui_mdBigLine(big, FONT_SIZE_16PT, 0, NULL, mdMuted, "listening",
+                      mdMuted);
+        if (r.timedOut)
+            gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, mdTx,
+                      "nothing heard yet");
+        else
+            gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, mdMuted,
+                      "red to stop");
+        return;
+    }
+
+    _ui_mdFreq(freq, sizeof(freq), fastCopy_channel(r.hz));
+
+    if (r.state == FAST_COPY_TONE) {
+        gfx_print(l1, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+                  "frequency found");
+        _ui_mdBigLine(big, FONT_SIZE_16PT, 0, NULL, color_white, freq,
+                      color_white);
+        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, mdMuted,
+                  "reading the tone...");
+        return;
+    }
+
+    if (!r.toneFound)
+        snprintf(text, sizeof(text), "no tone");
+    else if (r.tone & RTX_TONE_DCS)
+        snprintf(text, sizeof(text), "DCS D%03o%c", r.tone & 0x1ff,
+                 (r.tone & RTX_TONE_DCS_INV) ? 'I' : 'N');
+    else
+        snprintf(text, sizeof(text), "CTCSS %u.%u", r.tone / 10, r.tone % 10);
+    gfx_print(l1, FONT_SIZE_8PT, TEXT_ALIGN_CENTER,
+              r.toneFound ? mdGroup : mdMuted, "%s", text);
+    _ui_mdBigLine(big, FONT_SIZE_16PT, 0, NULL, mdVoice, freq, mdVoice);
+    gfx_print(small, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+              "green copies, red cancels");
+}
+
+#endif
 
 #endif /* CONFIG_UI_FM_SCREEN */

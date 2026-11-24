@@ -240,6 +240,9 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       with Up / Down and show on line 1
 - [ ] If you are licensed for it: PTT turns the screen red, MIC moves, a
       second radio hears you (with the tone, if set)
+- [ ] Fast copy: hold **\*** in FM, key a second radio next to the C62
+      (set to a tone or DCS code): the frequency, then the tone or code,
+      appear; **green** copies them into the VFO
 
 ## If something goes wrong
 

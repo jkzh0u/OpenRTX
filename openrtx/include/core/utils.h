@@ -90,6 +90,16 @@ uint8_t rssiToSlevel(const rssi_t rssi);
 uint32_t dcsCodeWord(uint16_t code, bool inverted);
 
 /**
+ * Find the DCS code of a received 23-bit codeword, which may start at any
+ * bit (DCS repeats it endlessly) and may be inverted.
+ *
+ * @param cw: codeword as received.
+ * @param inverted: set to true if the code is the inverted (I) one.
+ * @return the code (octal digits, as in dcs_code[]), or -1 if none.
+ */
+int dcsDecode(uint32_t cw, bool *inverted);
+
+/**
  * Retrieve the CTCSS tone index given its frequency in tenths of Hz.
  *
  * @param freq: CTCSS frequency

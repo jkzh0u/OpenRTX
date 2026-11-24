@@ -99,6 +99,27 @@ uint32_t dcsCodeWord(uint16_t code, bool inverted)
     return inverted ? (cw ^ 0x7fffffu) : cw;
 }
 
+int dcsDecode(uint32_t cw, bool *inverted)
+{
+    for (int inv = 0; inv < 2; inv++) {
+        uint32_t w = (inv ? ~cw : cw) & 0x7fffffu;
+        for (int shift = 0; shift < 23; shift++) {
+            /* A codeword has the fixed bits 100 after its 9-bit code */
+            if (((w >> 9) & 0x7u) == 0x4u) {
+                for (int i = 0; i < DCS_CODE_NUM; i++) {
+                    if ((w & 0x1ffu) == dcs_code[i]
+                        && dcsCodeWord(dcs_code[i], false) == w) {
+                        *inverted = (inv != 0);
+                        return dcs_code[i];
+                    }
+                }
+            }
+            w = (w >> 1) | ((w & 1u) << 22);
+        }
+    }
+    return -1;
+}
+
 uint8_t ctcssFreqToIndex(const uint16_t freq)
 {
     for(uint8_t idx = 0; idx < CTCSS_FREQ_NUM; idx += 1)

@@ -66,6 +66,9 @@
 #include "core/voicePromptUtils.h"
 #include "core/beeps.h"
 #include "core/roger_beep.h"
+#ifdef CONFIG_FAST_COPY
+#include "core/fast_copy.h"
+#endif
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
@@ -979,6 +982,89 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
     }
 }
+
+#ifdef CONFIG_FAST_COPY
+/* In ui_modes.c */
+extern void _ui_drawFastCopy(ui_state_t *ui_state);
+
+/**
+ * Long * in FM, on the main screens: fast copy, reading the frequency and
+ * tone of a radio transmitting next to this one.
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_fastCopyKey(kbd_msg_t msg)
+{
+    if((state.channel.mode != OPMODE_FM) || !msg.long_press
+       || (msg.keys != KEY_STAR))
+        return false;
+
+    ui_state.last_main_state = state.ui_screen;
+    fastCopy_start();
+    state.ui_screen = FAST_COPY;
+    return true;
+}
+
+/**
+ * Copy what fast copy found into the VFO, and go to VFO mode.
+ */
+static void _ui_fastCopyApply(bool *sync_rtx)
+{
+    struct fastCopyResult r;
+    fastCopy_get(&r);
+    if(r.state != FAST_COPY_FOUND)
+        return;
+
+    // From memory mode: the VFO, which then takes the copy
+    if(ui_state.last_main_state == MAIN_MEM)
+        state.channel = state.vfo_channel;
+
+    freq_t hz = fastCopy_channel(r.hz);
+    state.channel.mode = OPMODE_FM;
+    state.channel.rx_frequency = hz;
+    state.channel.tx_frequency = hz;
+    state.channel.fm.rxToneEn = r.toneFound;
+    state.channel.fm.txToneEn = r.toneFound;
+    if(r.toneFound)
+    {
+        uint8_t idx = 0;
+        bool dcs = (r.tone & RTX_TONE_DCS) != 0;
+        if(dcs)
+        {
+            for(uint8_t i = 0; i < DCS_CODE_NUM; i++)
+            {
+                if(dcs_code[i] == (r.tone & 0x1ff))
+                    idx = i;
+            }
+        }
+        else
+        {
+            // The nearest CTCSS tone
+            uint16_t best = 0xffff;
+            for(uint8_t i = 0; i < CTCSS_FREQ_NUM; i++)
+            {
+                uint16_t d = (ctcss_tone[i] > r.tone) ? ctcss_tone[i] - r.tone
+                                                      : r.tone - ctcss_tone[i];
+                if(d < best)
+                {
+                    best = d;
+                    idx = i;
+                }
+            }
+        }
+        bool inv = (r.tone & RTX_TONE_DCS_INV) != 0;
+        state.channel.fm.rxTone = idx;
+        state.channel.fm.txTone = idx;
+        state.channel.rxDcs = dcs;
+        state.channel.txDcs = dcs;
+        state.channel.rxDcsInv = dcs && inv;
+        state.channel.txDcsInv = dcs && inv;
+    }
+    state.vfo_channel = state.channel;
+    state.ui_screen = MAIN_VFO;
+    *sync_rtx = true;
+}
+#endif
 
 static void _ui_fsm_insertVFONumber(kbd_msg_t msg, bool *sync_rtx)
 {
@@ -2014,6 +2100,13 @@ void ui_updateFSM(bool *sync_rtx)
                     }
                     else
                     #endif
+                    #ifdef CONFIG_FAST_COPY
+                    if(_ui_fastCopyKey(msg))
+                    {
+                        // Long *: read a nearby radio
+                    }
+                    else
+                    #endif
                     if(msg.keys & KEY_ENTER)
                     {
                         // Save current main state
@@ -2247,6 +2340,13 @@ void ui_updateFSM(bool *sync_rtx)
                     }
                     else
                     #endif
+                    #ifdef CONFIG_FAST_COPY
+                    if(_ui_fastCopyKey(msg))
+                    {
+                        // Long *: read a nearby radio
+                    }
+                    else
+                    #endif
                     if(msg.keys & KEY_ENTER)
                     {
                         // Save current main state
@@ -2318,6 +2418,28 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
             // Top menu screen
+            #ifdef CONFIG_FAST_COPY
+            // Fast copy: green copies what was found, red stops
+            case FAST_COPY:
+                if(msg.long_press)
+                    break;
+                if(msg.keys & KEY_ENTER)
+                {
+                    struct fastCopyResult r;
+                    fastCopy_get(&r);
+                    if(r.state == FAST_COPY_FOUND)
+                    {
+                        _ui_fastCopyApply(sync_rtx);
+                        fastCopy_stop();
+                    }
+                }
+                else if(msg.keys & KEY_ESC)
+                {
+                    fastCopy_stop();
+                    state.ui_screen = ui_state.last_main_state;
+                }
+                break;
+            #endif
             #ifdef CONFIG_TETRA
             // TETRA recent calls: Enter holds the selected one
             case TETRA_RECENT:
@@ -3282,6 +3404,11 @@ bool ui_updateGUI()
             break;
         case TETRA_FIELD_TEST:
             _ui_drawTetraFieldTest(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_FAST_COPY
+        case FAST_COPY:
+            _ui_drawFastCopy(&ui_state);
             break;
 #endif
         // Flash backup and restore screen

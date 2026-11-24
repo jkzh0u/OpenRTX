@@ -82,6 +82,7 @@ On the main screen, in any mode:
 | **0** to **9** | VFO: type a frequency, then **Enter**. Memory: type a channel number, see below |
 | Long **1** to **9** | Memory: the side key shortcut of that number, without the side key. Long **9** also unlocks the keypad |
 | Long **5** | VFO: change mode, if 5 is the first digit typed (it is then dropped) |
+| Long **\*** | FM: fast copy, read the channel of a radio keyed next to this one (section 10) |
 | Side key + number | Shortcut, see below |
 
 In memory mode a short press of a number types a channel number, shown
@@ -1021,5 +1022,22 @@ receive and transmit tones: CTCSS in tenths of Hz (885 for 88.5 Hz), a
 DCS code as `D023N` (normal) or `D023I` (inverted), or 0 for none. `chlist.py` checks the tones against the standard list and
 `--show` prints the result. `CPS_CHANNEL(..., OPMODE_FM)` channels stay
 receive only, 25 kHz, without tones.
+
+### Fast copy
+
+Hold **\*** in FM (VFO or memory mode) to copy another radio's channel
+without a computer, as on the Quansheng UV-K5: key the other radio right
+next to the C62. The screen says `listening`, then shows the frequency it
+measured, rounded to the nearest channel (2.5 or 6.25 kHz steps), then
+spends up to 3 s reading its CTCSS tone or DCS code. **Green** puts the
+frequency and tone into the VFO (both ways, tone mode Both, or no tone),
+**red** stops. From memory mode the copy goes to the VFO, and the radio
+switches to VFO mode.
+
+It only hears a radio a metre or so away: the receiver's front end is off
+while it measures. It reads the frequency the other radio transmits on, so
+for a repeater it gives the input; set the receive frequency afterwards. A
+DCS code may come out as its equivalent (D023I is the same signal as
+D047N, and so on), which works the same.
 
 Transmitting needs a licence for the band and frequency you use.

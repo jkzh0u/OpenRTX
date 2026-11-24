@@ -10,6 +10,7 @@
 #include "interfaces/radio.h"
 #include "core/state.h"
 #include "core/roger_beep.h"
+#include "core/fast_copy.h"
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
 #include <string.h>
@@ -122,6 +123,30 @@ static void playTalkPermit(uint8_t style)
 void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
 {
     (void) newCfg;
+
+    #ifdef CONFIG_FAST_COPY
+    // Fast copy has the radio: no reception, no transmission
+    static bool fastCopying;
+    if(fastCopy_run(getTick()))
+    {
+        if(sqlOpen)
+        {
+            audioPath_release(rxAudioPath);
+            sqlOpen = false;
+        }
+        fastCopying = true;
+        sleepFor(0u, 30u);
+        return;
+    }
+    if(fastCopying)
+    {
+        // Receive normally again, with the configuration's settings
+        fastCopying = false;
+        radio_disableRtx();
+        status->opStatus = OFF;
+        enterRx = true;
+    }
+    #endif
 
     #if defined(PLATFORM_TTWRPLUS)
     // Set output volume by changing the HR_C6000 DAC gain

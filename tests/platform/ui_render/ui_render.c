@@ -42,6 +42,7 @@
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
 #include "core/settings.h"
+#include "core/fast_copy.h"
 #include "core/voicePrompts.h"
 #include "core/voicePromptUtils.h"
 #include "interfaces/platform.h"
@@ -65,6 +66,7 @@ void _ui_drawMainMEM(ui_state_t *ui_state);
 void _ui_drawTetraRecent(ui_state_t *ui_state);
 void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 void _ui_drawTetraFieldTest(ui_state_t *ui_state);
+void _ui_drawFastCopy(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
 void _ui_drawMenuTop(ui_state_t *ui_state);
@@ -163,6 +165,13 @@ void delayUs(unsigned int useconds)
 }
 
 static bool pttStatus;
+static struct fastCopyResult fastCopy;
+
+void fastCopy_get(struct fastCopyResult *out)
+{
+    *out = fastCopy;
+}
+
 static bool fmRxOpen;
 
 bool platform_getPttStatus()
@@ -312,7 +321,8 @@ enum screen {
     SCREEN_MEM,
     SCREEN_RECENT,
     SCREEN_DETAIL,
-    SCREEN_FIELD_TEST
+    SCREEN_FIELD_TEST,
+    SCREEN_FAST_COPY
 };
 
 /* Memory channel number being typed, drawn on the next scene */
@@ -337,6 +347,8 @@ static void draw(const char *name, enum screen screen)
         _ui_drawTetraRecentDetail(&ui);
     else if (screen == SCREEN_FIELD_TEST)
         _ui_drawTetraFieldTest(&ui);
+    else if (screen == SCREEN_FAST_COPY)
+        _ui_drawFastCopy(&ui);
     else
         _ui_drawMainVFO(&ui);
     gfx_render();
@@ -601,6 +613,20 @@ static void fmScenes(void)
     last_state.channel.rxDcs = 0;
     last_state.channel.txDcs = 0;
 
+    /* Fast copy: listening, frequency found, found with a tone or code */
+    memset(&fastCopy, 0, sizeof(fastCopy));
+    fastCopy.state = FAST_COPY_FREQ;
+    draw("fm-6-fast-copy-listening", SCREEN_FAST_COPY);
+    fastCopy.state = FAST_COPY_TONE;
+    fastCopy.hz = 446006180;
+    draw("fm-6b-fast-copy-frequency", SCREEN_FAST_COPY);
+    fastCopy.state = FAST_COPY_FOUND;
+    fastCopy.toneFound = true;
+    fastCopy.tone = 885;
+    draw("fm-6c-fast-copy-ctcss", SCREEN_FAST_COPY);
+    fastCopy.tone = RTX_TONE_DCS | 0023;
+    draw("fm-6d-fast-copy-dcs", SCREEN_FAST_COPY);
+    memset(&fastCopy, 0, sizeof(fastCopy));
     last_state.channel = saved;
     strcpy(last_state.channel.name, savedName);
     last_state.rssi = -85;

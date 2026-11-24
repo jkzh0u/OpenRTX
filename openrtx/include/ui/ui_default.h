@@ -56,7 +56,8 @@ enum uiScreen
     TETRA_RECENT,
     TETRA_RECENT_DETAIL,
     TETRA_FIELD_TEST,
-    SETTINGS_TETRA
+    SETTINGS_TETRA,
+    FAST_COPY
 };
 
 enum SetRxTx

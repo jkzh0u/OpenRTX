@@ -207,6 +207,9 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraSpeech.c)
 endif()
 
+# FM fast copy (CONFIG_FAST_COPY in hwconfig.h)
+target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/fast_copy.c)
+
 # Channels and TETRA names come from the channel list image in flash
 target_sources(app PRIVATE
   ${OPENRTX_ROOT}/openrtx/src/core/chlist.c

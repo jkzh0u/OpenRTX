@@ -40,6 +40,8 @@ extern "C" {
 #define CONFIG_ROGER_BEEP
 /* FM DCS codes as well as CTCSS tones */
 #define CONFIG_DCS
+/* FM fast copy: read a nearby radio's frequency and tone (long *) */
+#define CONFIG_FAST_COPY
 
 /* Battery type */
 #define CONFIG_BAT_LIION

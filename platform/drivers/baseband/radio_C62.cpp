@@ -468,6 +468,76 @@ rssi_t radio_getRssi()
     return bk4819_get_rssi(&c62_bk4819);
 }
 
+#ifdef CONFIG_FAST_COPY
+/*
+ * Fast copy, with the BK4819's frequency scanner (REG_32, result in REG_0D
+ * and REG_0E, in 10 Hz units) and its CTCSS/DCS scanner (REG_68 to 6A), as
+ * the Quansheng UV-K5 uses them.
+ */
+#define FREQ_SCAN_ON ((290u << 1) | 1u) /* Scan time 0.2 s */
+#define FREQ_SCAN_OFF (290u << 1)
+
+void radio_fastCopyStart()
+{
+    /* Front end off: only a transmitter right next to the radio */
+    gpioDev_clear(&c62_bk4819_gpio, GPIO_VHF_RX_LNA);
+    gpioDev_clear(&c62_bk4819_gpio, GPIO_UHF_RX_LNA);
+    BK4819_SetAF(&c62_bk4819, 0);
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_32, FREQ_SCAN_OFF);
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_32, FREQ_SCAN_ON);
+}
+
+bool radio_fastCopyFreq(uint32_t *hz)
+{
+    uint16_t high = BK4819_readReg(&c62_bk4819, BK4819_REG_0D);
+    if (high & 0x8000)
+        return false; /* Still scanning */
+
+    uint16_t low = BK4819_readReg(&c62_bk4819, BK4819_REG_0E);
+    *hz = ((((uint32_t)high & 0x7ff) << 16) | low) * 10;
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_32, FREQ_SCAN_OFF);
+    return true;
+}
+
+void radio_fastCopyTone(uint32_t hz)
+{
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_32, FREQ_SCAN_OFF);
+    bk4819_set_freq(&c62_bk4819, hz);
+    /* CTCSS/DCS generator off, detectors on: they report what they hear */
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_51, 0);
+    bk4819_rx_on(&c62_bk4819);
+}
+
+bool radio_fastCopyToneResult(uint16_t *tone)
+{
+    uint16_t high = BK4819_readReg(&c62_bk4819, BK4819_REG_69);
+    if ((high & 0x8000) == 0) {
+        uint16_t low = BK4819_readReg(&c62_bk4819, BK4819_REG_6A);
+        uint32_t cw = (((uint32_t)high & 0xfff) << 12) | (low & 0xfff);
+        bool inv = false;
+        int code = dcsDecode(cw, &inv);
+        if (code < 0)
+            return false;
+        *tone = (uint16_t)(RTX_TONE_DCS | (inv ? RTX_TONE_DCS_INV : 0) | code);
+        return true;
+    }
+
+    uint16_t ctc = BK4819_readReg(&c62_bk4819, BK4819_REG_68);
+    if ((ctc & 0x8000) == 0) {
+        /* Tenths of Hz */
+        *tone = (uint16_t)(((uint32_t)(ctc & 0x1fff) * 4843) / 10000);
+        return true;
+    }
+    return false;
+}
+
+void radio_fastCopyStop()
+{
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_32, FREQ_SCAN_OFF);
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_51, 0);
+}
+#endif
+
 void radio_setTxTone(uint16_t hz)
 {
     if (radioStatus != TX)
