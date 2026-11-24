@@ -241,6 +241,24 @@ bool callStore_info(uint16_t n, struct callStoreInfo *out)
     return true;
 }
 
+/* Saved calls: none recorded since power on; the network says Nov 19, 16:36 */
+bool tetraCallRec_heardAt(uint32_t seq, long long *tick)
+{
+    (void)seq;
+    (void)tick;
+    return false;
+}
+
+bool tetraStatus_timeNow(uint16_t *year, uint16_t *day, uint32_t *sec,
+                         bool *local)
+{
+    *year = 2026;
+    *day = 322;
+    *sec = 59760;
+    *local = true;
+    return true;
+}
+
 bool tetraCallRec_playing(uint32_t *seq, uint16_t *played, uint16_t *length)
 {
     *seq = 53;

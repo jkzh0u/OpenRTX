@@ -556,8 +556,9 @@ them, which is the default (`C62_TETRA_FOLLOW`, `C62_TETRA_ROAM`).
 With **Settings** > **TETRA** > Save calls on, every call heard with
 speech is kept on the radio, and **Menu** > **Saved calls** lists them,
 newest first: the talkgroup by name and the length, then the date and time
-(the network's time, which TTC sends; `#` and a number if the network has
-not sent it yet) and who talked first.
+(the network's time, which TTC sends; for calls today, how long ago, like
+`5 min ago`; `#` and a number if the network has not sent the time) and
+who talked first.
 
 | Key | Does |
 |---|---|
@@ -579,10 +580,6 @@ written is not saved either.
 
 The channel list image can be at most 64 kB (about 2000 channels): the
 rest of its old area holds the saved calls.
-
-Recording other people's calls is for your own listening: in Canada the
-Radiocommunication Act (section 9(2)) forbids passing on or using what is
-intercepted. Anyone holding the radio can play them.
 
 ### Receive log
 

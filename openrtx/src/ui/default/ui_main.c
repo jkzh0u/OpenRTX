@@ -786,6 +786,45 @@ static void _ui_tetraDate(char *buf, size_t len, uint16_t year, uint16_t day)
 }
 
 /**
+ * How long ago a saved call was heard, if it was today: from when it was
+ * recorded if that was since power on, else from the network's clock.
+ *
+ * @return false if not known, or a day or more ago.
+ */
+static bool _ui_tetraSavedAge(char *buf, size_t len,
+                              const struct callStoreInfo *ci)
+{
+    long long tick;
+    long long s = -1;
+
+    if (tetraCallRec_heardAt(ci->seq, &tick)) {
+        s = (getTick() - tick) / 1000;
+    } else if (ci->year != 0) {
+        uint16_t year, day;
+        uint32_t sec;
+        bool local;
+        if (tetraStatus_timeNow(&year, &day, &sec, &local)) {
+            long long days = (long long)day - ci->dayOfYear;
+            if (year == ci->year + 1)
+                days += (ci->year % 4 == 0) ? 366 : 365;
+            else if (year != ci->year)
+                return false;
+            s = days * 86400 + (long long)sec - ci->secOfDay;
+        }
+    }
+    if (s < 0 || s >= 86400)
+        return false;
+
+    if (s < 60)
+        snprintf(buf, len, "just now");
+    else if (s < 3600)
+        snprintf(buf, len, "%lld min ago", s / 60);
+    else
+        snprintf(buf, len, "%lld h ago", s / 3600);
+    return true;
+}
+
+/**
  * Saved calls, newest first: on each, the talkgroup and its length, then
  * when (network time) and who talked. The one playing is green.
  */
@@ -863,8 +902,10 @@ void _ui_drawTetraSaved(ui_state_t *ui_state)
         point_t left = { layout.horizontal_pad, pos.y };
         gfx_print(left, layout.menu_font, TEXT_ALIGN_LEFT, ink, "%s", fitted);
 
-        /* When, and who talked first */
-        if (ci.year != 0) {
+        /* When (how long ago if today), and who talked first */
+        if (_ui_tetraSavedAge(when, sizeof(when), &ci)) {
+            /* "5 min ago" */
+        } else if (ci.year != 0) {
             char date[10];
             _ui_tetraDate(date, sizeof(date), ci.year, ci.dayOfYear);
             snprintf(when, sizeof(when), "%s %02lu:%02lu", date,

@@ -61,6 +61,15 @@ void tetraCallRec_stop(void);
  */
 bool tetraCallRec_playing(uint32_t *seq, uint16_t *played, uint16_t *length);
 
+/**
+ * When a call saved since power on was heard (UI).
+ *
+ * @param seq: the call.
+ * @param tick: when it started, ms.
+ * @return false if it was saved before this power on.
+ */
+bool tetraCallRec_heardAt(uint32_t seq, long long *tick);
+
 /** @return true while a call is being recorded or written (UI). */
 bool tetraCallRec_busy(void);
 

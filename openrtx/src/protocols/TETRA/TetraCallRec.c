@@ -43,7 +43,16 @@ static unsigned cur;              /* Buffer recording */
 static struct callStoreInfo info; /* Of the call recording */
 static uint16_t callId;           /* Of the call recording */
 static long long lastFrame;       /* Tick of its last frame */
-static bool pending;              /* Buffer !cur holds a call to write */
+static long long firstFrame;      /* Tick of its first frame */
+static long long pendingFirst;    /* Of the call to write */
+/* Calls saved since power on, and when they started: for "5 min ago" */
+#define SESSION_CALLS 16
+static struct {
+    uint32_t seq;
+    long long tick;
+} session[SESSION_CALLS];
+static unsigned sessionNext;
+static bool pending; /* Buffer !cur holds a call to write */
 static struct callStoreInfo pendingInfo;
 static volatile bool writing;
 
@@ -85,6 +94,7 @@ static void finish(void)
 {
     if (recording && info.frames >= CALLREC_MIN_FRAMES && !pending) {
         pendingInfo = info;
+        pendingFirst = firstFrame;
         pending = true;
         cur ^= 1;
     }
@@ -143,6 +153,7 @@ void tetraCallRec_frame(const uint8_t *bits, uint8_t bfi)
             info.year = 0;
         }
         callId = id;
+        firstFrame = now;
         recording = true;
     }
 
@@ -172,8 +183,13 @@ static void *writeCalls(void *arg)
         pthread_mutex_unlock(&mutex);
 
         if (work) {
-            callStore_save(&saving, frames[buf]);
+            int ret = callStore_save(&saving, frames[buf]);
             pthread_mutex_lock(&mutex);
+            if (ret == 0) {
+                session[sessionNext % SESSION_CALLS].seq = saving.seq;
+                session[sessionNext % SESSION_CALLS].tick = pendingFirst;
+                sessionNext++;
+            }
             pending = false;
             writing = false;
             pthread_mutex_unlock(&mutex);
@@ -211,6 +227,21 @@ void tetraCallRec_enable(bool on)
     if (on && !writerUp)
         writerUp = spawn(&writer, WRITER_STACK, writeCalls);
     enabled = on && writerUp;
+}
+
+bool tetraCallRec_heardAt(uint32_t seq, long long *tick)
+{
+    bool found = false;
+
+    pthread_mutex_lock(&mutex);
+    for (unsigned i = 0; i < SESSION_CALLS && i < sessionNext; i++) {
+        if (session[i].seq == seq) {
+            *tick = session[i].tick;
+            found = true;
+        }
+    }
+    pthread_mutex_unlock(&mutex);
+    return found;
 }
 
 bool tetraCallRec_busy(void)
