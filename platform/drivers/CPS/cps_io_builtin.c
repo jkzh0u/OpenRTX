@@ -26,6 +26,9 @@
 #include "interfaces/cps_io.h"
 #include "rtx/rtx.h"
 
+#ifdef CONFIG_MEMCH
+#include "core/memch.h"
+#endif
 #ifdef CONFIG_CHLIST
 #include "core/chlist.h"
 #elif !defined(CPS_BUILTIN_LIST)
@@ -93,6 +96,13 @@ int cps_readChannel(channel_t *channel, uint16_t pos)
 #ifdef CONFIG_CHLIST
     struct chlistChannel c;
 
+#ifdef CONFIG_MEMCH
+    /* After the list's channels: the FM channels saved on the radio */
+    if (pos >= chlist_channelCount()) {
+        int slot = memch_nth((uint16_t)(pos - chlist_channelCount()));
+        return (slot >= 0 && memch_read((uint16_t)slot, channel)) ? 0 : -1;
+    }
+#endif
     if (!chlist_channel(pos, &c))
         return -1;
 

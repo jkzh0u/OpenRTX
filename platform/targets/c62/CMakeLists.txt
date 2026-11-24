@@ -207,6 +207,10 @@ if(C62_TETRA)
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraSpeech.c)
 endif()
 
+# FM channels saved on the radio, after the channel list's (core/memch.h,
+# stored by platform/drivers/NVM/nvmem_c62.c)
+target_compile_definitions(app PRIVATE CONFIG_MEMCH)
+
 # FM fast copy (CONFIG_FAST_COPY in hwconfig.h)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/fast_copy.c)
 

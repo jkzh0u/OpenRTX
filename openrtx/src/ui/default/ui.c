@@ -69,6 +69,9 @@
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
+#ifdef CONFIG_MEMCH
+#include "core/memch.h"
+#endif
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
@@ -147,6 +150,9 @@ const char *settings_items[] =
     "M17",
 #endif
     "FM",
+#ifdef CONFIG_MEMCH
+    "Memory",
+#endif
 #ifdef CONFIG_TETRA
     "TETRA",
 #endif
@@ -311,6 +317,16 @@ const uint8_t settings_radio_num = sizeof(settings_radio_items)/sizeof(settings_
 const uint8_t settings_m17_num = sizeof(settings_m17_items)/sizeof(settings_m17_items[0]);
 #endif
 const uint8_t settings_fm_num = sizeof(settings_fm_items) / sizeof(settings_fm_items[0]);
+#ifdef CONFIG_MEMCH
+const char *settings_memory_items[] =
+{
+    "Slot",
+    "Save here",
+    "Rename",
+    "Delete"
+};
+const uint8_t settings_memory_num = sizeof(settings_memory_items) / sizeof(settings_memory_items[0]);
+#endif
 const uint8_t settings_accessibility_num = sizeof(settings_accessibility_items)/sizeof(settings_accessibility_items[0]);
 #ifdef CONFIG_TETRA
 const uint8_t settings_tetra_num = sizeof(settings_tetra_items)/sizeof(settings_tetra_items[0]);
@@ -1063,6 +1079,134 @@ static void _ui_fastCopyApply(bool *sync_rtx)
     state.vfo_channel = state.channel;
     state.ui_screen = MAIN_VFO;
     *sync_rtx = true;
+}
+#endif
+
+#ifdef CONFIG_MEMCH
+/* In ui_menu.c */
+extern void _ui_drawSettingsMemory(ui_state_t *ui_state);
+
+static void _ui_textInputReset(char *buf, size_t bufSize);
+static void _ui_textInputKeypad(char *buf, uint8_t max_len, kbd_msg_t msg,
+                                bool callsign);
+static void _ui_textInputConfirm(char *buf);
+static void _ui_textInputDel(char *buf);
+static void _ui_menuUp(uint8_t menu_entries);
+static void _ui_menuDown(uint8_t menu_entries);
+static void _ui_menuBack(uint8_t prev_state);
+
+/**
+ * Settings > Memory, as the Quansheng UV-K5's channel menus: Slot picks
+ * M1 to M200 (Enter, then Up / Down); Enter on Save here saves the channel
+ * in use (FM, the VFO or a memory channel with its changes) to that slot;
+ * on Rename types its name on the keypad; on Delete, twice, clears it.
+ */
+static void _ui_memoryKeys(kbd_msg_t msg)
+{
+    uint8_t slot = ui_state.mem_slot;
+
+    // Typing a name
+    if(ui_state.mem_naming)
+    {
+        if(msg.keys & KEY_ENTER)
+        {
+            _ui_textInputConfirm(ui_state.new_name);
+            char *p = ui_state.new_name;
+            if(p[0] == '_')
+                p[0] = '\0';
+            ui_state.mem_status = (memch_rename(slot, p) == 0) ? "renamed"
+                                                                 : "write failed";
+            ui_state.mem_naming = false;
+        }
+        else if(msg.keys & KEY_ESC)
+        {
+            ui_state.mem_naming = false;
+        }
+        else if(msg.keys & (KEY_UP | KEY_DOWN | KEY_LEFT | KEY_RIGHT))
+        {
+            _ui_textInputDel(ui_state.new_name);
+        }
+        else if(input_isCharPressed(msg))
+        {
+            _ui_textInputKeypad(ui_state.new_name, MEMCH_NAME_LEN, msg, false);
+        }
+        return;
+    }
+
+    // Choosing the slot
+    if(ui_state.edit_mode && (ui_state.menu_selected == MEM_SLOT))
+    {
+        if(msg.keys & (KEY_UP | KNOB_RIGHT | KEY_RIGHT))
+            ui_state.mem_slot = (uint8_t)((slot + 1) % MEMCH_SLOTS);
+        else if(msg.keys & (KEY_DOWN | KNOB_LEFT | KEY_LEFT))
+            ui_state.mem_slot = (uint8_t)((slot + MEMCH_SLOTS - 1) % MEMCH_SLOTS);
+        else if(msg.keys & (KEY_ENTER | KEY_ESC))
+            ui_state.edit_mode = false;
+        ui_state.mem_status = NULL;
+        ui_state.mem_delete_armed = false;
+        return;
+    }
+
+    if(msg.keys & KEY_UP || msg.keys & KNOB_LEFT)
+    {
+        _ui_menuUp(settings_memory_num);
+        ui_state.mem_delete_armed = false;
+    }
+    else if(msg.keys & KEY_DOWN || msg.keys & KNOB_RIGHT)
+    {
+        _ui_menuDown(settings_memory_num);
+        ui_state.mem_delete_armed = false;
+    }
+    else if(msg.keys & KEY_ESC)
+    {
+        ui_state.mem_delete_armed = false;
+        _ui_menuBack(MENU_SETTINGS);
+    }
+    else if(msg.keys & KEY_ENTER)
+    {
+        switch(ui_state.menu_selected)
+        {
+            case MEM_SLOT:
+                ui_state.edit_mode = true;
+                break;
+
+            case MEM_SAVE:
+                if(state.channel.mode != OPMODE_FM)
+                    ui_state.mem_status = "FM only";
+                else if(memch_save(slot, &state.channel) == 0)
+                    ui_state.mem_status = "saved";
+                else
+                    ui_state.mem_status = "write failed";
+                break;
+
+            case MEM_RENAME:
+                if(!memch_used(slot))
+                {
+                    ui_state.mem_status = "empty slot";
+                    break;
+                }
+                _ui_textInputReset(ui_state.new_name, sizeof(ui_state.new_name));
+                ui_state.mem_naming = true;
+                break;
+
+            case MEM_DELETE:
+                if(!memch_used(slot))
+                {
+                    ui_state.mem_status = "empty slot";
+                }
+                else if(!ui_state.mem_delete_armed)
+                {
+                    ui_state.mem_delete_armed = true;
+                }
+                else
+                {
+                    ui_state.mem_delete_armed = false;
+                    ui_state.mem_status = (memch_delete(slot) == 0) ? "deleted"
+                                                                    : "write failed";
+                }
+                break;
+        }
+    }
 }
 #endif
 
@@ -2668,6 +2812,14 @@ void ui_updateFSM(bool *sync_rtx)
                         case S_FM:
                             state.ui_screen = SETTINGS_FM;
                             break;
+#ifdef CONFIG_MEMCH
+                        case S_MEMORY:
+                            state.ui_screen = SETTINGS_MEMORY;
+                            ui_state.mem_status = NULL;
+                            ui_state.mem_delete_armed = false;
+                            ui_state.mem_naming = false;
+                            break;
+#endif
 #ifdef CONFIG_TETRA
                         case S_TETRA:
                             state.ui_screen = SETTINGS_TETRA;
@@ -3150,6 +3302,12 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
 #endif
+#ifdef CONFIG_MEMCH
+            // Memory: choose a slot, then save, rename or delete
+            case SETTINGS_MEMORY:
+                _ui_memoryKeys(msg);
+                break;
+#endif
             // FM settings: Enter, then Up / Down change the value
             case SETTINGS_FM:
                 if(ui_state.edit_mode &&
@@ -3461,6 +3619,11 @@ bool ui_updateGUI()
         case SETTINGS_FM:
             _ui_drawSettingsFM(&ui_state);
             break;
+#ifdef CONFIG_MEMCH
+        case SETTINGS_MEMORY:
+            _ui_drawSettingsMemory(&ui_state);
+            break;
+#endif
 #ifdef CONFIG_TETRA
         // TETRA settings screen
         case SETTINGS_TETRA:

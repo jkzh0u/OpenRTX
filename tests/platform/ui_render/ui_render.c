@@ -67,6 +67,7 @@ void _ui_drawTetraRecent(ui_state_t *ui_state);
 void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 void _ui_drawTetraFieldTest(ui_state_t *ui_state);
 void _ui_drawFastCopy(ui_state_t *ui_state);
+void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
 void _ui_drawMenuTop(ui_state_t *ui_state);
@@ -166,6 +167,19 @@ void delayUs(unsigned int useconds)
 
 static bool pttStatus;
 static struct fastCopyResult fastCopy;
+
+/* Saved channels: slot M1 holds a repeater */
+bool memch_read(uint16_t slot, channel_t *ch)
+{
+    if (slot != 0)
+        return false;
+    memset(ch, 0, sizeof(*ch));
+    ch->mode = OPMODE_FM;
+    ch->rx_frequency = 443150000;
+    ch->tx_frequency = 448150000;
+    strcpy(ch->name, "Repeater");
+    return true;
+}
 
 void fastCopy_get(struct fastCopyResult *out)
 {
@@ -648,6 +662,22 @@ static void menu(const char *name, menuDraw fn, uint8_t selected)
     printf("%s\n", outPath);
 }
 
+/** Settings > Memory after saving to slot M2 */
+static void memorySaved(ui_state_t *ui_state)
+{
+    ui_state->mem_slot = 1;
+    ui_state->mem_status = "saved";
+    _ui_drawSettingsMemory(ui_state);
+}
+
+/** Settings > Memory, typing the name of M1 */
+static void memoryNaming(ui_state_t *ui_state)
+{
+    ui_state->mem_naming = true;
+    strcpy(ui_state->new_name, "Home rpt_");
+    _ui_drawSettingsMemory(ui_state);
+}
+
 /**
  * Side key shortcuts: ui.c covers the screen in black (_ui_drawDarkOverlay)
  * and draws them on top
@@ -692,6 +722,9 @@ static void menuScenes(void)
     last_state.channel = before;
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
     menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);
+    menu("menu-07e-memory", _ui_drawSettingsMemory, 0);
+    menu("menu-07f-memory-save", memorySaved, 1);
+    menu("menu-07g-memory-name", memoryNaming, 0);
     menu("menu-09-reset", _ui_drawSettingsReset2Defaults, 0);
     menu("menu-10-info", _ui_drawMenuInfo, 0);
     menu("menu-11-about", _ui_drawMenuAbout, 0);

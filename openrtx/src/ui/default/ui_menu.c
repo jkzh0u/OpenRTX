@@ -11,6 +11,9 @@
 #include "core/utils.h"
 #include "ui/ui_default.h"
 #include "core/roger_beep.h"
+#ifdef CONFIG_MEMCH
+#include "core/memch.h"
+#endif
 #include "interfaces/nvmem.h"
 #include "interfaces/cps_io.h"
 #include "interfaces/platform.h"
@@ -559,6 +562,89 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
 
     return 0;
 }
+
+#ifdef CONFIG_MEMCH
+int _ui_getMemoryEntryName(char *buf, uint8_t max_len, uint8_t index)
+{
+    if (index >= settings_memory_num)
+        return -1;
+    sniprintf(buf, max_len, "%s", settings_memory_items[index]);
+    return 0;
+}
+
+/* Set by _ui_drawSettingsMemory() for the value names */
+static const ui_state_t *memUi;
+
+int _ui_getMemoryValueName(char *buf, uint8_t max_len, uint8_t index)
+{
+    if (index >= settings_memory_num || memUi == NULL)
+        return -1;
+
+    uint8_t slot = memUi->mem_slot;
+    channel_t ch;
+    bool used = memch_read(slot, &ch);
+
+    // What the last action did, on its line
+    if (memUi->mem_status != NULL && index == memUi->menu_selected
+        && index != MEM_SLOT) {
+        sniprintf(buf, max_len, "%s", memUi->mem_status);
+        return 0;
+    }
+
+    switch (index) {
+        case MEM_SLOT:
+            if (used)
+                sniprintf(buf, max_len, "M%u %.9s", slot + 1, ch.name);
+            else
+                sniprintf(buf, max_len, "M%u empty", slot + 1);
+            break;
+        case MEM_SAVE:
+            sniprintf(buf, max_len, "%s",
+                      (last_state.channel.mode != OPMODE_FM) ? "FM only"
+                      : used                                 ? "replace"
+                                                             : "");
+            break;
+        case MEM_RENAME:
+            sniprintf(buf, max_len, "%.10s", used ? ch.name : "");
+            break;
+        case MEM_DELETE:
+            sniprintf(buf, max_len, "%s",
+                      memUi->mem_delete_armed ? "again" : "");
+            break;
+    }
+    return 0;
+}
+
+void _ui_drawSettingsMemory(ui_state_t *ui_state)
+{
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Memory");
+
+    if (ui_state->mem_naming) {
+        // The name being typed, in a box, as the M17 callsign
+        uint16_t rect_width = CONFIG_SCREEN_WIDTH - (layout.horizontal_pad * 2);
+        uint16_t rect_height = (CONFIG_SCREEN_HEIGHT
+                                - (layout.top_h + layout.bottom_h)) / 2;
+        point_t rect_origin = { (CONFIG_SCREEN_WIDTH - rect_width) / 2,
+                                (CONFIG_SCREEN_HEIGHT - rect_height) / 2 };
+        char title[16];
+        sniprintf(title, sizeof(title), "Name of M%u", ui_state->mem_slot + 1);
+        gfx_printLine(1, 4, layout.top_h, CONFIG_SCREEN_HEIGHT - layout.bottom_h,
+                      layout.horizontal_pad, layout.menu_font, TEXT_ALIGN_LEFT,
+                      color_white, title);
+        gfx_drawRect(rect_origin, rect_width, rect_height, color_white, false);
+        gfx_printLine(1, 1, layout.top_h, CONFIG_SCREEN_HEIGHT - layout.bottom_h,
+                      layout.horizontal_pad, layout.menu_font,
+                      TEXT_ALIGN_CENTER, color_white, ui_state->new_name);
+        return;
+    }
+
+    memUi = ui_state;
+    _ui_drawMenuListValue(ui_state, ui_state->menu_selected,
+                          _ui_getMemoryEntryName, _ui_getMemoryValueName);
+}
+#endif
 
 int _ui_getAccessibilityEntryName(char *buf, uint8_t max_len, uint8_t index)
 {

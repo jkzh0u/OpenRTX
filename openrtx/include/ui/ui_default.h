@@ -57,7 +57,8 @@ enum uiScreen
     TETRA_RECENT_DETAIL,
     TETRA_FIELD_TEST,
     SETTINGS_TETRA,
-    FAST_COPY
+    FAST_COPY,
+    SETTINGS_MEMORY
 };
 
 enum SetRxTx
@@ -98,6 +99,9 @@ enum settingsItems
     S_M17,
 #endif
     S_FM,
+#ifdef CONFIG_MEMCH
+    S_MEMORY,
+#endif
 #ifdef CONFIG_TETRA
     S_TETRA,
 #endif
@@ -169,6 +173,16 @@ enum settingsM17Items
     M17_CAN,
     M17_CAN_RX
 };
+
+#ifdef CONFIG_MEMCH
+enum settingsMemoryItems
+{
+    MEM_SLOT = 0,
+    MEM_SAVE,
+    MEM_RENAME,
+    MEM_DELETE
+};
+#endif
 
 enum settingsFMItems
 {
@@ -268,6 +282,15 @@ typedef struct ui_state_t
     long long ch_entry_tick;
     // Which state to return to when we exit menu
     uint8_t last_main_state;
+#ifdef CONFIG_MEMCH
+    // Settings > Memory: the slot chosen, a name being typed, and what the
+    // last action did
+    uint8_t mem_slot;
+    char new_name[16];
+    bool mem_naming;
+    bool mem_delete_armed;
+    const char *mem_status;
+#endif
 #if defined(CONFIG_UI_NO_KEYBOARD)
     uint8_t macro_menu_selected;
 #endif // UI_NO_KEYBOARD
@@ -284,6 +307,10 @@ extern const char *settings_gps_items[];
 extern const char *settings_radio_items[];
 extern const char *settings_m17_items[];
 extern const char *settings_fm_items[];
+#ifdef CONFIG_MEMCH
+extern const char *settings_memory_items[];
+extern const uint8_t settings_memory_num;
+#endif
 extern const char * settings_accessibility_items[];
 #ifdef CONFIG_TETRA
 extern const char *settings_tetra_items[];

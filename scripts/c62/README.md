@@ -1023,6 +1023,25 @@ DCS code as `D023N` (normal) or `D023I` (inverted), or 0 for none. `chlist.py` c
 `--show` prints the result. `CPS_CHANNEL(..., OPMODE_FM)` channels stay
 receive only, 25 kHz, without tones.
 
+### Saving FM channels on the radio
+
+**Menu** > **Settings** > **Memory** keeps FM channels on the radio itself,
+as on the Quansheng UV-K5, in 200 slots (M1 to M200):
+
+| Line | Does |
+|---|---|
+| Slot | **Green**, then **Up** / **Down** pick the slot; it shows its name, or `empty` |
+| Save here | **Green** saves the channel in use (the VFO, or a memory channel with any changes made to it) to the slot: frequency, transmit frequency, width, power and tones. Without a name it is named after its frequency |
+| Rename | **Green**, type the name on the keypad (up to 15 characters, like the M17 callsign), **green** to keep it |
+| Delete | **Green** twice clears the slot |
+
+Saved channels come after the channel list's channels in memory mode, in
+slot order: with the TTC list's 43 channels, M1 is channel 44. To change
+one, select it, change its settings, and save it to the same slot again.
+They are kept in the flash area after the settings (0x2b4000, 16 kB) and
+survive a new firmware or channel list; Default Settings does not clear
+them. FM only: TETRA channels come from the channel list.
+
 ### Fast copy
 
 Hold **\*** in FM (VFO or memory mode) to copy another radio's channel
