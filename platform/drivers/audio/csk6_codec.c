@@ -5,7 +5,6 @@
  */
 
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <csk6_cm33/include/cache.h>
@@ -107,15 +106,6 @@ static bool playback_running;
  * of each 10 ms frame, 0 to 255, falling slowly */
 static bool mic_monitor;
 static volatile uint8_t mic_level;
-/* Tone watch on the radio's audio: a Goertzel filter on every 6th sample
- * (8 kHz), over blocks of 20 ms; the share of the block's energy in the
- * tone, percent */
-#define TONE_DECIMATE 6
-#define TONE_BLOCK 160
-static volatile float tone_coeff; /* 0: off */
-static float tone_s1, tone_s2, tone_energy;
-static unsigned int tone_n, tone_phase;
-static volatile uint8_t tone_ratio;
 static int64_t playback_deadline;
 static uint32_t playback_fraction;
 static struct k_thread worker;
@@ -357,8 +347,7 @@ fail:
  */
 static void apply_routes(void)
 {
-    bool capture = input_enabled[0] || input_enabled[1] || mic_monitor
-                || tone_coeff != 0.0f;
+    bool capture = input_enabled[0] || input_enabled[1] || mic_monitor;
     bool playback = false;
     for (unsigned int i = 0; i < 2; i++) {
         capture |= output_source[i] == SOURCE_MIC
@@ -393,48 +382,6 @@ static void apply_routes(void)
         routes_dirty = false;
         k_condvar_broadcast(&changed);
     }
-}
-
-/**
- * One 8 kHz sample of the radio's audio for the tone watch. A tone alone
- * gives a share near 100 %, noise or speech a few percent.
- */
-static void tone_sample(int16_t sample)
-{
-    float x = sample;
-    float s0 = x + tone_coeff * tone_s1 - tone_s2;
-    tone_s2 = tone_s1;
-    tone_s1 = s0;
-    tone_energy += x * x;
-    if (++tone_n < TONE_BLOCK)
-        return;
-
-    float power = tone_s1 * tone_s1 + tone_s2 * tone_s2
-                - tone_coeff * tone_s1 * tone_s2;
-    float share = (tone_energy > 0.0f) ?
-                      power / (tone_energy * (TONE_BLOCK / 2)) :
-                      0.0f;
-    tone_ratio = (uint8_t)MIN(share * 100.0f, 100.0f);
-    tone_s1 = tone_s2 = tone_energy = 0.0f;
-    tone_n = 0;
-}
-
-void csk6codec_setToneWatch(uint16_t hz)
-{
-    k_mutex_lock(&audio_mutex, K_FOREVER);
-    tone_s1 = tone_s2 = tone_energy = 0.0f;
-    tone_n = 0;
-    tone_ratio = 0;
-    tone_coeff = (hz == 0) ? 0.0f :
-                             2.0f
-                                 * cosf(2.0f * 3.14159265f * hz
-                                        / (DSP_SAMPLE_RATE / TONE_DECIMATE));
-    k_mutex_unlock(&audio_mutex);
-}
-
-uint8_t csk6codec_getToneRatio(void)
-{
-    return tone_ratio;
 }
 
 /** Hand a captured sample to the FM outputs taking it from its source */
@@ -612,9 +559,6 @@ static void capture_frame(void)
                 int a = (sample < 0) ? -sample : sample;
                 if (a > mic_peak)
                     mic_peak = a;
-            } else if (tone_coeff != 0.0f
-                       && tone_phase++ % TONE_DECIMATE == 0) {
-                tone_sample(sample);
             }
             struct input_state *in = &inputs[source];
             struct endpoint *ep = &in->endpoint;

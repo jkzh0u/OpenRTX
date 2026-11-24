@@ -68,7 +68,6 @@
 #include "core/roger_beep.h"
 #include "core/vox.h"
 #include "core/bcast.h"
-#include "core/weather.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -136,9 +135,6 @@ const char *menu_items[] =
 #endif
 #ifdef CONFIG_BCAST_FM
     "FM radio",
-#endif
-#ifdef CONFIG_WEATHER
-    "Weather",
 #endif
     "Settings",
     "Info",
@@ -232,9 +228,6 @@ const char* settings_fm_items[] =
 #ifdef CONFIG_NOISE_REDUCTION
     "AI denoise RX",
     "AI denoise TX",
-#endif
-#ifdef CONFIG_WEATHER
-    "Weather alert",
 #endif
 };
 
@@ -1121,14 +1114,6 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 #endif
 
-#ifdef CONFIG_WEATHER
-        case FM_WX_ALERT:
-            state.settings.wxAlert =
-                (uint8_t)((state.settings.wxAlert + WX_CHANNELS + 1 + step)
-                          % (WX_CHANNELS + 1));
-            break;
-#endif
-
 #ifdef CONFIG_NOISE_REDUCTION
         case FM_NR_RX:
             state.settings.nrRx =
@@ -1778,105 +1763,6 @@ static void _ui_bcastKey(kbd_msg_t msg)
         _ui_bcastPreset(1);
     } else if (msg.keys & KEY_ENTER) {
         _ui_bcastTyped(true);
-    }
-}
-#endif
-
-#ifdef CONFIG_WEATHER
-/* In ui_modes.c */
-extern void _ui_drawWeather(ui_state_t *ui_state);
-extern void _ui_drawWxAlert(ui_state_t *ui_state);
-
-/** Listen to a weather channel, 0 for WX1, in place of the channel */
-static void _ui_wxListen(uint8_t ch, bool *sync_rtx)
-{
-    ui_state.wx_sel = ch % WX_CHANNELS;
-    state.wx_listen = (uint8_t)(ui_state.wx_sel + 1);
-    *sync_rtx = true;
-}
-
-/**
- * Menu > Weather: the weather channels, listened to as they are selected,
- * on the one watched for alerts or WX1.
- */
-static void _ui_weatherOpen(bool *sync_rtx)
-{
-    uint8_t watch = state.settings.wxAlert;
-    #ifdef CONFIG_BCAST_FM
-    bcast_stop();
-    #endif
-    _ui_wxListen((watch != 0) ? (uint8_t)(watch - 1) : ui_state.wx_sel,
-                 sync_rtx);
-    state.ui_screen = WEATHER;
-}
-
-/**
- * Keys of the weather screen: up / down change channel, green watches it
- * for alerts (again: stop watching), red goes back to the channel.
- */
-static void _ui_weatherKey(kbd_msg_t msg, bool *sync_rtx)
-{
-    if (msg.keys == 0 || msg.long_press)
-        return;
-
-    if (msg.keys & (KEY_UP | KNOB_LEFT)) {
-        _ui_wxListen((uint8_t)(ui_state.wx_sel + WX_CHANNELS - 1), sync_rtx);
-    } else if (msg.keys & (KEY_DOWN | KNOB_RIGHT)) {
-        _ui_wxListen((uint8_t)(ui_state.wx_sel + 1), sync_rtx);
-    } else if (msg.keys & KEY_ENTER) {
-        uint8_t ch = (uint8_t)(ui_state.wx_sel + 1);
-        state.settings.wxAlert = (state.settings.wxAlert == ch) ? 0 : ch;
-    } else if (msg.keys & KEY_ESC) {
-        state.wx_listen = 0;
-        *sync_rtx = true;
-        state.ui_screen = ui_state.last_main_state;
-    }
-}
-
-/**
- * On each status update: an alert heard takes the screen, from the main
- * screens or the FM radio.
- */
-static void _ui_wxAlertCheck(void)
-{
-    int ch = wx_alert();
-    if (ch < 0 || state.ui_screen == WX_ALERT)
-        return;
-
-    bool fromMain = state.ui_screen == MAIN_VFO || state.ui_screen == MAIN_MEM;
-    #ifdef CONFIG_BCAST_FM
-    fromMain = fromMain || state.ui_screen == BCAST_FM;
-    #endif
-    if (!fromMain)
-        return;
-
-    ui_state.wx_alert_ch = (uint8_t)ch;
-    ui_state.wx_return = state.ui_screen;
-    state.ui_screen = WX_ALERT;
-}
-
-/**
- * Keys of the alert: green listens to the weather channel, red goes back.
- * Either stops the alarm.
- */
-static void _ui_wxAlertKey(kbd_msg_t msg, bool *sync_rtx)
-{
-    if (msg.keys == 0 || msg.long_press)
-        return;
-
-    if (msg.keys & KEY_ENTER) {
-        wx_alertDismiss();
-        #ifdef CONFIG_BCAST_FM
-        if (ui_state.wx_return == BCAST_FM)
-            _ui_bcastClose();
-        #endif
-        if (ui_state.wx_return == MAIN_VFO || ui_state.wx_return == MAIN_MEM)
-            ui_state.last_main_state = ui_state.wx_return;
-        _ui_wxListen(ui_state.wx_alert_ch, sync_rtx);
-        state.ui_screen = WEATHER;
-    } else if (msg.keys & KEY_ESC) {
-        wx_alertDismiss();
-        state.ui_screen = ui_state.wx_return;
     }
 }
 #endif
@@ -3525,11 +3411,6 @@ void ui_updateFSM(bool *sync_rtx)
                             _ui_bcastOpen(sync_rtx);
                             break;
 #endif
-#ifdef CONFIG_WEATHER
-                        case M_WEATHER:
-                            _ui_weatherOpen(sync_rtx);
-                            break;
-#endif
                         case M_SETTINGS:
                             state.ui_screen = MENU_SETTINGS;
                             break;
@@ -4209,16 +4090,6 @@ void ui_updateFSM(bool *sync_rtx)
                 break;
             #endif
 
-            #ifdef CONFIG_WEATHER
-            case WEATHER:
-                _ui_weatherKey(msg, sync_rtx);
-                break;
-
-            case WX_ALERT:
-                _ui_wxAlertKey(msg, sync_rtx);
-                break;
-            #endif
-
             case SETTINGS_ACCESSIBILITY:
                 if(msg.keys & KEY_LEFT || (ui_state.edit_mode &&
                    (msg.keys & KEY_DOWN || msg.keys & KNOB_LEFT)))
@@ -4352,9 +4223,6 @@ void ui_updateFSM(bool *sync_rtx)
 #ifdef CONFIG_SCAN
         _ui_scanTick(now, sync_rtx);
 #endif
-#ifdef CONFIG_WEATHER
-        _ui_wxAlertCheck();
-#endif
         // Channel number typed and left: jump to it
         if(ui_state.ch_entry_digits > 0)
         {
@@ -4386,9 +4254,6 @@ void ui_updateFSM(bool *sync_rtx)
         #ifdef CONFIG_SPECTRUM
         // The spectrum view keeps the screen on
         watching = (state.ui_screen == SPECTRUM);
-        #endif
-        #ifdef CONFIG_WEATHER
-        watching = watching || (state.ui_screen == WX_ALERT);
         #endif
 
         // VOX transmits without PTT
@@ -4538,14 +4403,6 @@ bool ui_updateGUI()
 #ifdef CONFIG_BCAST_FM
         case BCAST_FM:
             _ui_drawBcast(&ui_state);
-            break;
-#endif
-#ifdef CONFIG_WEATHER
-        case WEATHER:
-            _ui_drawWeather(&ui_state);
-            break;
-        case WX_ALERT:
-            _ui_drawWxAlert(&ui_state);
             break;
 #endif
 #ifdef CONFIG_MEMCH

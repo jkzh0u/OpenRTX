@@ -567,26 +567,6 @@ void radio_bcastSignal(uint8_t *rssi, uint8_t *snr, bool *railed)
 }
 #endif
 
-#ifdef CONFIG_WEATHER
-void radio_peekStart(uint32_t hz)
-{
-    bool vhf = vhfLna(hz);
-    gpioDev_clear(&c62_bk4819_gpio, vhf ? GPIO_UHF_RX_LNA : GPIO_VHF_RX_LNA);
-    gpioDev_set(&c62_bk4819_gpio, vhf ? GPIO_VHF_RX_LNA : GPIO_UHF_RX_LNA);
-    bk4819_disable_ctdcss(&c62_bk4819);
-    bk4819_SetFilterBandwidth(&c62_bk4819, BW_25);
-    bk4819_set_freq(&c62_bk4819, hz + rxOffset);
-    BK4819_SetAF(&c62_bk4819, BK4819_AF_TYPE_FM);
-}
-
-void radio_peekStop()
-{
-    BK4819_SetAF(&c62_bk4819, 0);
-    if (radioStatus == RX)
-        radio_enableRx();
-}
-#endif
-
 #ifdef CONFIG_SPECTRUM
 /*
  * Spectrum view: retune and read REG_67, as the UV-K5's spectrum mod does.

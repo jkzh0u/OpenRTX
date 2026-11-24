@@ -215,7 +215,6 @@ target_compile_definitions(app PRIVATE CONFIG_MEMCH)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/fast_copy.c)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/spectrum.c)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/bcast.c)
-target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/weather.c)
 
 # AI noise reduction of FM audio (CONFIG_NOISE_REDUCTION): RNNoise, built
 # for speed, as it runs in real time on the audio worker

@@ -14,12 +14,10 @@
 #include "core/spectrum.h"
 #include "core/vox.h"
 #include "core/bcast.h"
-#include "core/weather.h"
 #include "interfaces/audio.h"
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
 #include <string.h>
-#include <math.h>
 #include "rtx/OpMode_FM.hpp"
 #include "rtx/rtx.h"
 
@@ -74,9 +72,6 @@ void OpMode_FM::enable()
 static bool audioOpen;
 /* The transceiver's own audio on (the path turns it on when opened) */
 static bool afOn;
-/* Updates for which the squelch stays shut: after a weather look, the
- * RSSI filter still holds the weather channel's signal */
-static uint8_t holdSql;
 
 #ifdef CONFIG_VOX
 static bool voxKeyed;       // VOX has the transmitter keyed
@@ -156,9 +151,6 @@ void OpMode_FM::disable()
     audioPath_release(txAudioPath);
     audioOpen = false;
     afOn      = false;
-    #ifdef CONFIG_WEATHER
-    wx_update(0, false, getTick());
-    #endif
     #ifdef CONFIG_BCAST_FM
     bcast_halt();
     #endif
@@ -177,7 +169,7 @@ void OpMode_FM::disable()
     #endif
 }
 
-#if defined(CONFIG_ROGER_BEEP) || defined(CONFIG_WEATHER)
+#ifdef CONFIG_ROGER_BEEP
 /* Local sounds: 8 kHz */
 #define LOCAL_RATE 8000
 /* Longest local sound: 0.3 s */
@@ -244,31 +236,6 @@ static void playTalkPermit(uint8_t style)
 }
 #endif
 
-#ifdef CONFIG_WEATHER
-/* The alarm repeats every this often, for at most this long */
-#define WX_ALARM_PERIOD_MS 4000
-#define WX_ALARM_MAX_MS 120000
-
-/**
- * The weather alarm in the radio's own speaker: the attention signal of US
- * emergency alerts, 853 and 960 Hz together, three bursts of 0.25 s.
- */
-static void playWeatherAlarm()
-{
-    const size_t n = LOCAL_RATE / 4;
-
-    for (size_t i = 0; i < n; i++) {
-        float t = (float) i / LOCAL_RATE;
-        localSound[i] = (int16_t) (9000.0f * (sinf(2.0f * 3.14159265f * 853.0f * t)
-                                            + sinf(2.0f * 3.14159265f * 960.0f * t)));
-    }
-    for (int k = 0; k < 3; k++) {
-        playLocal(localSound, n);
-        sleepFor(0u, 100u);
-    }
-}
-#endif
-
 void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
 {
     (void) newCfg;
@@ -313,38 +280,6 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
     _setVolume();
     #endif
 
-    #ifdef CONFIG_WEATHER
-    // Weather alert watch: a short look at the weather channel now and then,
-    // only while nothing is heard and the radio is not keyed
-    bool wxIdle = (status->opStatus == RX) && !audioOpen
-               && !platform_getPttStatus();
-    if(wx_update(state.settings.wxAlert, wxIdle, getTick()))
-    {
-        holdSql = 3;
-        sleepFor(0u, 10u);
-        return;
-    }
-
-    // An alert heard: the alarm until it is seen, or for 2 minutes
-    static long long alarmFirst = -1, alarmLast;
-    if(wx_alert() >= 0 && status->opStatus != TX)
-    {
-        long long now = getTick();
-        if(alarmFirst < 0)
-            alarmFirst = now;
-        if((now - alarmFirst < WX_ALARM_MAX_MS)
-           && (now - alarmLast >= WX_ALARM_PERIOD_MS))
-        {
-            playWeatherAlarm();
-            alarmLast = getTick();
-        }
-    }
-    else if(wx_alert() < 0)
-    {
-        alarmFirst = -1;
-    }
-    #endif
-
     // RX logic
     bool chanOpen = false;
     if(status->opStatus == RX)
@@ -358,12 +293,6 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
         // moved more than 1dBm on either side of the current squelch setting.
         if((rfSqlOpen == false) && (rssi > (squelch + 1))) rfSqlOpen = true;
         if((rfSqlOpen == true)  && (rssi < (squelch - 1))) rfSqlOpen = false;
-
-        if(holdSql > 0)
-        {
-            holdSql--;
-            rfSqlOpen = false;
-        }
 
         // Local flags for current RF and tone squelch status
         bool rfSql   = ((status->rxToneEn == 0) && (rfSqlOpen == true));

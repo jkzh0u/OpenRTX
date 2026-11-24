@@ -22,7 +22,6 @@
 #include "rtx/rtx.h"
 #include "interfaces/audio.h"
 #include "core/bcast.h"
-#include "core/weather.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -673,78 +672,6 @@ void _ui_drawBcast(ui_state_t *ui_state)
     unsigned rssi = st.rssi;
     _ui_mdMeter("SIG", rssi, 80, _ui_mdTraffic(rssi, 40, 20), 0, "SNR", st.snr,
                 15, mdGroup);
-}
-#endif
-
-#ifdef CONFIG_WEATHER
-/**
- * Weather channels: the seven, the one listened to selected, the one
- * watched for alerts marked; the signal at the bottom. From Menu > Weather.
- */
-void _ui_drawWeather(ui_state_t *ui_state)
-{
-    const uint16_t rowH = 13;
-    point_t pos = { layout.horizontal_pad, 30 };
-    uint8_t watch = last_state.settings.wxAlert;
-
-    gfx_clearScreen();
-    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
-              "Weather");
-
-    for (uint8_t i = 0; i < WX_CHANNELS; i++) {
-        uint32_t hz = wx_hz(i);
-        bool sel = i == ui_state->wx_sel;
-        color_t fg = sel ? color_black : color_white;
-        if (sel) {
-            point_t r = { 0, (uint16_t)(pos.y - rowH + 2) };
-            gfx_drawRect(r, CONFIG_SCREEN_WIDTH, rowH, color_white, true);
-        }
-        gfx_print(pos, FONT_SIZE_8PT, TEXT_ALIGN_LEFT, fg, "WX%u  %lu.%03lu",
-                  i + 1, (unsigned long)(hz / 1000000),
-                  (unsigned long)(hz % 1000000 / 1000));
-        if (watch == i + 1) {
-            point_t r = { 0, (uint16_t)(pos.y - 1) };
-            gfx_print(r, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT,
-                      sel ? color_black : yellow_fab413, "alert");
-        }
-        pos.y += rowH;
-    }
-
-    point_t bottom = { 0, (uint16_t)(CONFIG_SCREEN_HEIGHT - 3) };
-    if (rtx_rxSquelchOpen())
-        gfx_print(bottom, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdVoice,
-                  "Receiving  S%u", rssiToSlevel(last_state.rssi));
-    else
-        gfx_print(bottom, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
-                  "green: alert watch on this channel");
-}
-
-/**
- * A weather alert: the 1050 Hz alarm tone was heard on the channel
- * watched.
- */
-void _ui_drawWxAlert(ui_state_t *ui_state)
-{
-    point_t big, small;
-    uint32_t hz = wx_hz(ui_state->wx_alert_ch);
-    char text[24];
-
-    _ui_mdLines(&big, &small);
-    gfx_clearScreen();
-    point_t top = { 0, (uint16_t)(layout.top_pos.y + 4) };
-    gfx_print(top, FONT_SIZE_12PT, TEXT_ALIGN_CENTER, mdTx, "WEATHER");
-    top.y += 20;
-    gfx_print(top, FONT_SIZE_12PT, TEXT_ALIGN_CENTER, mdTx, "ALERT");
-
-    snprintf(text, sizeof(text), "WX%u %lu.%03lu", ui_state->wx_alert_ch + 1,
-             (unsigned long)(hz / 1000000),
-             (unsigned long)(hz % 1000000 / 1000));
-    _ui_mdBigLine(big, FONT_SIZE_12PT, 0, NULL, color_white, text, color_white);
-    gfx_print(small, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
-              "1050 Hz alarm tone heard");
-    point_t hint = { 0, (uint16_t)(CONFIG_SCREEN_HEIGHT - 4) };
-    gfx_print(hint, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, yellow_fab413,
-              "green listens, red goes back");
 }
 #endif
 

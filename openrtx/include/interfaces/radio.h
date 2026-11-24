@@ -168,19 +168,6 @@ void radio_bcastMute(bool mute);
 void radio_bcastSignal(uint8_t *rssi, uint8_t *snr, bool *railed);
 #endif
 
-#ifdef CONFIG_WEATHER
-/**
- * Weather alert watch (core/weather.h): listen briefly on another
- * frequency, audio on for the tone detector, speaker untouched.
- *
- * @param hz: frequency, Hz.
- */
-void radio_peekStart(uint32_t hz);
-
-/** Back to the configured channel, its audio off. */
-void radio_peekStop();
-#endif
-
 #ifdef CONFIG_SPECTRUM
 /**
  * Spectrum view (core/spectrum.h): get ready to read the signal strength

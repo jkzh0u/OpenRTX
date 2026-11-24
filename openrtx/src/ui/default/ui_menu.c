@@ -714,15 +714,6 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
             break;
 #endif
 
-#ifdef CONFIG_WEATHER
-        case FM_WX_ALERT:
-            if (last_state.settings.wxAlert == 0)
-                sniprintf(buf, max_len, "%s", currentLanguage->off);
-            else
-                sniprintf(buf, max_len, "WX%u", last_state.settings.wxAlert);
-            break;
-#endif
-
 #ifdef CONFIG_NOISE_REDUCTION
         case FM_NR_RX:
         case FM_NR_TX: {

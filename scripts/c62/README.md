@@ -1007,7 +1007,6 @@ The main screen shows, from the top:
 | VOX delay | How long VOX keeps transmitting after you stop talking: 0.5, 1 (at first), 1.5, 2 or 3 s. Saved |
 | AI denoise RX | AI noise reduction of what you hear: Off (at first), or 1 (light, noise 3 dB down) to 10 (strong, 30 dB down). Saved. See below |
 | AI denoise TX | The same for your microphone, before it is transmitted. Saved |
-| Weather alert | Off (at first), or WX1 to WX7: the weather channel watched for alerts (see Weather radio below). Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
 **Green** on TX tone or RX tone opens a page listing every choice: Off,
@@ -1167,29 +1166,6 @@ main screen. Station and saved stations are kept with the settings.
 The radio's audio reaches the speaker through the same path as the
 channel's, with the transceiver's own audio off. If the first test gives
 silence, that path is the first thing to look at (FIRST_FLASH.md).
-
-### Weather radio
-
-**Menu** > **Weather** lists the seven NOAA weather channels, WX1 to WX7
-(162.400 to 162.550 MHz). The one selected is heard straight away, in place
-of the channel, receive only; **Up** / **Down** change it, **red** goes back
-to the channel, which is left as it was.
-
-**Green** on a weather channel watches it for alerts (`alert` on its right;
-green again stops), as **Settings** > **FM** > Weather alert does. Before a
-warning, NOAA stations send a 1050 Hz tone for 8 to 10 s. With a channel
-watched, every 5 s while nothing is heard or sent the radio listens to it
-for 0.3 s and measures that tone; heard twice in a row, it raises an alert:
-
-- `WEATHER ALERT` on the screen, from the main screens or the FM radio
-- the alarm in the speaker, the two-tone attention signal of US emergency
-  alerts, every 4 s for up to 2 minutes
-- **green** listens to the weather channel, **red** goes back
-
-Each look leaves the channel unheard for 0.3 s, so the very start of a
-call can be cut. Nothing is looked at while the channel or the FM radio is
-heard, or while transmitting. A dismissed alert does not come back for 2
-minutes.
 
 ### Spectrum view
 
