@@ -125,6 +125,18 @@ void audio_terminate(void)
     k_mutex_unlock(&board_mutex);
 }
 
+#ifdef CONFIG_NOISE_REDUCTION
+void audio_setNoiseReduction(uint8_t rxLevel, uint8_t txLevel)
+{
+    csk6codec_setNoiseReduction(rxLevel, txLevel);
+}
+
+uint8_t audio_getNoiseReductionLoad(bool *overload)
+{
+    return csk6codec_getNoiseReductionLoad(overload);
+}
+#endif
+
 void audio_setMicMonitor(bool on)
 {
     k_mutex_lock(&board_mutex, K_FOREVER);

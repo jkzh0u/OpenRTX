@@ -221,6 +221,10 @@ const char* settings_fm_items[] =
     "VOX",
     "VOX delay",
 #endif
+#ifdef CONFIG_NOISE_REDUCTION
+    "AI denoise RX",
+    "AI denoise TX",
+#endif
 };
 
 #ifdef CONFIG_TETRA
@@ -1103,6 +1107,18 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             state.settings.rogerBeep =
                 (uint8_t)((state.settings.rogerBeep + ROGER_BEEP_STYLES + step)
                           % ROGER_BEEP_STYLES);
+            break;
+#endif
+
+#ifdef CONFIG_NOISE_REDUCTION
+        case FM_NR_RX:
+            state.settings.nrRx =
+                (uint8_t)((state.settings.nrRx + 11 + step) % 11);
+            break;
+
+        case FM_NR_TX:
+            state.settings.nrTx =
+                (uint8_t)((state.settings.nrTx + 11 + step) % 11);
             break;
 #endif
 

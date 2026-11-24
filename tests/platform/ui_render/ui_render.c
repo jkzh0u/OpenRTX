@@ -188,6 +188,14 @@ void fastCopy_get(struct fastCopyResult *out)
     *out = fastCopy;
 }
 
+/* AI noise reduction: its load, as measured on the radio */
+uint8_t audio_getNoiseReductionLoad(bool *overload)
+{
+    if (overload != NULL)
+        *overload = false;
+    return 27;
+}
+
 static struct spectrumSweep sweep;
 
 void spectrum_get(struct spectrumSweep *out)
@@ -662,8 +670,10 @@ static void fmScenes(void)
     scene("fm-3-repeater-memory", true);
     /* VOX on: VOX in amber on line 1, here the longest line 1 */
     last_state.settings.voxLevel = 5;
+    last_state.settings.nrRx = 5;
     scene("fm-9-vox-repeater", true);
     last_state.settings.voxLevel = 0;
+    last_state.settings.nrRx = 0;
     fmRxOpen = false;
 
     pttStatus = true;
@@ -836,7 +846,11 @@ static void menuScenes(void)
     last_state.channel.fm.txToneEn = 1;
     last_state.channel.fm.rxToneEn = 0;
     menu("menu-07-fm", _ui_drawSettingsFM, 0);
+    last_state.settings.nrRx = 5;
+    last_state.settings.nrTx = 3;
     menu("menu-07b-fm-end", _ui_drawSettingsFM, settings_fm_num - 1);
+    last_state.settings.nrRx = 0;
+    last_state.settings.nrTx = 0;
     last_state.channel.rxDcs = 1;
     last_state.channel.rxDcsInv = 1;
     last_state.channel.fm.rxTone = 103;

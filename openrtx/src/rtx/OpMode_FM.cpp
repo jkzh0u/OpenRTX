@@ -143,6 +143,9 @@ void OpMode_FM::disable()
     rfSqlOpen = false;
     sqlOpen   = false;
     enterRx   = false;
+    #ifdef CONFIG_NOISE_REDUCTION
+    audio_setNoiseReduction(0, 0);
+    #endif
     #ifdef CONFIG_VOX
     if(voxMonitoring)
         audio_setMicMonitor(false);
@@ -278,6 +281,11 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
         status->opStatus = RX;
         enterRx = false;
     }
+
+    #ifdef CONFIG_NOISE_REDUCTION
+    // Settings > FM, applied by the audio driver to the FM audio
+    audio_setNoiseReduction(state.settings.nrRx, state.settings.nrTx);
+    #endif
 
     // TX logic: PTT, or VOX
     bool ptt   = platform_getPttStatus();

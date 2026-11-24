@@ -48,6 +48,8 @@ extern "C" {
 #define CONFIG_SCAN
 /* FM VOX: transmit while talking, from the microphone level */
 #define CONFIG_VOX
+/* FM AI noise reduction, RNNoise on the CSK6 (lib/rnnoise) */
+#define CONFIG_NOISE_REDUCTION
 
 /* Battery type */
 #define CONFIG_BAT_LIION

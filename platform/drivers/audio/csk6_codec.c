@@ -17,6 +17,9 @@
 #include "AudioSystem.h"
 #include "AudioTrack.h"
 #include "AudioRecord.h"
+#ifdef CONFIG_NOISE_REDUCTION
+#include "rnnoise.h"
+#endif
 #ifdef C62_BASEBAND_DUMP
 #include "baseband_dump_c62.h"
 #endif
@@ -106,7 +109,14 @@ static volatile uint8_t mic_level;
 static int64_t playback_deadline;
 static uint32_t playback_fraction;
 static struct k_thread worker;
+#ifdef CONFIG_NOISE_REDUCTION
+/* RNNoise keeps about 32 kB on the stack: room for it, in PSRAM */
+#define NR_WORKER_STACK_SIZE (48 * 1024)
+Z_KERNEL_STACK_DEFINE_IN(worker_stack, NR_WORKER_STACK_SIZE,
+                         __attribute__((section(".psram_section"))));
+#else
 K_THREAD_STACK_DEFINE(worker_stack, WORKER_STACK_SIZE);
+#endif
 
 /**
  * Empty an FM queue.
@@ -374,6 +384,142 @@ static void apply_routes(void)
     }
 }
 
+/** Hand a captured sample to the FM outputs taking it from its source */
+static void fm_push(unsigned int source, int16_t sample)
+{
+    for (unsigned int sink = 0; sink < 2; sink++) {
+        if (output_source[sink] != (int)source)
+            continue;
+        struct sample_queue *q = &outputs[sink].fm_queue;
+        /* On overflow discard the oldest FM sample. */
+        if (q->count == QUEUE_SAMPLES)
+            queue_pop(q);
+        queue_push(q, sample);
+    }
+}
+
+#ifdef CONFIG_NOISE_REDUCTION
+/*
+ * AI noise reduction of FM audio with RNNoise (lib/rnnoise), a small neural
+ * network trained to tell speech from noise: received audio on its way to
+ * the speaker, and the microphone on its way to the transmitter. It works
+ * on 10 ms frames at 48 kHz, as the DSP delivers them, and adds 10 ms of
+ * delay. Each level lets noise down 3 dB more, 3 to 30 dB.
+ *
+ * It runs on this worker, the processing time measured: if it takes most
+ * of a frame's time it is bypassed until a level is changed, so that the
+ * audio never stutters.
+ */
+#define NR_FRAME 480
+/* DenoiseState, checked against rnnoise_get_size() */
+#define NR_STATE_BYTES 20480
+/* Of a frame's time: more than this on average, and it is bypassed */
+#define NR_MAX_LOAD 85
+
+static uint8_t nr_state_mem[2][NR_STATE_BYTES]
+    __attribute__((section(".psram_section"), aligned(8)));
+static DenoiseState *nr_state[2]; /* By source, set up when first used */
+static float nr_buf[2][NR_FRAME];
+static size_t nr_fill[2];
+static volatile uint8_t nr_level[2]; /* By source, 0 off */
+static volatile bool nr_overload;
+static volatile uint8_t nr_load;
+static uint32_t nr_avg; /* Cycles a frame, averaged */
+
+/* Lowest band gain of each level: 3 dB more each, -3 to -30 dB */
+static const float nr_floor[10] = {
+    0.708f, 0.501f,  0.355f,  0.251f,  0.178f,
+    0.126f, 0.0891f, 0.0631f, 0.0447f, 0.0316f,
+};
+
+/** @return true if a source's FM audio is to be denoised now */
+static bool nr_wanted(unsigned int source)
+{
+    if (nr_level[source] == 0 || nr_overload)
+        return false;
+    if (output_source[0] != (int)source && output_source[1] != (int)source)
+        return false;
+    if (nr_state[source] == NULL) {
+        if (rnnoise_get_size() > NR_STATE_BYTES) {
+            nr_overload = true;
+            return false;
+        }
+        nr_state[source] = (DenoiseState *)nr_state_mem[source];
+        rnnoise_init(nr_state[source], NULL);
+    }
+    return true;
+}
+
+/** Pass on the samples waiting for a frame, as they are */
+static void nr_flush(unsigned int source)
+{
+    for (size_t i = 0; i < nr_fill[source]; i++)
+        fm_push(source, (int16_t)nr_buf[source][i]);
+    nr_fill[source] = 0;
+}
+
+/** Denoise a full frame and pass it on */
+static void nr_run(unsigned int source)
+{
+    float *buf = nr_buf[source];
+    uint8_t level = MIN(nr_level[source], ARRAY_SIZE(nr_floor));
+    uint32_t start = k_cycle_get_32();
+
+    rnnoise_set_min_gain(nr_state[source], nr_floor[level - 1]);
+    rnnoise_process_frame(nr_state[source], buf, buf);
+
+    uint32_t cycles = k_cycle_get_32() - start;
+    uint32_t frame = sys_clock_hw_cycles_per_sec() / 100;
+    nr_avg = (nr_avg == 0) ? cycles : (nr_avg * 7 + cycles) / 8;
+    nr_load = (uint8_t)MIN((uint64_t)nr_avg * 100 / frame, 255);
+    if (nr_load > NR_MAX_LOAD)
+        nr_overload = true;
+
+    for (size_t i = 0; i < NR_FRAME; i++) {
+        float v = buf[i];
+        fm_push(source, (int16_t)(v > 32767.0f  ? 32767 :
+                                  v < -32768.0f ? -32768 :
+                                                  (int)v));
+    }
+    nr_fill[source] = 0;
+}
+
+/** A captured sample for the FM outputs, through the noise reduction */
+static void fm_capture(unsigned int source, int16_t sample)
+{
+    if (!nr_wanted(source)) {
+        if (nr_fill[source] != 0)
+            nr_flush(source);
+        fm_push(source, sample);
+        return;
+    }
+    nr_buf[source][nr_fill[source]++] = sample;
+    if (nr_fill[source] == NR_FRAME)
+        nr_run(source);
+}
+
+void csk6codec_setNoiseReduction(uint8_t rx, uint8_t tx)
+{
+    if (rx != nr_level[SOURCE_RTX] || tx != nr_level[SOURCE_MIC]) {
+        nr_level[SOURCE_RTX] = rx;
+        nr_level[SOURCE_MIC] = tx;
+        /* A new try, after an overload */
+        nr_overload = false;
+        nr_avg = 0;
+        nr_load = 0;
+    }
+}
+
+uint8_t csk6codec_getNoiseReductionLoad(bool *overload)
+{
+    if (overload != NULL)
+        *overload = nr_overload;
+    return nr_load;
+}
+#else
+#define fm_capture fm_push
+#endif
+
 /**
  * Take one capture frame, if any, and hand its samples to the attached
  * input streams and FM queues. AudioRecord_read() can block indefinitely and
@@ -433,15 +579,7 @@ static void capture_frame(void)
                 }
                 in->phase = (in->phase + 1) % ep->divisor;
             }
-            for (unsigned int sink = 0; sink < 2; sink++) {
-                if (output_source[sink] != (int)source)
-                    continue;
-                struct sample_queue *q = &outputs[sink].fm_queue;
-                /* On overflow discard the oldest FM sample. */
-                if (q->count == QUEUE_SAMPLES)
-                    queue_pop(q);
-                queue_push(q, sample);
-            }
+            fm_capture(source, sample);
         }
     }
 #ifdef C62_BASEBAND_DUMP

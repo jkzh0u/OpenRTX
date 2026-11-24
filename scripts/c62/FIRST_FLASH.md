@@ -253,6 +253,10 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       the radio on a channel a second radio listens to: the screen turns red
       and it transmits, then stops 1 s after you stop. Note which level keys
       up reliably without keying on background noise
+- [ ] AI noise reduction: **Settings** > **FM** > AI denoise RX 5, listen
+      to a weak, hissy FM signal: the hiss drops, the voice stays. Note the
+      percentage shown next to the level (the processor time it takes); if
+      it says `slow`, it could not keep up and switched itself off
 - [ ] Spectrum: side key + **0** in FM, key a second radio within the
       view: a bar rises at its frequency; **green** tunes the VFO to it
 

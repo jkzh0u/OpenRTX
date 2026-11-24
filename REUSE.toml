@@ -69,6 +69,17 @@ SPDX-FileCopyrightText = "Pictogrammers"
 
 # This section is for font glyph sources that were taken from Pictogrammers
 [[annotations]]
+path = "lib/rnnoise/**/*"
+SPDX-License-Identifier = "BSD-3-Clause"
+SPDX-FileCopyrightText = [
+    "2017 Mozilla",
+    "2007-2017 Jean-Marc Valin",
+    "2005-2017 Xiph.Org Foundation",
+    "2003-2004 Mark Borgerding",
+]
+precedence = "override"
+
+[[annotations]]
 path = "lib/qdec/**/*"
 SPDX-License-Identifier = "MIT"
 SPDX-FileCopyrightText = "2019 SimpleHacks (\"Simple hacks for a simple life\")"

@@ -214,6 +214,10 @@ enum settingsFMItems
     FM_VOX,
     FM_VOX_DELAY,
 #endif
+#ifdef CONFIG_NOISE_REDUCTION
+    FM_NR_RX,
+    FM_NR_TX,
+#endif
 };
 
 /**

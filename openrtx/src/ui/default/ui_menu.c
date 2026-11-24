@@ -12,6 +12,7 @@
 #include "ui/ui_default.h"
 #include "core/roger_beep.h"
 #include "core/vox.h"
+#include "interfaces/audio.h"
 #ifdef CONFIG_MEMCH
 #include "core/memch.h"
 #endif
@@ -711,6 +712,26 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
             sniprintf(buf, max_len, "%s",
                       rogerBeep_name(last_state.settings.rogerBeep));
             break;
+#endif
+
+#ifdef CONFIG_NOISE_REDUCTION
+        case FM_NR_RX:
+        case FM_NR_TX: {
+            uint8_t level = (index == FM_NR_RX) ? last_state.settings.nrRx
+                                                : last_state.settings.nrTx;
+            bool overload = false;
+            uint8_t load = audio_getNoiseReductionLoad(&overload);
+            if (level == 0)
+                sniprintf(buf, max_len, "%s", currentLanguage->off);
+            else if (overload)
+                sniprintf(buf, max_len, "%u slow", level);
+            else if (load > 0)
+                // %%%% for a %: the menu prints the value as a format
+                sniprintf(buf, max_len, "%u  %u%%%%", level, load);
+            else
+                sniprintf(buf, max_len, "%u", level);
+            break;
+        }
 #endif
 
 #ifdef CONFIG_VOX

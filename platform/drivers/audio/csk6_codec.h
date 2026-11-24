@@ -53,6 +53,21 @@ void csk6codec_setMicMonitor(bool on);
  */
 uint8_t csk6codec_getMicLevel(void);
 
+/**
+ * AI noise reduction of FM audio (CONFIG_NOISE_REDUCTION).
+ *
+ * @param rx: level for received audio, 0 off, 1 to 10.
+ * @param tx: level for the microphone, 0 off, 1 to 10.
+ */
+void csk6codec_setNoiseReduction(uint8_t rx, uint8_t tx);
+
+/**
+ * @param overload: set to true if the noise reduction was too slow and is
+ * bypassed until a level changes. May be NULL.
+ * @return the time it takes, in percent of the audio's time.
+ */
+uint8_t csk6codec_getNoiseReductionLoad(bool *overload);
+
 #ifdef __cplusplus
 }
 #endif

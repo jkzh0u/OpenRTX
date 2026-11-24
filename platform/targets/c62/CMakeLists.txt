@@ -215,6 +215,21 @@ target_compile_definitions(app PRIVATE CONFIG_MEMCH)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/fast_copy.c)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/spectrum.c)
 
+# AI noise reduction of FM audio (CONFIG_NOISE_REDUCTION): RNNoise, built
+# for speed, as it runs in real time on the audio worker
+set(RNNOISE_SOURCES
+    ${OPENRTX_ROOT}/lib/rnnoise/src/denoise.c
+    ${OPENRTX_ROOT}/lib/rnnoise/src/rnn.c
+    ${OPENRTX_ROOT}/lib/rnnoise/src/rnn_data.c
+    ${OPENRTX_ROOT}/lib/rnnoise/src/pitch.c
+    ${OPENRTX_ROOT}/lib/rnnoise/src/kiss_fft.c
+    ${OPENRTX_ROOT}/lib/rnnoise/src/celt_lpc.c
+)
+target_sources(app PRIVATE ${RNNOISE_SOURCES})
+set_source_files_properties(${RNNOISE_SOURCES} PROPERTIES
+    COMPILE_OPTIONS "-O2;-w")
+target_include_directories(app PRIVATE ${OPENRTX_ROOT}/lib/rnnoise/include)
+
 # Channels and TETRA names come from the channel list image in flash
 target_sources(app PRIVATE
   ${OPENRTX_ROOT}/openrtx/src/core/chlist.c

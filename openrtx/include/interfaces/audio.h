@@ -182,6 +182,23 @@ bool audio_checkPathCompatibility(const enum AudioSource p1Source,
  */
 void audio_setMicMonitor(bool on);
 
+/**
+ * On platforms with CONFIG_NOISE_REDUCTION: AI noise reduction of FM audio.
+ *
+ * @param rxLevel: for received audio, 0 off, 1 to 10.
+ * @param txLevel: for the microphone, 0 off, 1 to 10.
+ */
+void audio_setNoiseReduction(uint8_t rxLevel, uint8_t txLevel);
+
+/**
+ * On platforms with CONFIG_NOISE_REDUCTION.
+ *
+ * @param overload: set to true if it was too slow and is bypassed until a
+ * level changes. May be NULL.
+ * @return the processing time, in percent of the audio's time.
+ */
+uint8_t audio_getNoiseReductionLoad(bool *overload);
+
 #ifdef __cplusplus
 }
 #endif

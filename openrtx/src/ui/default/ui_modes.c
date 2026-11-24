@@ -20,6 +20,7 @@
 #include "interfaces/delays.h"
 #include "interfaces/platform.h"
 #include "rtx/rtx.h"
+#include "interfaces/audio.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -304,11 +305,23 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
 
     _ui_mdLines(&big, &small);
     _ui_drawFmInfo();
+    /* VOX and AI noise reduction on: top left, where line 1 has no room
+     * for them */
+    point_t flag = { layout.horizontal_pad, layout.top_pos.y };
+    (void)flag;
 #ifdef CONFIG_VOX
-    /* VOX on: top left, where line 1 has no room for it */
     if (last_state.settings.voxLevel != 0) {
-        point_t vox = { layout.horizontal_pad, layout.top_pos.y };
-        gfx_print(vox, layout.top_font, TEXT_ALIGN_LEFT, yellow_fab413, "VOX");
+        gfx_print(flag, layout.top_font, TEXT_ALIGN_LEFT, yellow_fab413,
+                  "VOX ");
+        flag.x += _ui_mdTextWidth(layout.top_font, "VOX ");
+    }
+#endif
+#ifdef CONFIG_NOISE_REDUCTION
+    if (last_state.settings.nrRx != 0 || last_state.settings.nrTx != 0) {
+        bool overload = false;
+        audio_getNoiseReductionLoad(&overload);
+        gfx_print(flag, layout.top_font, TEXT_ALIGN_LEFT,
+                  overload ? mdTx : mdGroup, "AI");
     }
 #endif
 

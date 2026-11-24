@@ -1005,6 +1005,8 @@ The main screen shows, from the top:
 | Scan resume | What scan does after stopping on a signal: Carrier (at first: goes on 2 s after the signal ends), Time (goes on after 5 s, signal or not) or Stop (the scan ends there). Saved |
 | VOX | Transmit while you talk, without PTT: Off (at first), or 1 (needs a loud voice) to 10 (most sensitive). Saved. See VOX below |
 | VOX delay | How long VOX keeps transmitting after you stop talking: 0.5, 1 (at first), 1.5, 2 or 3 s. Saved |
+| AI denoise RX | AI noise reduction of what you hear: Off (at first), or 1 (light, noise 3 dB down) to 10 (strong, 30 dB down). Saved. See below |
+| AI denoise TX | The same for your microphone, before it is transmitted. Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
 **Green** on TX tone or RX tone opens a page listing every choice: Off,
@@ -1119,6 +1121,27 @@ up on your voice, try a lower or higher one. The MIC bar shows the
 microphone level while transmitting.
 
 Transmitting needs a licence for the band and frequency you use.
+
+### AI noise reduction
+
+The stock C62 firmware advertises "AI noise reduction" with ListenAI's own
+software, which is closed and not available here. This firmware has its
+own: RNNoise (`lib/rnnoise`), a small neural network made by Xiph and
+Mozilla that tells speech from noise, running on the C62's processor.
+
+**Settings** > **FM** > AI denoise RX cleans up what comes out of the
+speaker: hiss on weak signals, background noise from the other station.
+AI denoise TX cleans up your microphone before it goes out: wind, engines,
+crowds. Each level takes noise down 3 dB more, 3 dB at 1 to 30 dB at 10;
+higher levels can make voices sound thinner. Speech passes through, about
+10 ms later. `AI` shows in blue at the top left of the FM screen while
+either is on. FM only.
+
+Next to the level, the settings page shows how much of the processor it
+takes, measured on the radio (`5  27%`). If it ever needs more than 85 %,
+it switches itself off so that the audio does not stutter: the value says
+`slow` and `AI` turns red; changing a level tries again. Whether the C62
+keeps up has to be checked on the radio (see FIRST_FLASH.md).
 
 ### Spectrum view
 

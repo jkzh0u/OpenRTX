@@ -78,6 +78,10 @@ typedef struct
 #ifdef CONFIG_VOX
     uint8_t voxDelay;             // FM VOX hang time, index (core/vox.h)
 #endif
+#ifdef CONFIG_NOISE_REDUCTION
+    uint8_t nrRx;                 // FM AI noise reduction, received, 0 off
+    uint8_t nrTx;                 // FM AI noise reduction, microphone, 0 off
+#endif
 }
 __attribute__((packed)) settings_t;
 
@@ -126,6 +130,10 @@ static const settings_t default_settings =
 #endif
 #ifdef CONFIG_VOX
     1,                            // VOX hang time 1 s
+#endif
+#ifdef CONFIG_NOISE_REDUCTION
+    0,                            // No noise reduction on received audio
+    0,                            // No noise reduction on the microphone
 #endif
 };
 

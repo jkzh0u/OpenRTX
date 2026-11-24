@@ -1,0 +1,11 @@
+RNNoise, a recurrent neural network noise suppressor by Jean-Marc Valin
+(Mozilla, Xiph.Org), from https://github.com/xiph/rnnoise at commit
+7f449bf8bd3b933891d12c30112268c4090e4d59 (2019, the original model).
+BSD-3-Clause, see COPYING.
+
+Only the files needed to denoise are kept: not the model reader, the
+examples or the training scripts.
+
+Changes for OpenRTX, marked "OpenRTX" in the sources:
+- rnnoise_set_min_gain(): the lowest gain of a band, to set how much noise
+  is taken out (the C62's noise reduction levels).
