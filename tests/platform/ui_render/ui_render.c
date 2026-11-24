@@ -660,6 +660,10 @@ static void fmScenes(void)
     strcpy(last_state.channel.name, "Repeater");
     last_state.rssi = -101;
     scene("fm-3-repeater-memory", true);
+    /* VOX on: VOX in amber on line 1, here the longest line 1 */
+    last_state.settings.voxLevel = 5;
+    scene("fm-9-vox-repeater", true);
+    last_state.settings.voxLevel = 0;
     fmRxOpen = false;
 
     pttStatus = true;

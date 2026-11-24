@@ -174,6 +174,14 @@ bool audio_checkPathCompatibility(const enum AudioSource p1Source,
                                   const enum AudioSource p2Source,
                                   const enum AudioSink p2Sink);
 
+/**
+ * On platforms with CONFIG_VOX: keep capturing the microphone without a path
+ * to it, so that platform_getMicLevel() reads it while receiving.
+ *
+ * @param on: true to keep capturing.
+ */
+void audio_setMicMonitor(bool on);
+
 #ifdef __cplusplus
 }
 #endif

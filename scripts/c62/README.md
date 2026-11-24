@@ -1003,6 +1003,8 @@ The main screen shows, from the top:
 | RX tone | The tone the squelch waits for, from the same list. A DCS code opens it whether it arrives normal or inverted |
 | Talk permit | A tone in the radio's own speaker when you press PTT, telling you to talk, as on Motorola radios: Off (at first), Beep, Double, Motorola (Motorola's trunking talk permit: four 910 Hz bursts, getting longer), Triple (three short 1000 Hz beeps), Melody (four quick notes, G C G E) or Chime. Not transmitted; the transmitter keys up just after it, 0.1 to 0.2 s later. Saved |
 | Scan resume | What scan does after stopping on a signal: Carrier (at first: goes on 2 s after the signal ends), Time (goes on after 5 s, signal or not) or Stop (the scan ends there). Saved |
+| VOX | Transmit while you talk, without PTT: Off (at first), or 1 (needs a loud voice) to 10 (most sensitive). Saved. See VOX below |
+| VOX delay | How long VOX keeps transmitting after you stop talking: 0.5, 1 (at first), 1.5, 2 or 3 s. Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
 **Green** on TX tone or RX tone opens a page listing every choice: Off,
@@ -1094,6 +1096,29 @@ while it waits to go on. **Up** / **Down** turn it that way and move on
 at once, PTT talks on the channel it stopped on and ends the scan, any
 other key ends it where it is. In VFO mode a full band at 12.5 kHz steps
 takes about 5 minutes; a wider step is quicker.
+
+### VOX
+
+With **Settings** > **FM** > VOX on, the radio transmits when you talk
+into it and stops after the VOX delay without speech. `VOX` shows in amber
+at the top left of the FM screen, which turns red while it transmits.
+
+- It does not key up while a signal is being received, nor in the 0.8 s
+  after, so the speaker cannot set it off.
+- Only on the main screens, as with PTT, and not on receive only channels.
+- No talk permit tone (it would delay the start of what you say); the roger
+  beep still plays.
+- A VOX transmission stops after 3 minutes; it then waits for quiet before
+  keying again.
+- The microphone is sampled all the time while VOX is on, which uses a
+  little more battery.
+
+The first syllable is partly lost while it keys up, as on any VOX. The
+levels are a first guess: if 5 keys up on background noise, or does not key
+up on your voice, try a lower or higher one. The MIC bar shows the
+microphone level while transmitting.
+
+Transmitting needs a licence for the band and frequency you use.
 
 ### Spectrum view
 

@@ -295,7 +295,8 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
 {
     const channel_t *ch = &last_state.channel;
     rtxStatus_t rtx = rtx_getCurrentStatus();
-    bool tx = platform_getPttStatus() && (rtx.opStatus == TX);
+    /* PTT, or VOX */
+    bool tx = (rtx.opStatus == TX);
     bool rx = !tx && rtx_rxSquelchOpen();
     color_t color = tx ? mdTx : (rx ? mdVoice : color_white);
     point_t big, small;
@@ -303,6 +304,13 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
 
     _ui_mdLines(&big, &small);
     _ui_drawFmInfo();
+#ifdef CONFIG_VOX
+    /* VOX on: top left, where line 1 has no room for it */
+    if (last_state.settings.voxLevel != 0) {
+        point_t vox = { layout.horizontal_pad, layout.top_pos.y };
+        gfx_print(vox, layout.top_font, TEXT_ALIGN_LEFT, yellow_fab413, "VOX");
+    }
+#endif
 
     _ui_mdFreq(freq, sizeof(freq), tx ? ch->tx_frequency : ch->rx_frequency);
     if (memory) {

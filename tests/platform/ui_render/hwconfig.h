@@ -24,6 +24,7 @@
 #define CONFIG_FAST_COPY
 #define CONFIG_SPECTRUM
 #define CONFIG_SCAN
+#define CONFIG_VOX
 #define CONFIG_MEMCH
 #define CONFIG_TETRA_LOG
 #define CONFIG_TETRA_AFC

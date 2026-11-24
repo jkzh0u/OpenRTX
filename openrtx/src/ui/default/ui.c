@@ -66,6 +66,7 @@
 #include "core/voicePromptUtils.h"
 #include "core/beeps.h"
 #include "core/roger_beep.h"
+#include "core/vox.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -215,6 +216,10 @@ const char* settings_fm_items[] =
 #endif
 #ifdef CONFIG_SCAN
     "Scan resume",
+#endif
+#ifdef CONFIG_VOX
+    "VOX",
+    "VOX delay",
 #endif
 };
 
@@ -1101,6 +1106,20 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 #endif
 
+#ifdef CONFIG_VOX
+        case FM_VOX:
+            state.settings.voxLevel =
+                (uint8_t)((state.settings.voxLevel + VOX_LEVELS + 1 + step)
+                          % (VOX_LEVELS + 1));
+            break;
+
+        case FM_VOX_DELAY:
+            state.settings.voxDelay =
+                (uint8_t)((state.settings.voxDelay + VOX_DELAYS + step)
+                          % VOX_DELAYS);
+            break;
+#endif
+
 #ifdef CONFIG_SCAN
         case FM_SCAN_RESUME:
             state.settings.scanResume =
@@ -1374,9 +1393,11 @@ static void _ui_scanTick(long long now, bool *sync_rtx)
     if(!ui_state.scan_on)
         return;
 
-    // Out of the main screens, out of FM or transmitting: over
+    // Out of the main screens, out of FM or transmitting (PTT or VOX): over
     bool main = (state.ui_screen == MAIN_MEM) || (state.ui_screen == MAIN_VFO);
-    if(!main || (state.channel.mode != OPMODE_FM) || platform_getPttStatus())
+    bool tx = platform_getPttStatus()
+           || (rtx_getCurrentStatus().opStatus == TX);
+    if(!main || (state.channel.mode != OPMODE_FM) || tx)
     {
         _ui_scanStop();
         return;
@@ -4014,6 +4035,10 @@ void ui_updateFSM(bool *sync_rtx)
         // The spectrum view keeps the screen on
         watching = (state.ui_screen == SPECTRUM);
         #endif
+
+        // VOX transmits without PTT
+        if (rtx_getCurrentStatus().opStatus == TX)
+            watching = true;
 
         if (txOngoing || rtx_rxSquelchOpen() || tetraCall || watching ||
             (state.volume != last_state.volume))

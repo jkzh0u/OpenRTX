@@ -210,6 +210,10 @@ enum settingsFMItems
 #ifdef CONFIG_SCAN
     FM_SCAN_RESUME,
 #endif
+#ifdef CONFIG_VOX
+    FM_VOX,
+    FM_VOX_DELAY,
+#endif
 };
 
 /**

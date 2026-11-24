@@ -36,7 +36,7 @@ typedef struct
     uint8_t brightness;           // Display brightness
     uint8_t contrast;             // Display contrast
     uint8_t sqlLevel;             // Squelch level
-    uint8_t voxLevel;             // Vox level
+    uint8_t voxLevel;             // Vox level: FM VOX, 0 off (core/vox.h)
     int8_t  utc_timezone;         // Timezone, in units of half hours
     bool    gps_enabled;          // GPS active
     char    callsign[10];         // Plaintext callsign
@@ -74,6 +74,9 @@ typedef struct
 #endif
 #ifdef CONFIG_SCAN
     uint8_t scanResume;           // FM scan resume, 0 carrier (ui_default.h)
+#endif
+#ifdef CONFIG_VOX
+    uint8_t voxDelay;             // FM VOX hang time, index (core/vox.h)
 #endif
 }
 __attribute__((packed)) settings_t;
@@ -120,6 +123,9 @@ static const settings_t default_settings =
 #endif
 #ifdef CONFIG_SCAN
     0,                            // Scan resumes when the signal has gone
+#endif
+#ifdef CONFIG_VOX
+    1,                            // VOX hang time 1 s
 #endif
 };
 

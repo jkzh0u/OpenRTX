@@ -249,6 +249,10 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
 - [ ] Scan: squelch above Off, hold **0** in memory mode: `Scan up`, the
       channels change about 10 times a second; key a second radio on one of
       them: it stops there and plays it, then goes on 2 s after you let go
+- [ ] If you are licensed for it: **Settings** > **FM** > VOX 5, talk into
+      the radio on a channel a second radio listens to: the screen turns red
+      and it transmits, then stops 1 s after you stop. Note which level keys
+      up reliably without keying on background noise
 - [ ] Spectrum: side key + **0** in FM, key a second radio within the
       view: a bar rises at its frequency; **green** tunes the VFO to it
 

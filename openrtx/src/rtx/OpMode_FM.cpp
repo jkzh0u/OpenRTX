@@ -12,6 +12,8 @@
 #include "core/roger_beep.h"
 #include "core/fast_copy.h"
 #include "core/spectrum.h"
+#include "core/vox.h"
+#include "interfaces/audio.h"
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
 #include <string.h>
@@ -61,6 +63,75 @@ void OpMode_FM::enable()
     enterRx   = true;
 }
 
+#ifdef CONFIG_VOX
+static bool voxKeyed;       // VOX has the transmitter keyed
+static bool voxMonitoring;  // The microphone is kept captured
+static bool voxWaitQuiet;   // After VOX_MAX_MS: not again until quiet
+static long long voxLoud;   // Last time the microphone was loud enough
+static long long voxStart;  // When VOX keyed up
+static long long lastRxOpen; // Last time the squelch was open
+
+/**
+ * VOX, on each update: keys up when the microphone is loud enough, not while
+ * receiving or just after, and unkeys after the hang time without speech or
+ * after VOX_MAX_MS.
+ *
+ * @return true while VOX wants the transmitter keyed.
+ */
+static bool voxUpdate(const rtxStatus_t *status, bool sqlOpen)
+{
+    uint8_t level = state.settings.voxLevel;
+    long long now = getTick();
+    bool on = (level != 0) && (status->txDisable == 0);
+
+    if(on != voxMonitoring)
+    {
+        audio_setMicMonitor(on);
+        voxMonitoring = on;
+    }
+    if(!on)
+    {
+        voxKeyed = false;
+        voxWaitQuiet = false;
+        return false;
+    }
+
+    if(sqlOpen)
+        lastRxOpen = now;
+
+    bool loud = platform_getMicLevel() >= vox_threshold(level);
+    if(voxKeyed)
+    {
+        if(loud)
+            voxLoud = now;
+        if((now - voxLoud) > (long long) vox_hangMs(state.settings.voxDelay))
+            voxKeyed = false;
+        else if((now - voxStart) > VOX_MAX_MS)
+        {
+            voxKeyed = false;
+            voxWaitQuiet = true;
+        }
+        return voxKeyed;
+    }
+
+    if(voxWaitQuiet)
+    {
+        if(!loud)
+            voxWaitQuiet = false;
+        return false;
+    }
+
+    if(loud && (status->opStatus == RX) && !sqlOpen
+       && ((now - lastRxOpen) > VOX_RX_GUARD_MS))
+    {
+        voxKeyed = true;
+        voxLoud = now;
+        voxStart = now;
+    }
+    return voxKeyed;
+}
+#endif
+
 void OpMode_FM::disable()
 {
     // Clean shutdown.
@@ -72,6 +143,12 @@ void OpMode_FM::disable()
     rfSqlOpen = false;
     sqlOpen   = false;
     enterRx   = false;
+    #ifdef CONFIG_VOX
+    if(voxMonitoring)
+        audio_setMicMonitor(false);
+    voxMonitoring = false;
+    voxKeyed = false;
+    #endif
 }
 
 #ifdef CONFIG_ROGER_BEEP
@@ -202,15 +279,22 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
         enterRx = false;
     }
 
-    // TX logic
-    if(platform_getPttStatus() && (status->opStatus != TX) &&
-                                  (status->txDisable == 0))
+    // TX logic: PTT, or VOX
+    bool ptt   = platform_getPttStatus();
+    bool keyed = ptt;
+    #ifdef CONFIG_VOX
+    keyed = voxUpdate(status, sqlOpen) || ptt;
+    #endif
+
+    if(keyed && (status->opStatus != TX) && (status->txDisable == 0))
     {
         audioPath_release(rxAudioPath);
         radio_disableRtx();
 
         #ifdef CONFIG_ROGER_BEEP
-        playTalkPermit(state.settings.talkPermit);
+        // Not for VOX: it would delay the start of what is said
+        if(ptt)
+            playTalkPermit(state.settings.talkPermit);
         #endif
 
         txAudioPath = audioPath_request(SOURCE_MIC, SINK_RTX, PRIO_TX);
@@ -219,7 +303,7 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
         status->opStatus = TX;
     }
 
-    if(!platform_getPttStatus() && (status->opStatus == TX))
+    if(!keyed && (status->opStatus == TX))
     {
         #ifdef CONFIG_ROGER_BEEP
         rogerBeep_play(state.settings.rogerBeep, radio_setTxTone);

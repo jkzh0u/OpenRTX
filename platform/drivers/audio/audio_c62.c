@@ -125,6 +125,14 @@ void audio_terminate(void)
     k_mutex_unlock(&board_mutex);
 }
 
+void audio_setMicMonitor(bool on)
+{
+    k_mutex_lock(&board_mutex, K_FOREVER);
+    if (initialized)
+        csk6codec_setMicMonitor(on);
+    k_mutex_unlock(&board_mutex);
+}
+
 void audio_connect(const enum AudioSource source, const enum AudioSink sink)
 {
     if (source > SOURCE_MCU || sink > SINK_MCU)

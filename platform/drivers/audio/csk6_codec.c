@@ -99,6 +99,10 @@ static AudioRecord record;
 static AudioTrack playback_track;
 static bool capture_running;
 static bool playback_running;
+/* Microphone kept captured without a route (VOX), and its level: the peak
+ * of each 10 ms frame, 0 to 255, falling slowly */
+static bool mic_monitor;
+static volatile uint8_t mic_level;
 static int64_t playback_deadline;
 static uint32_t playback_fraction;
 static struct k_thread worker;
@@ -333,7 +337,7 @@ fail:
  */
 static void apply_routes(void)
 {
-    bool capture = input_enabled[0] || input_enabled[1];
+    bool capture = input_enabled[0] || input_enabled[1] || mic_monitor;
     bool playback = false;
     for (unsigned int i = 0; i < 2; i++) {
         capture |= output_source[i] == SOURCE_MIC
@@ -347,8 +351,10 @@ static void apply_routes(void)
 #ifdef C62_BASEBAND_DUMP
             baseband_dump_restart();
 #endif
-        } else
+        } else {
             AudioRecord_stop(&record);
+            mic_level = 0;
+        }
         capture_running = capture;
     }
     if (playback != playback_running) {
@@ -385,6 +391,7 @@ static void capture_frame(void)
     if (ret != IC_OK)
         goto fail;
     const int16_t *samples = frame;
+    int mic_peak = 0;
 #ifdef C62_BASEBAND_DUMP
     /* Raw 48 kHz radio samples, before any rate selection */
     int16_t dump[64];
@@ -402,6 +409,11 @@ static void capture_frame(void)
         for (unsigned int source = 0; source < 2; source++) {
             int16_t sample = samples[n * ic->share->channelCount
                                      + record.mChannelOutIdx[source]];
+            if (source == SOURCE_MIC) {
+                int a = (sample < 0) ? -sample : sample;
+                if (a > mic_peak)
+                    mic_peak = a;
+            }
             struct input_state *in = &inputs[source];
             struct endpoint *ep = &in->endpoint;
             /* Select every divisor-th sample directly into the caller's
@@ -435,6 +447,10 @@ static void capture_frame(void)
 #ifdef C62_BASEBAND_DUMP
     baseband_dump_push(dump, dumped);
 #endif
+    /* Up at once, down by an eighth a frame: about 0.15 s to fade */
+    uint8_t peak = (uint8_t)MIN(mic_peak >> 7, 255);
+    uint8_t level = mic_level;
+    mic_level = (peak > level) ? peak : (uint8_t)(level - (level + 7) / 8);
     ret = ICStream_Consumer_releaseFrame(ic, frame);
     if (ret == IC_OK)
         ret = ICStream_Consumer_commitRemote(ic);
@@ -671,6 +687,18 @@ void csk6codec_setRoute(enum AudioSource source, enum AudioSink sink,
             k_condvar_wait(&changed, &audio_mutex, K_FOREVER);
     }
     k_mutex_unlock(&audio_mutex);
+}
+
+void csk6codec_setMicMonitor(bool on)
+{
+    k_mutex_lock(&audio_mutex, K_FOREVER);
+    mic_monitor = on;
+    k_mutex_unlock(&audio_mutex);
+}
+
+uint8_t csk6codec_getMicLevel(void)
+{
+    return mic_level;
 }
 
 /**

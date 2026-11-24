@@ -18,6 +18,7 @@
 #include <zephyr/storage/flash_map.h>
 #include "core/chlist.h"
 #include <interfaces/audio.h>
+#include "drivers/audio/csk6_codec.h"
 #include "drivers/SPI/spi_zephyr.h"
 #include "controller.h"
 #include "dsp.h"
@@ -233,7 +234,9 @@ uint16_t platform_getVbat()
 
 uint8_t platform_getMicLevel()
 {
-    return 0;
+    /* Peak of the microphone, while it is captured: transmitting, or
+     * monitored for VOX */
+    return csk6codec_getMicLevel();
 }
 
 uint8_t platform_getVolumeLevel()

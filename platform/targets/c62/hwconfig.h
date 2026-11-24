@@ -46,6 +46,8 @@ extern "C" {
 #define CONFIG_SPECTRUM
 /* FM scan of the memory channels or the VFO (long 0) */
 #define CONFIG_SCAN
+/* FM VOX: transmit while talking, from the microphone level */
+#define CONFIG_VOX
 
 /* Battery type */
 #define CONFIG_BAT_LIION

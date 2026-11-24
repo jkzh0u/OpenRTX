@@ -40,6 +40,19 @@ void csk6codec_terminate(void);
 void csk6codec_setRoute(enum AudioSource source, enum AudioSink sink,
                         bool enabled);
 
+/**
+ * Keep the microphone captured without a route to it, for its level (VOX).
+ *
+ * @param on: true to keep capturing.
+ */
+void csk6codec_setMicMonitor(bool on);
+
+/**
+ * @return the microphone level, 0 to 255: the peak of the last 10 ms,
+ * falling over about 0.15 s. 0 while the microphone is not captured.
+ */
+uint8_t csk6codec_getMicLevel(void);
+
 #ifdef __cplusplus
 }
 #endif

@@ -11,6 +11,7 @@
 #include "core/utils.h"
 #include "ui/ui_default.h"
 #include "core/roger_beep.h"
+#include "core/vox.h"
 #ifdef CONFIG_MEMCH
 #include "core/memch.h"
 #endif
@@ -710,6 +711,25 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
             sniprintf(buf, max_len, "%s",
                       rogerBeep_name(last_state.settings.rogerBeep));
             break;
+#endif
+
+#ifdef CONFIG_VOX
+        case FM_VOX:
+            if (last_state.settings.voxLevel == 0)
+                sniprintf(buf, max_len, "%s", currentLanguage->off);
+            else
+                sniprintf(buf, max_len, "%u", last_state.settings.voxLevel);
+            break;
+
+        case FM_VOX_DELAY: {
+            uint32_t ms = vox_hangMs(last_state.settings.voxDelay);
+            if (ms % 1000 == 0)
+                sniprintf(buf, max_len, "%lu s", (unsigned long)(ms / 1000));
+            else
+                sniprintf(buf, max_len, "%lu.%lu s", (unsigned long)(ms / 1000),
+                          (unsigned long)(ms % 1000 / 100));
+            break;
+        }
 #endif
 
 #ifdef CONFIG_SCAN
