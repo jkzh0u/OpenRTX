@@ -24,9 +24,16 @@
 #include "drivers/NVM/eeep.h"
 #include "drivers/NVM/flash_zephyr.h"
 #include "hwconfig.h"
+#if defined(CONFIG_MEMCH) || defined(CONFIG_TETRA_CALLREC)
+#include "core/chlist.h"
+#endif
+#ifdef CONFIG_TETRA_CALLREC
+#include <zephyr/kernel.h>
+#include <zephyr/sys/util.h>
+#include "protocols/TETRA/TetraCallStore.h"
+#endif
 #ifdef CONFIG_MEMCH
 #include <stdio.h>
-#include "core/chlist.h"
 #include "core/memch.h"
 #endif
 
@@ -322,6 +329,257 @@ int memch_nth(uint16_t n)
 }
 #endif /* CONFIG_MEMCH */
 
+#ifdef CONFIG_TETRA_CALLREC
+/*
+ * TETRA calls saved on the radio (TetraCallStore.h), in
+ * call_store_partition: each call from the start of a 4 kB sector, a
+ * header then its speech frames, as many sectors as it takes. The header is
+ * written last, so that a call cut short by a power loss is not seen. A
+ * new call goes after the newest one, back at the start when it would not
+ * fit before the end, and the calls it writes over are dropped. Deleting
+ * clears a word of the header.
+ */
+#define CALL_BASE FIXED_PARTITION_OFFSET(call_store_partition)
+#define CALL_SIZE FIXED_PARTITION_SIZE(call_store_partition)
+#define CALL_SECTOR 4096u
+#define CALL_SECTORS (CALL_SIZE / CALL_SECTOR)
+#define CALL_MAGIC 0x4c414354u /* "TCAL" */
+#define CALL_HDR 64u
+/* Written a page at a time, with a pause after each erase and page */
+#define CALL_PAGE 256u
+
+struct callHeader {
+    uint32_t magic;
+    uint32_t live; /* 0xffffffff, 0 once deleted */
+    struct callStoreInfo info;
+    uint32_t crc;  /* Of info */
+} __attribute__((packed));
+
+BUILD_ASSERT(sizeof(struct callHeader) <= CALL_HDR, "call header too long");
+BUILD_ASSERT(CALL_SECTORS <= 255, "call store too large for the index");
+
+/* The calls saved, newest first */
+static struct {
+    uint32_t seq;
+    uint8_t sector;
+    uint8_t sectors;
+} calls[CALL_SECTORS];
+static uint16_t nCalls;
+static uint32_t nextSeq = 1;
+static bool callsReady;
+static K_MUTEX_DEFINE(callMutex);
+
+static uint8_t sectorsOf(uint32_t frames)
+{
+    uint32_t bytes = CALL_HDR + frames * CALLSTORE_FRAME_BYTES;
+    return (uint8_t)((bytes + CALL_SECTOR - 1) / CALL_SECTOR);
+}
+
+static uint32_t sectorAddr(uint8_t sector)
+{
+    return CALL_BASE + (uint32_t)sector * CALL_SECTOR;
+}
+
+/** Insert a call in the index, newest first */
+static void indexAdd(uint32_t seq, uint8_t sector, uint8_t sectors)
+{
+    uint16_t i = nCalls;
+    while (i > 0 && calls[i - 1].seq < seq) {
+        calls[i] = calls[i - 1];
+        i--;
+    }
+    calls[i].seq = seq;
+    calls[i].sector = sector;
+    calls[i].sectors = sectors;
+    nCalls++;
+}
+
+static void indexRemove(uint16_t i)
+{
+    for (; i + 1 < nCalls; i++)
+        calls[i] = calls[i + 1];
+    nCalls--;
+}
+
+static int indexFind(uint32_t seq)
+{
+    for (uint16_t i = 0; i < nCalls; i++) {
+        if (calls[i].seq == seq)
+            return i;
+    }
+    return -1;
+}
+
+static bool readHeader(uint8_t sector, struct callHeader *h)
+{
+    if (nvm_devRead(&eflash, sectorAddr(sector), h, sizeof(*h)) < 0)
+        return false;
+    return h->magic == CALL_MAGIC
+        && h->crc == chlist_crc32(&h->info, sizeof(h->info))
+        && h->info.frames > 0
+        && sector + sectorsOf(h->info.frames) <= CALL_SECTORS;
+}
+
+/** Find the calls saved: at start-up */
+static void callsLoad(void)
+{
+    struct callHeader h;
+
+    nCalls = 0;
+    for (uint8_t s = 0; s < CALL_SECTORS;) {
+        if (!readHeader(s, &h)) {
+            s++;
+            continue;
+        }
+        uint8_t n = sectorsOf(h.info.frames);
+        if (h.live == 0xffffffffu)
+            indexAdd(h.info.seq, s, n);
+        if (h.info.seq >= nextSeq)
+            nextSeq = h.info.seq + 1;
+        s += n;
+    }
+    callsReady = true;
+}
+
+bool callStore_ready(void)
+{
+    return callsReady;
+}
+
+uint16_t callStore_count(void)
+{
+    return nCalls;
+}
+
+uint32_t callStore_maxFrames(void)
+{
+    return ((CALL_SECTORS - 1) * CALL_SECTOR - CALL_HDR)
+         / CALLSTORE_FRAME_BYTES;
+}
+
+bool callStore_info(uint16_t n, struct callStoreInfo *out)
+{
+    struct callHeader h;
+    bool ok = false;
+
+    k_mutex_lock(&callMutex, K_FOREVER);
+    if (n < nCalls && readHeader(calls[n].sector, &h)) {
+        *out = h.info;
+        ok = true;
+    }
+    k_mutex_unlock(&callMutex);
+    return ok;
+}
+
+int callStore_read(uint32_t seq, uint32_t first, uint8_t *buf, uint32_t count)
+{
+    int ret = -1;
+
+    k_mutex_lock(&callMutex, K_FOREVER);
+    int i = indexFind(seq);
+    if (i >= 0) {
+        struct callHeader h;
+        if (readHeader(calls[i].sector, &h)) {
+            if (first >= h.info.frames)
+                count = 0;
+            else if (first + count > h.info.frames)
+                count = h.info.frames - first;
+            uint32_t addr = sectorAddr(calls[i].sector) + CALL_HDR
+                          + first * CALLSTORE_FRAME_BYTES;
+            if (count == 0
+                || nvm_devRead(&eflash, addr, buf,
+                               count * CALLSTORE_FRAME_BYTES)
+                       >= 0)
+                ret = (int)count;
+        }
+    }
+    k_mutex_unlock(&callMutex);
+    return ret;
+}
+
+int callStore_save(struct callStoreInfo *info, const uint8_t *frames)
+{
+    if (!callsReady || info->frames == 0
+        || info->frames > callStore_maxFrames())
+        return -1;
+
+    uint8_t n = sectorsOf(info->frames);
+
+    /* After the newest call, or back at the start */
+    k_mutex_lock(&callMutex, K_FOREVER);
+    uint8_t start = 0;
+    if (nCalls > 0)
+        start = calls[0].sector + calls[0].sectors;
+    if (start + n > CALL_SECTORS)
+        start = 0;
+    /* The calls in the way are dropped before anything is erased */
+    for (uint16_t i = 0; i < nCalls;) {
+        bool overlap = calls[i].sector < start + n
+                    && calls[i].sector + calls[i].sectors > start;
+        if (overlap)
+            indexRemove(i);
+        else
+            i++;
+    }
+    info->seq = nextSeq++;
+    k_mutex_unlock(&callMutex);
+
+    for (uint8_t s = 0; s < n; s++) {
+        k_mutex_lock(&callMutex, K_FOREVER);
+        int ret = nvm_devErase(&eflash, sectorAddr(start + s), CALL_SECTOR);
+        k_mutex_unlock(&callMutex);
+        if (ret < 0)
+            return -1;
+        k_msleep(20);
+    }
+
+    uint32_t bytes = info->frames * CALLSTORE_FRAME_BYTES;
+    uint32_t base = sectorAddr(start) + CALL_HDR;
+    for (uint32_t off = 0; off < bytes; off += CALL_PAGE) {
+        uint32_t len = MIN(CALL_PAGE, bytes - off);
+        k_mutex_lock(&callMutex, K_FOREVER);
+        int ret = nvm_devWrite(&eflash, base + off, frames + off, len);
+        k_mutex_unlock(&callMutex);
+        if (ret < 0)
+            return -1;
+        k_msleep(2);
+    }
+
+    /* The header last: the call is there once it is written */
+    struct callHeader h = {
+        .magic = CALL_MAGIC,
+        .live = 0xffffffffu,
+        .info = *info,
+    };
+    h.crc = chlist_crc32(&h.info, sizeof(h.info));
+    k_mutex_lock(&callMutex, K_FOREVER);
+    int ret = nvm_devWrite(&eflash, sectorAddr(start), &h, sizeof(h));
+    if (ret >= 0)
+        indexAdd(info->seq, start, n);
+    k_mutex_unlock(&callMutex);
+    return (ret < 0) ? -1 : 0;
+}
+
+int callStore_delete(uint32_t seq)
+{
+    int ret = -1;
+
+    k_mutex_lock(&callMutex, K_FOREVER);
+    int i = indexFind(seq);
+    if (i >= 0) {
+        uint32_t dead = 0;
+        ret = nvm_devWrite(&eflash, sectorAddr(calls[i].sector) + 4, &dead,
+                           sizeof(dead));
+        if (ret >= 0) {
+            indexRemove((uint16_t)i);
+            ret = 0;
+        }
+    }
+    k_mutex_unlock(&callMutex);
+    return ret;
+}
+#endif /* CONFIG_TETRA_CALLREC */
+
 /* CRCs of what is stored, to skip writes of unchanged data */
 static uint16_t settingsCrc;
 static uint16_t vfoCrc;
@@ -341,6 +599,9 @@ void nvm_init()
     ready = eeep_init(&eeep, 0, 0) == 0;
 #ifdef CONFIG_MEMCH
     memchLoad();
+#endif
+#ifdef CONFIG_TETRA_CALLREC
+    callsLoad();
 #endif
 }
 

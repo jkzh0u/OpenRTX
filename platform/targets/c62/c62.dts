@@ -279,8 +279,17 @@
 		 */
 		channel_list_partition: partition@2c0000 {
 			label = "channel_list";
-			reg = <0x2c0000 0x90000>;
+			reg = <0x2c0000 0x10000>;
 			read-only;
+		};
+
+		/* TETRA calls saved on the radio (openrtx/include/protocols/
+		 * TETRA/TetraCallStore.h), in what was the end of the channel
+		 * list partition
+		 */
+		call_store_partition: partition@2d0000 {
+			label = "call_store";
+			reg = <0x2d0000 0x80000>;
 		};
 
 		/* Factory resources left by the OEM firmware */

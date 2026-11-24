@@ -19,6 +19,7 @@
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraRoam.h"
 #include "protocols/TETRA/TetraStatus.h"
+#include "protocols/TETRA/TetraCallRec.h"
 
 /* An SDS text stays on the main screen this long */
 #define TETRA_SDS_SHOW_MS 30000
@@ -762,6 +763,126 @@ static void _ui_drawTetraRecentRow(const struct tetraCallEntry *e,
     _ui_tetraFit(text, sizeof(text), layout.menu_font, room, "", name, "");
     gfx_print(pos, layout.menu_font, TEXT_ALIGN_LEFT, ink, "%s", text);
 }
+
+#ifdef CONFIG_TETRA_CALLREC
+/** A day of the year as "Nov 19" */
+static void _ui_tetraDate(char *buf, size_t len, uint16_t year, uint16_t day)
+{
+    static const char *names[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+    static const uint8_t days[12] = { 31, 28, 31, 30, 31, 30,
+                                      31, 31, 30, 31, 30, 31 };
+    bool leap = (year % 4 == 0) && (year % 100 != 0 || year % 400 == 0);
+    unsigned m = 0;
+
+    while (m < 11) {
+        unsigned d = days[m] + (m == 1 && leap);
+        if (day < d)
+            break;
+        day -= d;
+        m++;
+    }
+    snprintf(buf, len, "%s %u", names[m], day + 1);
+}
+
+/**
+ * Saved calls, newest first: on each, the talkgroup and its length, then
+ * when (network time) and who talked. The one playing is green.
+ */
+void _ui_drawTetraSaved(ui_state_t *ui_state)
+{
+    static const color_t green = { 60, 255, 120, 255 };
+    const uint16_t rowH = layout.menu_h + 9;
+    uint16_t count = callStore_count();
+    uint32_t playSeq = 0;
+    uint16_t played = 0, length = 0;
+    bool playing = tetraCallRec_playing(&playSeq, &played, &length);
+
+    gfx_clearScreen();
+    if (playing)
+        gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, green,
+                  "Playing %u:%02u/%u:%02u", played / 60, played % 60,
+                  length / 60, length % 60);
+    else if (ui_state->saved_delete_armed)
+        gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+                  tetraWarn, "Hold green: delete");
+    else
+        gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+                  color_white, "Saved calls");
+
+    if (count == 0) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "None yet");
+        if (last_state.settings.tetraSaveCalls) {
+            gfx_print(layout.line3_pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
+                      tetraMuted, "calls heard are saved");
+        } else {
+            gfx_print(layout.line3_pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
+                      tetraMuted, "turn it on in Settings");
+            gfx_print(layout.line4_pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
+                      tetraMuted, "> TETRA > Save calls");
+        }
+        return;
+    }
+
+    uint16_t rows = (CONFIG_SCREEN_HEIGHT - layout.line1_pos.y + layout.menu_h)
+                  / rowH;
+    if (rows == 0)
+        rows = 1;
+    uint16_t sel = ui_state->saved_sel;
+    uint16_t first = (sel >= rows) ? (uint16_t)(sel - rows + 1) : 0;
+    point_t pos = layout.line1_pos;
+
+    for (uint16_t n = first; n < count && n < first + rows; n++) {
+        struct callStoreInfo ci;
+        if (!callStore_info(n, &ci))
+            break;
+        bool selected = n == sel;
+        bool on = playing && ci.seq == playSeq;
+        color_t ink = selected ? color_black : (on ? green : color_white);
+        color_t small = selected ? color_black : tetraMuted;
+        char name[24], when[32], who[24], len[16];
+
+        if (selected) {
+            point_t bar = { 0, (uint16_t)(pos.y - layout.menu_h + 3) };
+            gfx_drawRect(bar, CONFIG_SCREEN_WIDTH, rowH, color_white, true);
+        }
+
+        uint32_t sec = ci.frames * 30 / 1000;
+        snprintf(len, sizeof(len), "%lu:%02lu", (unsigned long)(sec / 60),
+                 (unsigned long)(sec % 60));
+        point_t right = { layout.horizontal_pad, pos.y };
+        gfx_print(right, layout.menu_font, TEXT_ALIGN_RIGHT, small, "%s", len);
+        uint16_t room = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad - 6
+                      - _ui_tetraTextWidth(layout.menu_font, len);
+        _ui_tetraSsiName(name, sizeof(name), ci.dst,
+                         (ci.flags & CALLSTORE_GROUP) != 0);
+        char fitted[32];
+        _ui_tetraFit(fitted, sizeof(fitted), layout.menu_font, room, "", name,
+                     "");
+        point_t left = { layout.horizontal_pad, pos.y };
+        gfx_print(left, layout.menu_font, TEXT_ALIGN_LEFT, ink, "%s", fitted);
+
+        /* When, and who talked first */
+        if (ci.year != 0) {
+            char date[10];
+            _ui_tetraDate(date, sizeof(date), ci.year, ci.dayOfYear);
+            snprintf(when, sizeof(when), "%s %02lu:%02lu", date,
+                     (unsigned long)(ci.secOfDay / 3600),
+                     (unsigned long)(ci.secOfDay / 60 % 60));
+        } else {
+            snprintf(when, sizeof(when), "#%lu", (unsigned long)ci.seq);
+        }
+        who[0] = '\0';
+        if (ci.talkers[0] != 0)
+            _ui_tetraSsiName(who, sizeof(who), ci.talkers[0], false);
+        point_t sub = { layout.horizontal_pad, (uint16_t)(pos.y + 9) };
+        gfx_print(sub, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, small, "%s  %s", when,
+                  who);
+        pos.y += rowH;
+    }
+}
+#endif
 
 /**
  * Recent calls, newest first.

@@ -47,6 +47,7 @@
 #include "core/bcast.h"
 #include "core/dtmf.h"
 #include "core/replay.h"
+#include "protocols/TETRA/TetraCallRec.h"
 #include "core/voicePrompts.h"
 #include "core/voicePromptUtils.h"
 #include "interfaces/platform.h"
@@ -74,6 +75,7 @@ void _ui_drawFastCopy(ui_state_t *ui_state);
 void _ui_drawSpectrum(ui_state_t *ui_state);
 void _ui_drawBcast(ui_state_t *ui_state);
 void _ui_drawReplay(void);
+void _ui_drawTetraSaved(ui_state_t *ui_state);
 void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
@@ -199,6 +201,52 @@ uint8_t audio_getNoiseReductionLoad(bool *overload)
     if (overload != NULL)
         *overload = false;
     return 27;
+}
+
+/* Saved TETRA calls: three, the middle one playing */
+static uint16_t savedCount;
+static bool savedPlaying;
+
+uint16_t callStore_count(void)
+{
+    return savedCount;
+}
+
+bool callStore_info(uint16_t n, struct callStoreInfo *out)
+{
+    static const struct callStoreInfo calls[3] = {
+        { 54,
+          101011,
+          { 6053, 6120 },
+          1500,
+          30,
+          2026,
+          322,
+          59460,
+          CALLSTORE_GROUP | CALLSTORE_LOCAL_TIME },
+        { 53,
+          100004,
+          { 5217 },
+          620,
+          30,
+          2026,
+          322,
+          59345,
+          CALLSTORE_GROUP | CALLSTORE_LOCAL_TIME },
+        { 52, 101011, { 6053 }, 2410, 28, 0, 0, 0, CALLSTORE_GROUP },
+    };
+    if (n >= savedCount || n >= 3)
+        return false;
+    *out = calls[n];
+    return true;
+}
+
+bool tetraCallRec_playing(uint32_t *seq, uint16_t *played, uint16_t *length)
+{
+    *seq = 53;
+    *played = 7;
+    *length = 18;
+    return savedPlaying;
 }
 
 /* Instant replay and DTMF: what the screens show */
@@ -412,6 +460,7 @@ enum screen {
     SCREEN_FAST_COPY,
     SCREEN_SPECTRUM,
     SCREEN_BCAST,
+    SCREEN_SAVED,
     SCREEN_NONE
 };
 
@@ -455,7 +504,10 @@ static void draw(const char *name, enum screen screen)
         _ui_drawFastCopy(&ui);
     else if (screen == SCREEN_SPECTRUM)
         _ui_drawSpectrum(&ui);
-    else if (screen == SCREEN_NONE) {
+    else if (screen == SCREEN_SAVED) {
+        ui.saved_sel = 1;
+        _ui_drawTetraSaved(&ui);
+    } else if (screen == SCREEN_NONE) {
         /* Drawn by the caller */
     } else if (screen == SCREEN_BCAST) {
         strcpy(ui.bcast_digits, bcastDigits);
@@ -525,6 +577,15 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.phaseErr = 12;
     tetra.carrierHz = -234;
     scene("tetra-2-cell", false);
+    /* Saved calls: none yet, three, one playing */
+    savedCount = 0;
+    draw("tetra-16-saved-empty", SCREEN_SAVED);
+    savedCount = 3;
+    draw("tetra-16b-saved", SCREEN_SAVED);
+    savedPlaying = true;
+    draw("tetra-16c-saved-playing", SCREEN_SAVED);
+    savedPlaying = false;
+
     /* Instant replay over the TETRA screen */
     replay.playing = true;
     replay.index = 1;

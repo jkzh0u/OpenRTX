@@ -940,6 +940,11 @@ int _ui_getTetraValueName(char *buf, uint8_t max_len, uint8_t index)
         case T_ALARM_BEEP:
             on = !last_state.settings.tetraAlarmOff;
             break;
+#ifdef CONFIG_TETRA_CALLREC
+        case T_SAVE_CALLS:
+            on = last_state.settings.tetraSaveCalls;
+            break;
+#endif
 #ifdef CONFIG_TETRA_AFC
         case T_AFC:
             on = !last_state.settings.tetraAfcOff;

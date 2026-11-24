@@ -440,8 +440,8 @@ def main():
     ap.add_argument("list", nargs="?", help="channel list to build")
     ap.add_argument("-o", "--output", help="image to write")
     ap.add_argument("--show", metavar="IMAGE", help="show an image")
-    ap.add_argument("--max-size", type=lambda v: int(v, 0), default=0x90000,
-                    help="largest image that fits (default 0x90000, C62)")
+    ap.add_argument("--max-size", type=lambda v: int(v, 0), default=0x10000,
+                    help="largest image that fits (default 0x10000, C62)")
     args = ap.parse_args()
 
     try:

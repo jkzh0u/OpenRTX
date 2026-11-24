@@ -57,6 +57,9 @@ extern "C" {
 #define CONFIG_REPLAY_SECTION ".psram_section"
 /* DTMF from the keypad while transmitting in FM */
 #define CONFIG_DTMF
+/* TETRA calls saved on the radio (Menu > Saved calls, CONFIG_TETRA_CALLREC
+ * set by the build with the speech decoder): recorded in PSRAM */
+#define CONFIG_TETRA_CALLREC_SECTION ".psram_section"
 
 /* Battery type */
 #define CONFIG_BAT_LIION

@@ -535,7 +535,8 @@ afterwards. Use `-n` for recordings not made with a C62.
 **Menu** > **Settings** > **TETRA** switches parts of T mode on and off.
 Select a line, press **green**, then **Up** turns it on and **Down** off;
 **green** again or **red** to finish. Like the other settings they are
-saved a few seconds after a change, and all are on at first.
+saved a few seconds after a change, and all but Save calls are on at
+first.
 
 | Setting | On | Off |
 |---|---|---|
@@ -544,10 +545,44 @@ saved a few seconds after a change, and all are on at first.
 | Cell tracking | Moves between cells by itself (Cell tracking above) | Stays on the channel you picked. A long **0** still searches once |
 | Alarm beep | An alarm call beeps three times and turns the screen red | Red screen only |
 | Keep filter | Starts with the talkgroup filter you last picked | Starts at `TG All` |
+| Save calls | Keeps the calls heard on the radio (Saved calls below) | Calls are not kept; the instant replay (**P2**) still works |
 | Freq. correct | Tunes itself so the signal decodes best: the C62 decodes best about 1.6 kHz off the channel frequency, plus its crystal error. Found within about 20 s of decoding and kept across channel changes. Remembered at power off, so the radio starts corrected even on a weak signal. If a strong signal stops decoding for 8 s, it goes back to the remembered correction, then to none, and searches again | Tunes exactly to the channel frequency |
 
 Follow calls and Cell tracking only do something in a firmware built with
 them, which is the default (`C62_TETRA_FOLLOW`, `C62_TETRA_ROAM`).
+
+### Saved calls
+
+With **Settings** > **TETRA** > Save calls on, every call heard with
+speech is kept on the radio, and **Menu** > **Saved calls** lists them,
+newest first: the talkgroup by name and the length, then the date and time
+(the network's time, which TTC sends; `#` and a number if the network has
+not sent it yet) and who talked first.
+
+| Key | Does |
+|---|---|
+| **Up** / **Down** | Select a call |
+| **Green** | Play it (the top line shows how far); on the one playing, stop |
+| Hold **green**, twice | Delete it (the top line asks for the second hold) |
+| **Red** | Stop playing, or back |
+
+A call received meanwhile stops the playback and is heard instead.
+
+The speech is kept as it arrives, still coded, about 38 kB a minute, and
+decoded again when played, so it sounds as it did live. A call is held in
+memory while it lasts (up to 3 minutes: the rest of a longer one is not
+kept) and written to flash after it ends, in a 512 kB area after the
+channel list (about 13 minutes of calls); when it is full the oldest calls
+make room. Calls under a second, and encrypted calls (no speech to keep),
+are not saved. A call that starts while the one before is still being
+written is not saved either.
+
+The channel list image can be at most 64 kB (about 2000 channels): the
+rest of its old area holds the saved calls.
+
+Recording other people's calls is for your own listening: in Canada the
+Radiocommunication Act (section 9(2)) forbids passing on or using what is
+intercepted. Anyone holding the radio can play them.
 
 ### Receive log
 

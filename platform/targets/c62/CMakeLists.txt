@@ -202,6 +202,10 @@ if(C62_TETRA)
     target_include_directories(app PRIVATE
       ${C62_OPENACELP}/include ${C62_OPENACELP}/src)
     target_compile_definitions(app PRIVATE CONFIG_TETRA_SPEECH)
+    # Calls saved on the radio: the speech decoder plays them back
+    target_sources(app PRIVATE
+      ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraCallRec.c)
+    target_compile_definitions(app PRIVATE CONFIG_TETRA_CALLREC)
   endif()
   target_sources(app PRIVATE
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraSpeech.c)
@@ -246,11 +250,11 @@ if(C62_CHANNELS)
     message(FATAL_ERROR "C62_CHANNELS: ${C62_CHANNELS_FILE} not found")
   endif()
   set(C62_CHANNELS_BIN ${CMAKE_BINARY_DIR}/zephyr/channels.bin)
-  # 0x90000: size of channel_list_partition in c62.dts
+  # 0x10000: size of channel_list_partition in c62.dts
   add_custom_command(
     OUTPUT ${C62_CHANNELS_BIN}
     COMMAND ${PYTHON_EXECUTABLE} ${OPENRTX_ROOT}/scripts/chlist.py
-            ${C62_CHANNELS_FILE} -o ${C62_CHANNELS_BIN} --max-size 0x90000
+            ${C62_CHANNELS_FILE} -o ${C62_CHANNELS_BIN} --max-size 0x10000
     DEPENDS ${C62_CHANNELS_FILE} ${OPENRTX_ROOT}/scripts/chlist.py
     COMMENT "Channel list image channels.bin")
   add_custom_target(c62_channels ALL DEPENDS ${C62_CHANNELS_BIN})

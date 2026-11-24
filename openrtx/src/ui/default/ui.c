@@ -70,6 +70,7 @@
 #include "core/bcast.h"
 #include "core/dtmf.h"
 #include "core/replay.h"
+#include "protocols/TETRA/TetraCallRec.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -137,6 +138,9 @@ const char *menu_items[] =
 #endif
 #ifdef CONFIG_BCAST_FM
     "FM radio",
+#endif
+#ifdef CONFIG_TETRA_CALLREC
+    "Saved calls",
 #endif
     "Settings",
     "Info",
@@ -244,6 +248,9 @@ const char *settings_tetra_items[] =
     "Cell tracking",
     "Alarm beep",
     "Keep filter",
+#ifdef CONFIG_TETRA_CALLREC
+    "Save calls",
+#endif
 #ifdef CONFIG_TETRA_AFC
     "Freq. correct",
 #endif
@@ -782,6 +789,9 @@ static void _ui_tetraApplySettings(void)
                     !state.settings.tetraJoinOff,
                     !state.settings.tetraRoamOff,
                     !state.settings.tetraAlarmOff);
+#ifdef CONFIG_TETRA_CALLREC
+    tetraCallRec_enable(state.settings.tetraSaveCalls);
+#endif
 }
 
 /**
@@ -820,6 +830,11 @@ static void _ui_changeTetraSetting(uint8_t item, bool on)
         case T_KEEP_FILTER:
             state.settings.tetraFilterReset = !on;
             break;
+#ifdef CONFIG_TETRA_CALLREC
+        case T_SAVE_CALLS:
+            state.settings.tetraSaveCalls = on;
+            break;
+#endif
 #ifdef CONFIG_TETRA_AFC
         case T_AFC:
             state.settings.tetraAfcOff = !on;
@@ -1589,6 +1604,76 @@ static void _ui_spectrumKey(kbd_msg_t msg, bool *sync_rtx)
     {
         spectrum_stop();
         state.ui_screen = ui_state.last_main_state;
+    }
+}
+#endif
+
+#ifdef CONFIG_TETRA_CALLREC
+/* In ui_main.c */
+extern void _ui_drawTetraSaved(ui_state_t *ui_state);
+static void _ui_menuBack(uint8_t prev_state);
+
+/**
+ * Keys of the saved calls: up / down select, green plays (on the one
+ * playing: stops), held twice deletes, red stops or goes back. Green acts
+ * when let go, so that holding it only arms the delete.
+ */
+static void _ui_tetraSavedKey(kbd_msg_t msg)
+{
+    static bool greenHeld;
+    uint16_t count = callStore_count();
+    uint32_t seq = 0;
+    uint16_t played, length;
+    bool playing = tetraCallRec_playing(&seq, &played, &length);
+    struct callStoreInfo ci;
+
+    if (greenHeld && (msg.keys & KEY_ENTER) == 0) {
+        greenHeld = false;
+        ui_state.saved_delete_armed = false;
+        if (callStore_info(ui_state.saved_sel, &ci)) {
+            if (playing && seq == ci.seq)
+                tetraCallRec_stop();
+            else
+                tetraCallRec_play(ci.seq);
+        }
+        if (msg.keys == 0)
+            return;
+    }
+
+    if (msg.long_press) {
+        if (greenHeld && (msg.keys & KEY_ENTER)) {
+            greenHeld = false;
+            if (!ui_state.saved_delete_armed) {
+                ui_state.saved_delete_armed = true;
+            } else if (callStore_info(ui_state.saved_sel, &ci)) {
+                if (playing && seq == ci.seq)
+                    tetraCallRec_stop();
+                callStore_delete(ci.seq);
+                ui_state.saved_delete_armed = false;
+                count = callStore_count();
+                if (ui_state.saved_sel >= count && count > 0)
+                    ui_state.saved_sel = count - 1;
+            }
+        }
+        return;
+    }
+
+    if (msg.keys & KEY_ENTER) {
+        greenHeld = true;
+    } else if (msg.keys & (KEY_UP | KNOB_LEFT)) {
+        ui_state.saved_delete_armed = false;
+        if (ui_state.saved_sel > 0)
+            ui_state.saved_sel--;
+    } else if (msg.keys & (KEY_DOWN | KNOB_RIGHT)) {
+        ui_state.saved_delete_armed = false;
+        if (ui_state.saved_sel + 1 < count)
+            ui_state.saved_sel++;
+    } else if (msg.keys & KEY_ESC) {
+        ui_state.saved_delete_armed = false;
+        if (playing)
+            tetraCallRec_stop();
+        else
+            _ui_menuBack(MENU_TOP);
     }
 }
 #endif
@@ -3515,6 +3600,13 @@ void ui_updateFSM(bool *sync_rtx)
                             _ui_bcastOpen(sync_rtx);
                             break;
 #endif
+#ifdef CONFIG_TETRA_CALLREC
+                        case M_SAVED_CALLS:
+                            ui_state.saved_sel = 0;
+                            ui_state.saved_delete_armed = false;
+                            state.ui_screen = TETRA_SAVED;
+                            break;
+#endif
                         case M_SETTINGS:
                             state.ui_screen = MENU_SETTINGS;
                             break;
@@ -4194,6 +4286,12 @@ void ui_updateFSM(bool *sync_rtx)
                 break;
             #endif
 
+            #ifdef CONFIG_TETRA_CALLREC
+            case TETRA_SAVED:
+                _ui_tetraSavedKey(msg);
+                break;
+            #endif
+
             case SETTINGS_ACCESSIBILITY:
                 if(msg.keys & KEY_LEFT || (ui_state.edit_mode &&
                    (msg.keys & KEY_DOWN || msg.keys & KNOB_LEFT)))
@@ -4507,6 +4605,11 @@ bool ui_updateGUI()
 #ifdef CONFIG_BCAST_FM
         case BCAST_FM:
             _ui_drawBcast(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_TETRA_CALLREC
+        case TETRA_SAVED:
+            _ui_drawTetraSaved(&ui_state);
             break;
 #endif
 #ifdef CONFIG_MEMCH

@@ -18,6 +18,7 @@
 #include "core/audio_stream.h"
 #include "interfaces/delays.h"
 #include "core/replay.h"
+#include "protocols/TETRA/TetraCallRec.h"
 
 #define QUEUE_FRAMES 16     /* 480 ms */
 #define PREBUFFER_FRAMES 5  /* 150 ms: frame 18 leaves a 113 ms gap */
@@ -261,6 +262,12 @@ void tetraSpeech_traffic(const struct tetra_traffic *t)
             statBad++;
     }
     pthread_mutex_unlock(&queueMutex);
+
+#ifdef CONFIG_TETRA_CALLREC
+    /* Saved calls keep the frames as received */
+    for (int i = 0; i < 2; i++)
+        tetraCallRec_frame(sp.bits[i], sp.bfi[i]);
+#endif
 }
 
 void tetraSpeech_follow(uint8_t tn)

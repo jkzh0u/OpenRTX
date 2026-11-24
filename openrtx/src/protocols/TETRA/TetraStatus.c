@@ -25,6 +25,35 @@ static long long lastCall;        /* Tick of the last call activity */
 static long long lastVoice;       /* Tick of the last traffic slot */
 static struct tetraFocus focus;   /* The call played and shown */
 
+bool tetraStatus_callNow(uint16_t *callId, uint32_t *dst, uint32_t *talker,
+                         bool *group, uint16_t *la)
+{
+    pthread_mutex_lock(&statusMutex);
+    bool call = status.call;
+    *callId = status.callId;
+    *dst = status.callDst;
+    *talker = status.talker;
+    *group = status.callGroup;
+    *la = status.la;
+    pthread_mutex_unlock(&statusMutex);
+    return call;
+}
+
+bool tetraStatus_timeNow(uint16_t *year, uint16_t *day, uint32_t *sec,
+                         bool *local)
+{
+    pthread_mutex_lock(&statusMutex);
+    bool known = status.time;
+    uint32_t s = status.timeOfDay
+               + (uint32_t)((getTick() - status.timeTick) / 1000);
+    *year = status.timeYear;
+    *day = (uint16_t)(status.timeDay + s / 86400);
+    *sec = s % 86400;
+    *local = status.timeLocal;
+    pthread_mutex_unlock(&statusMutex);
+    return known;
+}
+
 void tetra_getStatus(struct tetraStatus *out)
 {
     pthread_mutex_lock(&statusMutex);
@@ -98,12 +127,26 @@ static void onNetwork(const struct tetra_network *nw)
         status.nNeighbours = n;
 
     if (nw->has_time && nw->time_valid) {
-        long s = (long)(nw->utc_s % 86400);
+        /* utc_s counts from the start of the year */
+        long t = (long)nw->utc_s;
+        unsigned year = nw->year;
         if (nw->offset_valid)
-            s += (long)nw->offset_min * 60;
-        s %= 86400;
-        if (s < 0)
-            s += 86400;
+            t += (long)nw->offset_min * 60;
+        unsigned yearDays =
+            (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ? 366 : 365;
+        if (t < 0) {
+            year--;
+            yearDays = (year % 4 == 0 && (year % 100 != 0 || year % 400 == 0)) ?
+                           366 :
+                           365;
+            t += (long)yearDays * 86400;
+        } else if (t >= (long)yearDays * 86400) {
+            t -= (long)yearDays * 86400;
+            year++;
+        }
+        long s = t % 86400;
+        status.timeYear = (uint16_t)year;
+        status.timeDay = (uint16_t)(t / 86400);
         status.time = true;
         status.timeLocal = nw->offset_valid;
         status.timeOfDay = (uint32_t)s;

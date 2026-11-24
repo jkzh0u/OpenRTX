@@ -87,6 +87,8 @@ struct tetraStatus {
     bool time;           /**< Network time known */
     bool timeLocal;      /**< Local time, else UTC */
     uint32_t timeOfDay;  /**< Network time at timeTick, s since midnight */
+    uint16_t timeYear;   /**< Network date at timeTick: the year */
+    uint16_t timeDay;    /**< and the day of the year, 0 for 1 January */
     long long timeTick;  /**< Tick the network time was received */
     uint8_t roamState;   /**< enum tetraRoamState, TETRA_STATUS_NO_ROAM */
     uint8_t nMeasured;   /**< Carriers of the last measurement */
@@ -157,6 +159,32 @@ void tetraStatus_setMeasured(const struct tetraStatusMeasured *m, unsigned n);
  * Stop showing the current call, for example when a new filter excludes it.
  */
 void tetraStatus_endCall(void);
+
+/**
+ * The call heard now, without copying the whole status (for the call
+ * recorder, on each speech frame).
+ *
+ * @param callId: call identifier.
+ * @param dst: called group or SSI, 0 if unknown.
+ * @param talker: talking party, 0 if unknown.
+ * @param group: a group call.
+ * @param la: location area of the cell.
+ * @return false if no call is known.
+ */
+bool tetraStatus_callNow(uint16_t *callId, uint32_t *dst, uint32_t *talker,
+                         bool *group, uint16_t *la);
+
+/**
+ * The network's date and time now.
+ *
+ * @param year: year.
+ * @param day: day of the year, 0 for 1 January.
+ * @param sec: seconds since midnight.
+ * @param local: local time, else UTC.
+ * @return false if the network has not sent the time.
+ */
+bool tetraStatus_timeNow(uint16_t *year, uint16_t *day, uint32_t *sec,
+                         bool *local);
 
 /**
  * Set the traffic carrier being followed.

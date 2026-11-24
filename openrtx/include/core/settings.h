@@ -65,7 +65,8 @@ typedef struct
             tetraAlarmOff    : 1,  // No beep at the start of an alarm call
             tetraFilterReset : 1,  // Start each time with the filter TG All
             tetraJoinOff     : 1,  // Do not join calls late on other carriers
-            _tetraReserved   : 3;
+            tetraSaveCalls   : 1,  // Save the calls heard (TetraCallRec.h)
+            _tetraReserved   : 2;
     uint8_t tetraFilter;          // Talkgroup filter last picked
 #endif
 #ifdef CONFIG_ROGER_BEEP
@@ -125,6 +126,7 @@ static const settings_t default_settings =
     0,                            // Alarm beep
     0,                            // Keep the talkgroup filter
     0,                            // Join calls late
+    0,                            // Do not save calls
     0,                            // not used
     0,                            // Talkgroup filter: All
 #endif
