@@ -21,6 +21,8 @@
 #include "interfaces/platform.h"
 #include "rtx/rtx.h"
 #include "interfaces/audio.h"
+#include "core/bcast.h"
+#include "core/weather.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -591,6 +593,158 @@ void _ui_drawSpectrum(ui_state_t *ui_state)
     bool strong = s.rssi[peak] > sql;
     gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, strong ? mdVoice : mdMuted,
               "%s  %d dBm", freq, (int)s.rssi[peak]);
+}
+#endif
+
+#ifdef CONFIG_BCAST_FM
+/**
+ * Broadcast FM radio: the station large, what is happening below it, and
+ * its signal. From Menu > FM radio.
+ */
+void _ui_drawBcast(ui_state_t *ui_state)
+{
+    struct bcastStatus st;
+    point_t big, small;
+    char text[32];
+
+    bcast_get(&st);
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "FM radio");
+    _ui_mdLines(&big, &small);
+    point_t l1 = layout.line1_pos;
+#if CONFIG_SCREEN_HEIGHT > 127
+    l1.y += 2;
+#endif
+
+    if (last_state.channel.mode != OPMODE_FM) {
+        _ui_mdBigLine(big, FONT_SIZE_12PT, 0, NULL, mdMuted, "FM mode only",
+                      mdMuted);
+        gfx_print(small, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+                  "side key + 5 changes mode");
+        return;
+    }
+
+    uint32_t hz = (st.state != BCAST_OFF) ?
+                      st.hz :
+                      (uint32_t)last_state.settings.bcastFreq * 100000u;
+    uint16_t unit = (uint16_t)(hz / 100000u);
+
+    /* The saved station this is, top left */
+    for (int i = 0; i < BCAST_PRESETS; i++) {
+        if (last_state.settings.bcastPreset[i] == unit) {
+            point_t p = { layout.horizontal_pad, layout.top_pos.y };
+            gfx_print(p, layout.top_font, TEXT_ALIGN_LEFT, yellow_fab413, "%d",
+                      i + 1);
+            break;
+        }
+    }
+
+    snprintf(text, sizeof(text), "%u.%u MHz", unit / 10, unit % 10);
+    color_t c = (st.state == BCAST_SEEKING || st.channelBusy) ? mdMuted :
+                                                                color_white;
+    _ui_mdBigLine(big, FONT_SIZE_16PT, 0, NULL, c, text, c);
+
+    /* Line 1: typing, a message, or the state */
+    long long now = getTick();
+    if (ui_state->bcast_digits[0] != '\0') {
+        gfx_print(l1, FONT_SIZE_8PT, TEXT_ALIGN_CENTER, yellow_fab413,
+                  "Go to %s_", ui_state->bcast_digits);
+    } else if (ui_state->bcast_note != NULL
+               && now - ui_state->bcast_note_tick < 1500) {
+        gfx_print(l1, FONT_SIZE_8PT, TEXT_ALIGN_CENTER, yellow_fab413, "%s",
+                  ui_state->bcast_note);
+    } else if (st.state == BCAST_SEEKING) {
+        gfx_print(l1, FONT_SIZE_8PT, TEXT_ALIGN_CENTER, yellow_fab413,
+                  "seeking...");
+    }
+
+    /* Below: the channel, when it is heard instead */
+    if (st.channelBusy) {
+        bool tx = rtx_getCurrentStatus().opStatus == TX;
+        gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER,
+                  tx ? mdTx : mdVoice, "%s %s", tx ? "TX" : "RX",
+                  last_state.channel.name);
+    } else {
+        gfx_print(small, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+                  "hold ^v: seek   hold 1-9: save");
+    }
+
+    unsigned rssi = st.rssi;
+    _ui_mdMeter("SIG", rssi, 80, _ui_mdTraffic(rssi, 40, 20), 0, "SNR", st.snr,
+                15, mdGroup);
+}
+#endif
+
+#ifdef CONFIG_WEATHER
+/**
+ * Weather channels: the seven, the one listened to selected, the one
+ * watched for alerts marked; the signal at the bottom. From Menu > Weather.
+ */
+void _ui_drawWeather(ui_state_t *ui_state)
+{
+    const uint16_t rowH = 13;
+    point_t pos = { layout.horizontal_pad, 30 };
+    uint8_t watch = last_state.settings.wxAlert;
+
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Weather");
+
+    for (uint8_t i = 0; i < WX_CHANNELS; i++) {
+        uint32_t hz = wx_hz(i);
+        bool sel = i == ui_state->wx_sel;
+        color_t fg = sel ? color_black : color_white;
+        if (sel) {
+            point_t r = { 0, (uint16_t)(pos.y - rowH + 2) };
+            gfx_drawRect(r, CONFIG_SCREEN_WIDTH, rowH, color_white, true);
+        }
+        gfx_print(pos, FONT_SIZE_8PT, TEXT_ALIGN_LEFT, fg, "WX%u  %lu.%03lu",
+                  i + 1, (unsigned long)(hz / 1000000),
+                  (unsigned long)(hz % 1000000 / 1000));
+        if (watch == i + 1) {
+            point_t r = { 0, (uint16_t)(pos.y - 1) };
+            gfx_print(r, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT,
+                      sel ? color_black : yellow_fab413, "alert");
+        }
+        pos.y += rowH;
+    }
+
+    point_t bottom = { 0, (uint16_t)(CONFIG_SCREEN_HEIGHT - 3) };
+    if (rtx_rxSquelchOpen())
+        gfx_print(bottom, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdVoice,
+                  "Receiving  S%u", rssiToSlevel(last_state.rssi));
+    else
+        gfx_print(bottom, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+                  "green: alert watch on this channel");
+}
+
+/**
+ * A weather alert: the 1050 Hz alarm tone was heard on the channel
+ * watched.
+ */
+void _ui_drawWxAlert(ui_state_t *ui_state)
+{
+    point_t big, small;
+    uint32_t hz = wx_hz(ui_state->wx_alert_ch);
+    char text[24];
+
+    _ui_mdLines(&big, &small);
+    gfx_clearScreen();
+    point_t top = { 0, (uint16_t)(layout.top_pos.y + 4) };
+    gfx_print(top, FONT_SIZE_12PT, TEXT_ALIGN_CENTER, mdTx, "WEATHER");
+    top.y += 20;
+    gfx_print(top, FONT_SIZE_12PT, TEXT_ALIGN_CENTER, mdTx, "ALERT");
+
+    snprintf(text, sizeof(text), "WX%u %lu.%03lu", ui_state->wx_alert_ch + 1,
+             (unsigned long)(hz / 1000000),
+             (unsigned long)(hz % 1000000 / 1000));
+    _ui_mdBigLine(big, FONT_SIZE_12PT, 0, NULL, color_white, text, color_white);
+    gfx_print(small, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+              "1050 Hz alarm tone heard");
+    point_t hint = { 0, (uint16_t)(CONFIG_SCREEN_HEIGHT - 4) };
+    gfx_print(hint, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, yellow_fab413,
+              "green listens, red goes back");
 }
 #endif
 

@@ -67,6 +67,8 @@
 #include "core/beeps.h"
 #include "core/roger_beep.h"
 #include "core/vox.h"
+#include "core/bcast.h"
+#include "core/weather.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -131,6 +133,12 @@ const char *menu_items[] =
     "Contacts",
 #ifdef CONFIG_GPS
     "GPS",
+#endif
+#ifdef CONFIG_BCAST_FM
+    "FM radio",
+#endif
+#ifdef CONFIG_WEATHER
+    "Weather",
 #endif
     "Settings",
     "Info",
@@ -224,6 +232,9 @@ const char* settings_fm_items[] =
 #ifdef CONFIG_NOISE_REDUCTION
     "AI denoise RX",
     "AI denoise TX",
+#endif
+#ifdef CONFIG_WEATHER
+    "Weather alert",
 #endif
 };
 
@@ -1110,6 +1121,14 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 #endif
 
+#ifdef CONFIG_WEATHER
+        case FM_WX_ALERT:
+            state.settings.wxAlert =
+                (uint8_t)((state.settings.wxAlert + WX_CHANNELS + 1 + step)
+                          % (WX_CHANNELS + 1));
+            break;
+#endif
+
 #ifdef CONFIG_NOISE_REDUCTION
         case FM_NR_RX:
             state.settings.nrRx =
@@ -1574,6 +1593,290 @@ static void _ui_spectrumKey(kbd_msg_t msg, bool *sync_rtx)
     {
         spectrum_stop();
         state.ui_screen = ui_state.last_main_state;
+    }
+}
+#endif
+
+#ifdef CONFIG_BCAST_FM
+/* In ui_modes.c */
+extern void _ui_drawBcast(ui_state_t *ui_state);
+
+/* A short message on the broadcast FM screen lasts this long */
+#define BCAST_NOTE_MS 1500
+
+static void _ui_bcastNote(const char *note)
+{
+    ui_state.bcast_note = note;
+    ui_state.bcast_note_tick = getTick();
+}
+
+/** The station listened to, kept in the settings */
+static uint32_t _ui_bcastHz(void)
+{
+    struct bcastStatus st;
+    bcast_get(&st);
+    if (st.state != BCAST_OFF)
+        return st.hz;
+    return bcast_clamp((uint32_t)state.settings.bcastFreq * 100000u);
+}
+
+static void _ui_bcastTune(uint32_t hz)
+{
+    hz = bcast_clamp(hz);
+    state.settings.bcastFreq = (uint16_t)(hz / 100000u);
+    bcast_tune(hz);
+}
+
+/**
+ * Menu > FM radio: listen to broadcast FM, on the station last listened to.
+ */
+static void _ui_bcastOpen(bool *sync_rtx)
+{
+    // PTT still transmits on the channel, as on the main screens
+    state.txDisable = false;
+    *sync_rtx = true;
+    ui_state.bcast_digits[0] = '\0';
+    ui_state.bcast_pending = 0;
+    ui_state.bcast_note = NULL;
+    if (state.channel.mode == OPMODE_FM)
+        bcast_start(bcast_clamp((uint32_t)state.settings.bcastFreq * 100000u));
+    state.ui_screen = BCAST_FM;
+}
+
+static void _ui_bcastClose(void)
+{
+    if (bcast_requested())
+        state.settings.bcastFreq = (uint16_t)(_ui_bcastHz() / 100000u);
+    bcast_stop();
+    state.ui_screen = ui_state.last_main_state;
+}
+
+/**
+ * A frequency typed: 3 digits (98.1), or 4 from 100 MHz up (101.5). Green
+ * takes fewer as whole MHz (88 for 88.0).
+ *
+ * @param whole: green was pressed.
+ * @return true if the digits were used.
+ */
+static bool _ui_bcastTyped(bool whole)
+{
+    const char *d = ui_state.bcast_digits;
+    size_t n = strlen(d);
+    size_t full = (d[0] == '1') ? 4 : 3;
+    uint32_t v = (uint32_t)atoi(d);
+
+    if (n == 0)
+        return false;
+    if (n < full && !whole)
+        return false;
+
+    uint32_t hz = (n == full) ? v * 100000u : v * 1000000u;
+    ui_state.bcast_digits[0] = '\0';
+    if (hz < BCAST_MIN_HZ || hz > BCAST_MAX_HZ) {
+        _ui_bcastNote("not in 87.5-108");
+        return true;
+    }
+    _ui_bcastTune(hz);
+    return true;
+}
+
+/** The next saved station up (+1) or down (-1) from the one playing */
+static void _ui_bcastPreset(int dir)
+{
+    uint16_t now = (uint16_t)(_ui_bcastHz() / 100000u);
+    int idx = -1;
+
+    for (int i = 0; i < BCAST_PRESETS; i++) {
+        if (state.settings.bcastPreset[i] == now)
+            idx = i;
+    }
+    for (int k = 1; k <= BCAST_PRESETS; k++) {
+        int i = ((idx < 0 ? (dir > 0 ? -1 : 0) : idx) + dir * k
+                 + 2 * BCAST_PRESETS) % BCAST_PRESETS;
+        if (state.settings.bcastPreset[i] != 0) {
+            _ui_bcastTune((uint32_t)state.settings.bcastPreset[i] * 100000u);
+            return;
+        }
+    }
+    _ui_bcastNote("no stations saved");
+}
+
+/**
+ * Keys of the broadcast FM screen: up / down tune 100 kHz, held they seek;
+ * numbers type a frequency, held they save the station there; * and #
+ * go through the saved stations; red goes back. A number or arrow acts when
+ * let go, so that holding it does only its long press.
+ */
+static void _ui_bcastKey(kbd_msg_t msg)
+{
+    static const char *saved[BCAST_PRESETS] = {
+        "saved on 1", "saved on 2", "saved on 3", "saved on 4", "saved on 5",
+        "saved on 6", "saved on 7", "saved on 8", "saved on 9",
+    };
+    uint32_t pending = ui_state.bcast_pending;
+    bool fm = state.channel.mode == OPMODE_FM;
+
+    if (msg.keys & KEY_ESC) {
+        if (ui_state.bcast_digits[0] != '\0')
+            ui_state.bcast_digits[0] = '\0';
+        else
+            _ui_bcastClose();
+        ui_state.bcast_pending = 0;
+        return;
+    }
+    if (!fm)
+        return;
+
+    // Let go before its long press: the short action
+    if (pending != 0 && (msg.keys & pending) == 0) {
+        ui_state.bcast_pending = 0;
+        if (pending & (KEY_UP | KEY_DOWN)) {
+            _ui_bcastTune(bcast_step(_ui_bcastHz(),
+                                     (pending & KEY_UP) ? 1 : -1));
+        } else {
+            size_t n = strlen(ui_state.bcast_digits);
+            if (n + 1 < sizeof(ui_state.bcast_digits)) {
+                ui_state.bcast_digits[n] = '0' + __builtin_ctz(pending);
+                ui_state.bcast_digits[n + 1] = '\0';
+            }
+            _ui_bcastTyped(false);
+        }
+        if (msg.keys == 0)
+            return;
+    }
+
+    if (msg.long_press) {
+        if (pending & (KEY_UP | KEY_DOWN)) {
+            ui_state.bcast_pending = 0;
+            ui_state.bcast_digits[0] = '\0';
+            bcast_seek((pending & KEY_UP) ? 1 : -1);
+        } else if (pending & KBD_NUM_MASK) {
+            uint8_t n = (uint8_t)__builtin_ctz(pending);
+            ui_state.bcast_pending = 0;
+            if (n >= 1 && n <= BCAST_PRESETS) {
+                state.settings.bcastPreset[n - 1] =
+                    (uint16_t)(_ui_bcastHz() / 100000u);
+                _ui_bcastNote(saved[n - 1]);
+            }
+        }
+        return;
+    }
+
+    if (msg.keys == KEY_UP || msg.keys == KEY_DOWN) {
+        ui_state.bcast_pending = msg.keys;
+    } else if (msg.keys & KNOB_RIGHT) {
+        _ui_bcastTune(bcast_step(_ui_bcastHz(), 1));
+    } else if (msg.keys & KNOB_LEFT) {
+        _ui_bcastTune(bcast_step(_ui_bcastHz(), -1));
+    } else if (input_isNumberPressed(msg)) {
+        keyboard_t number = msg.keys & KBD_NUM_MASK;
+        if ((number & (number - 1)) == 0)
+            ui_state.bcast_pending = number;
+    } else if (msg.keys & KEY_STAR) {
+        _ui_bcastPreset(-1);
+    } else if (msg.keys & KEY_HASH) {
+        _ui_bcastPreset(1);
+    } else if (msg.keys & KEY_ENTER) {
+        _ui_bcastTyped(true);
+    }
+}
+#endif
+
+#ifdef CONFIG_WEATHER
+/* In ui_modes.c */
+extern void _ui_drawWeather(ui_state_t *ui_state);
+extern void _ui_drawWxAlert(ui_state_t *ui_state);
+
+/** Listen to a weather channel, 0 for WX1, in place of the channel */
+static void _ui_wxListen(uint8_t ch, bool *sync_rtx)
+{
+    ui_state.wx_sel = ch % WX_CHANNELS;
+    state.wx_listen = (uint8_t)(ui_state.wx_sel + 1);
+    *sync_rtx = true;
+}
+
+/**
+ * Menu > Weather: the weather channels, listened to as they are selected,
+ * on the one watched for alerts or WX1.
+ */
+static void _ui_weatherOpen(bool *sync_rtx)
+{
+    uint8_t watch = state.settings.wxAlert;
+    #ifdef CONFIG_BCAST_FM
+    bcast_stop();
+    #endif
+    _ui_wxListen((watch != 0) ? (uint8_t)(watch - 1) : ui_state.wx_sel,
+                 sync_rtx);
+    state.ui_screen = WEATHER;
+}
+
+/**
+ * Keys of the weather screen: up / down change channel, green watches it
+ * for alerts (again: stop watching), red goes back to the channel.
+ */
+static void _ui_weatherKey(kbd_msg_t msg, bool *sync_rtx)
+{
+    if (msg.keys == 0 || msg.long_press)
+        return;
+
+    if (msg.keys & (KEY_UP | KNOB_LEFT)) {
+        _ui_wxListen((uint8_t)(ui_state.wx_sel + WX_CHANNELS - 1), sync_rtx);
+    } else if (msg.keys & (KEY_DOWN | KNOB_RIGHT)) {
+        _ui_wxListen((uint8_t)(ui_state.wx_sel + 1), sync_rtx);
+    } else if (msg.keys & KEY_ENTER) {
+        uint8_t ch = (uint8_t)(ui_state.wx_sel + 1);
+        state.settings.wxAlert = (state.settings.wxAlert == ch) ? 0 : ch;
+    } else if (msg.keys & KEY_ESC) {
+        state.wx_listen = 0;
+        *sync_rtx = true;
+        state.ui_screen = ui_state.last_main_state;
+    }
+}
+
+/**
+ * On each status update: an alert heard takes the screen, from the main
+ * screens or the FM radio.
+ */
+static void _ui_wxAlertCheck(void)
+{
+    int ch = wx_alert();
+    if (ch < 0 || state.ui_screen == WX_ALERT)
+        return;
+
+    bool fromMain = state.ui_screen == MAIN_VFO || state.ui_screen == MAIN_MEM;
+    #ifdef CONFIG_BCAST_FM
+    fromMain = fromMain || state.ui_screen == BCAST_FM;
+    #endif
+    if (!fromMain)
+        return;
+
+    ui_state.wx_alert_ch = (uint8_t)ch;
+    ui_state.wx_return = state.ui_screen;
+    state.ui_screen = WX_ALERT;
+}
+
+/**
+ * Keys of the alert: green listens to the weather channel, red goes back.
+ * Either stops the alarm.
+ */
+static void _ui_wxAlertKey(kbd_msg_t msg, bool *sync_rtx)
+{
+    if (msg.keys == 0 || msg.long_press)
+        return;
+
+    if (msg.keys & KEY_ENTER) {
+        wx_alertDismiss();
+        #ifdef CONFIG_BCAST_FM
+        if (ui_state.wx_return == BCAST_FM)
+            _ui_bcastClose();
+        #endif
+        if (ui_state.wx_return == MAIN_VFO || ui_state.wx_return == MAIN_MEM)
+            ui_state.last_main_state = ui_state.wx_return;
+        _ui_wxListen(ui_state.wx_alert_ch, sync_rtx);
+        state.ui_screen = WEATHER;
+    } else if (msg.keys & KEY_ESC) {
+        wx_alertDismiss();
+        state.ui_screen = ui_state.wx_return;
     }
 }
 #endif
@@ -3217,6 +3520,16 @@ void ui_updateFSM(bool *sync_rtx)
                             state.ui_screen = MENU_GPS;
                             break;
 #endif
+#ifdef CONFIG_BCAST_FM
+                        case M_BCAST:
+                            _ui_bcastOpen(sync_rtx);
+                            break;
+#endif
+#ifdef CONFIG_WEATHER
+                        case M_WEATHER:
+                            _ui_weatherOpen(sync_rtx);
+                            break;
+#endif
                         case M_SETTINGS:
                             state.ui_screen = MENU_SETTINGS;
                             break;
@@ -3890,6 +4203,22 @@ void ui_updateFSM(bool *sync_rtx)
                 _ui_tonePickKey(msg, sync_rtx);
                 break;
 
+            #ifdef CONFIG_BCAST_FM
+            case BCAST_FM:
+                _ui_bcastKey(msg);
+                break;
+            #endif
+
+            #ifdef CONFIG_WEATHER
+            case WEATHER:
+                _ui_weatherKey(msg, sync_rtx);
+                break;
+
+            case WX_ALERT:
+                _ui_wxAlertKey(msg, sync_rtx);
+                break;
+            #endif
+
             case SETTINGS_ACCESSIBILITY:
                 if(msg.keys & KEY_LEFT || (ui_state.edit_mode &&
                    (msg.keys & KEY_DOWN || msg.keys & KNOB_LEFT)))
@@ -3989,6 +4318,10 @@ void ui_updateFSM(bool *sync_rtx)
 
         // Enable Tx only if in MAIN_VFO or MAIN_MEM states
         bool inMemOrVfo = (state.ui_screen == MAIN_VFO) || (state.ui_screen == MAIN_MEM);
+        #ifdef CONFIG_BCAST_FM
+        // The FM channel stays in use behind the broadcast radio
+        inMemOrVfo = inMemOrVfo || (state.ui_screen == BCAST_FM);
+        #endif
         if ((macro_menu == true) || ((inMemOrVfo == false) && (state.txDisable == false)))
         {
             state.txDisable = true;
@@ -4018,6 +4351,9 @@ void ui_updateFSM(bool *sync_rtx)
     {
 #ifdef CONFIG_SCAN
         _ui_scanTick(now, sync_rtx);
+#endif
+#ifdef CONFIG_WEATHER
+        _ui_wxAlertCheck();
 #endif
         // Channel number typed and left: jump to it
         if(ui_state.ch_entry_digits > 0)
@@ -4050,6 +4386,9 @@ void ui_updateFSM(bool *sync_rtx)
         #ifdef CONFIG_SPECTRUM
         // The spectrum view keeps the screen on
         watching = (state.ui_screen == SPECTRUM);
+        #endif
+        #ifdef CONFIG_WEATHER
+        watching = watching || (state.ui_screen == WX_ALERT);
         #endif
 
         // VOX transmits without PTT
@@ -4196,6 +4535,19 @@ bool ui_updateGUI()
         case TONE_PICK:
             _ui_drawTonePick(&ui_state);
             break;
+#ifdef CONFIG_BCAST_FM
+        case BCAST_FM:
+            _ui_drawBcast(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_WEATHER
+        case WEATHER:
+            _ui_drawWeather(&ui_state);
+            break;
+        case WX_ALERT:
+            _ui_drawWxAlert(&ui_state);
+            break;
+#endif
 #ifdef CONFIG_MEMCH
         case SETTINGS_MEMORY:
             _ui_drawSettingsMemory(&ui_state);

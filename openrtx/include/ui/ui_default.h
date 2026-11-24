@@ -60,7 +60,10 @@ enum uiScreen
     FAST_COPY,
     SETTINGS_MEMORY,
     SPECTRUM,
-    TONE_PICK
+    TONE_PICK,
+    BCAST_FM,
+    WEATHER,
+    WX_ALERT
 };
 
 /* FM scan: what it does after stopping on a signal (settings.scanResume) */
@@ -87,6 +90,12 @@ enum menuItems
     M_CONTACTS,
 #ifdef CONFIG_GPS
     M_GPS,
+#endif
+#ifdef CONFIG_BCAST_FM
+    M_BCAST,
+#endif
+#ifdef CONFIG_WEATHER
+    M_WEATHER,
 #endif
     M_SETTINGS,
     M_INFO,
@@ -218,6 +227,9 @@ enum settingsFMItems
     FM_NR_RX,
     FM_NR_TX,
 #endif
+#ifdef CONFIG_WEATHER
+    FM_WX_ALERT,
+#endif
 };
 
 /**
@@ -330,6 +342,22 @@ typedef struct ui_state_t
     long long scan_heard;
     uint8_t scan_opens;
     uint16_t scan_count;
+#endif
+#ifdef CONFIG_BCAST_FM
+    // Broadcast FM screen: digits of a frequency being typed, a number or
+    // arrow key waiting for its release (its long press does more), and a
+    // short message ("saved P3") with when it was shown
+    char bcast_digits[5];
+    uint32_t bcast_pending;
+    const char *bcast_note;
+    long long bcast_note_tick;
+#endif
+#ifdef CONFIG_WEATHER
+    // Weather screen: the channel listened to, 0 for WX1
+    uint8_t wx_sel;
+    // The alert being shown, 0 for WX1, and the screen to go back to
+    uint8_t wx_alert_ch;
+    uint8_t wx_return;
 #endif
 #ifdef CONFIG_SPECTRUM
     // Spectrum view: the frequency in the middle and the zoom

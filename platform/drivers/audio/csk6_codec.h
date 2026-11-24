@@ -54,6 +54,16 @@ void csk6codec_setMicMonitor(bool on);
 uint8_t csk6codec_getMicLevel(void);
 
 /**
+ * Measure a tone in the radio's audio, captured without a route to it.
+ *
+ * @param hz: the tone, Hz, under 4 kHz, or 0 to stop.
+ */
+void csk6codec_setToneWatch(uint16_t hz);
+
+/** @return the share of the radio's audio in the tone, percent, last 20 ms. */
+uint8_t csk6codec_getToneRatio(void);
+
+/**
  * AI noise reduction of FM audio (CONFIG_NOISE_REDUCTION).
  *
  * @param rx: level for received audio, 0 off, 1 to 10.

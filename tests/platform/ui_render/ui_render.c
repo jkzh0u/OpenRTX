@@ -44,6 +44,8 @@
 #include "core/settings.h"
 #include "core/fast_copy.h"
 #include "core/spectrum.h"
+#include "core/bcast.h"
+#include "core/weather.h"
 #include "core/voicePrompts.h"
 #include "core/voicePromptUtils.h"
 #include "interfaces/platform.h"
@@ -69,6 +71,9 @@ void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 void _ui_drawTetraFieldTest(ui_state_t *ui_state);
 void _ui_drawFastCopy(ui_state_t *ui_state);
 void _ui_drawSpectrum(ui_state_t *ui_state);
+void _ui_drawBcast(ui_state_t *ui_state);
+void _ui_drawWeather(ui_state_t *ui_state);
+void _ui_drawWxAlert(ui_state_t *ui_state);
 void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
@@ -194,6 +199,14 @@ uint8_t audio_getNoiseReductionLoad(bool *overload)
     if (overload != NULL)
         *overload = false;
     return 27;
+}
+
+/* Broadcast FM: what the screen shows */
+static struct bcastStatus bcast;
+
+void bcast_get(struct bcastStatus *out)
+{
+    *out = bcast;
 }
 
 static struct spectrumSweep sweep;
@@ -383,8 +396,15 @@ enum screen {
     SCREEN_DETAIL,
     SCREEN_FIELD_TEST,
     SCREEN_FAST_COPY,
-    SCREEN_SPECTRUM
+    SCREEN_SPECTRUM,
+    SCREEN_BCAST,
+    SCREEN_WEATHER,
+    SCREEN_WX_ALERT
 };
+
+/* Shown on the next broadcast FM and weather scenes */
+static const char *bcastDigits = "";
+static uint8_t wxSel;
 
 /* FM scan shown on the next scenes: 0 off, 1 scanning, 2 paused */
 static int scanShown;
@@ -423,7 +443,16 @@ static void draw(const char *name, enum screen screen)
         _ui_drawFastCopy(&ui);
     else if (screen == SCREEN_SPECTRUM)
         _ui_drawSpectrum(&ui);
-    else
+    else if (screen == SCREEN_BCAST) {
+        strcpy(ui.bcast_digits, bcastDigits);
+        _ui_drawBcast(&ui);
+    } else if (screen == SCREEN_WEATHER) {
+        ui.wx_sel = wxSel;
+        _ui_drawWeather(&ui);
+    } else if (screen == SCREEN_WX_ALERT) {
+        ui.wx_alert_ch = wxSel;
+        _ui_drawWxAlert(&ui);
+    } else
         _ui_drawMainVFO(&ui);
     gfx_render();
     printf("%s\n", outPath);
@@ -739,6 +768,44 @@ static void fmScenes(void)
     draw("fm-8b-spectrum-wide", SCREEN_SPECTRUM);
     memset(&sweep, 0, sizeof(sweep));
     draw("fm-8c-spectrum-sweeping", SCREEN_SPECTRUM);
+
+    /* Broadcast FM: playing a saved station, seeking, typing, and the
+     * channel heard instead */
+    last_state.settings.bcastPreset[2] = 981;
+    bcast.state = BCAST_PLAYING;
+    bcast.hz = 98100000;
+    bcast.rssi = 52;
+    bcast.snr = 11;
+    draw("fm-10-radio", SCREEN_BCAST);
+    bcast.state = BCAST_SEEKING;
+    bcast.hz = 101300000;
+    bcast.rssi = 8;
+    bcast.snr = 1;
+    draw("fm-10b-radio-seeking", SCREEN_BCAST);
+    bcast.state = BCAST_PLAYING;
+    bcast.hz = 98100000;
+    bcast.rssi = 52;
+    bcast.snr = 11;
+    bcastDigits = "10";
+    draw("fm-10c-radio-typing", SCREEN_BCAST);
+    bcastDigits = "";
+    bcast.channelBusy = true;
+    fmRxOpen = true;
+    draw("fm-10d-radio-channel", SCREEN_BCAST);
+    fmRxOpen = false;
+    memset(&bcast, 0, sizeof(bcast));
+    last_state.settings.bcastPreset[2] = 0;
+
+    /* Weather: WX2 listened to and watched, receiving; then an alert */
+    wxSel = 1;
+    last_state.settings.wxAlert = 2;
+    last_state.rssi = -80;
+    fmRxOpen = true;
+    draw("fm-11-weather", SCREEN_WEATHER);
+    fmRxOpen = false;
+    draw("fm-11b-weather-alert", SCREEN_WX_ALERT);
+    last_state.settings.wxAlert = 0;
+    wxSel = 0;
     last_state.channel = saved;
     strcpy(last_state.channel.name, savedName);
     last_state.rssi = -85;

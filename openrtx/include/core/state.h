@@ -51,6 +51,12 @@ typedef struct {
     bool restore_eflash;
     bool txDisable;
     uint8_t step_index;
+#ifdef CONFIG_WEATHER
+    // Listening to a weather channel (the Weather screen): 0 none, 1 to 7
+    // for WX1 to WX7. The radio tunes it in place of the channel, receive
+    // only, and the channel itself is left as it is.
+    uint8_t wx_listen;
+#endif
 } state_t;
 
 extern const uint32_t freq_steps[];

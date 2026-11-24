@@ -183,6 +183,21 @@ bool audio_checkPathCompatibility(const enum AudioSource p1Source,
 void audio_setMicMonitor(bool on);
 
 /**
+ * On platforms with CONFIG_WEATHER: measure a tone in the transceiver's
+ * audio, without a path to it.
+ *
+ * @param hz: the tone, Hz, or 0 to stop.
+ */
+void audio_setToneWatch(uint16_t hz);
+
+/**
+ * On platforms with CONFIG_WEATHER.
+ *
+ * @return the share of the transceiver's audio in the tone, percent.
+ */
+uint8_t audio_getToneRatio(void);
+
+/**
  * On platforms with CONFIG_NOISE_REDUCTION: AI noise reduction of FM audio.
  *
  * @param rxLevel: for received audio, 0 off, 1 to 10.

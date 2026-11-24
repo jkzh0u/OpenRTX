@@ -141,6 +141,46 @@ bool radio_fastCopyToneResult(uint16_t *tone);
 void radio_fastCopyStop();
 #endif
 
+#ifdef CONFIG_BCAST_FM
+/**
+ * Broadcast FM receiver (core/bcast.h), a chip of its own: power it on and
+ * tune it, or power it off. Its audio reaches the speaker through the
+ * radio's receive audio path, with the transceiver's own audio off.
+ *
+ * @param hz: frequency, Hz, or 0 to power off.
+ */
+void radio_bcastPower(uint32_t hz);
+
+/** @param hz: frequency to tune, Hz. */
+void radio_bcastTune(uint32_t hz);
+
+/** @param mute: true to mute the broadcast receiver's audio. */
+void radio_bcastMute(bool mute);
+
+/**
+ * Signal of the broadcast station tuned.
+ *
+ * @param rssi: signal level, 0 to 255.
+ * @param snr: signal to noise, 0 to 15.
+ * @param railed: true if its frequency control is at a limit (not on a
+ * station).
+ */
+void radio_bcastSignal(uint8_t *rssi, uint8_t *snr, bool *railed);
+#endif
+
+#ifdef CONFIG_WEATHER
+/**
+ * Weather alert watch (core/weather.h): listen briefly on another
+ * frequency, audio on for the tone detector, speaker untouched.
+ *
+ * @param hz: frequency, Hz.
+ */
+void radio_peekStart(uint32_t hz);
+
+/** Back to the configured channel, its audio off. */
+void radio_peekStop();
+#endif
+
 #ifdef CONFIG_SPECTRUM
 /**
  * Spectrum view (core/spectrum.h): get ready to read the signal strength

@@ -538,6 +538,55 @@ void radio_fastCopyStop()
 }
 #endif
 
+#ifdef CONFIG_BCAST_FM
+/* Band 0 of the BK1080: 87.5 to 108 MHz */
+#define BCAST_BAND 0
+
+void radio_bcastPower(uint32_t hz)
+{
+    BK1080_Init(&c62_bk1080, hz, BCAST_BAND);
+}
+
+void radio_bcastTune(uint32_t hz)
+{
+    BK1080_SetFrequency(&c62_bk1080, hz, BCAST_BAND);
+}
+
+void radio_bcastMute(bool mute)
+{
+    BK1080_Mute(&c62_bk1080, mute);
+}
+
+void radio_bcastSignal(uint8_t *rssi, uint8_t *snr, bool *railed)
+{
+    uint16_t r10 = BK1080_ReadRegister(&c62_bk1080, BK1080_REG_10);
+    uint16_t r07 = BK1080_ReadRegister(&c62_bk1080, BK1080_REG_07);
+    *rssi = (uint8_t)BK1080_REG_10_GET_RSSI(r10);
+    *snr = (uint8_t)BK1080_REG_07_GET_SNR(r07);
+    *railed = (r10 & BK1080_REG_10_MASK_AFCRL) != 0;
+}
+#endif
+
+#ifdef CONFIG_WEATHER
+void radio_peekStart(uint32_t hz)
+{
+    bool vhf = vhfLna(hz);
+    gpioDev_clear(&c62_bk4819_gpio, vhf ? GPIO_UHF_RX_LNA : GPIO_VHF_RX_LNA);
+    gpioDev_set(&c62_bk4819_gpio, vhf ? GPIO_VHF_RX_LNA : GPIO_UHF_RX_LNA);
+    bk4819_disable_ctdcss(&c62_bk4819);
+    bk4819_SetFilterBandwidth(&c62_bk4819, BW_25);
+    bk4819_set_freq(&c62_bk4819, hz + rxOffset);
+    BK4819_SetAF(&c62_bk4819, BK4819_AF_TYPE_FM);
+}
+
+void radio_peekStop()
+{
+    BK4819_SetAF(&c62_bk4819, 0);
+    if (radioStatus == RX)
+        radio_enableRx();
+}
+#endif
+
 #ifdef CONFIG_SPECTRUM
 /*
  * Spectrum view: retune and read REG_67, as the UV-K5's spectrum mod does.

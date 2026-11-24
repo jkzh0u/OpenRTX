@@ -257,6 +257,13 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       to a weak, hissy FM signal: the hiss drops, the voice stays. Note the
       percentage shown next to the level (the processor time it takes); if
       it says `slow`, it could not keep up and switched itself off
+- [ ] FM radio: **Menu** > **FM radio**, tune a local station (type it,
+      or hold Up to seek): music from the speaker. If it stays silent, note
+      it: the BK1080's audio path is the unknown. Key a second radio on the
+      FM channel meanwhile: the radio goes quiet and the channel is heard
+- [ ] Weather: **Menu** > **Weather**, the local NOAA channel is heard (in
+      the US). Weather alert watch: the next weekly test (Wednesdays, about
+      11 am to noon local time) should raise the alert
 - [ ] Spectrum: side key + **0** in FM, key a second radio within the
       view: a bar rises at its frequency; **green** tunes the VFO to it
 

@@ -21,6 +21,7 @@
 #include "core/backup.h"
 #include "core/gps.h"
 #include "core/voicePrompts.h"
+#include "core/weather.h"
 
 #if defined(PLATFORM_TTWRPLUS)
 #include "pmu.h"
@@ -115,6 +116,22 @@ void *ui_threadFunc(void *arg)
 
             // Enable Tx if channel allows it and we are in UI main screen
             rtx_cfg.txDisable = state.channel.rx_only || state.txDisable;
+
+#ifdef CONFIG_WEATHER
+            // A weather channel in place of the channel: FM, 25 kHz, no
+            // tones, receive only
+            if(state.wx_listen != 0)
+            {
+                uint32_t wx = wx_hz((uint8_t)(state.wx_listen - 1));
+                rtx_cfg.opMode      = OPMODE_FM;
+                rtx_cfg.bandwidth   = BW_25;
+                rtx_cfg.rxFrequency = wx;
+                rtx_cfg.txFrequency = wx;
+                rtx_cfg.rxToneEn    = 0;
+                rtx_cfg.txToneEn    = 0;
+                rtx_cfg.txDisable   = 1;
+            }
+#endif
 
             // Copy new M17 CAN, source and destination addresses
             rtx_cfg.can = state.settings.m17_can;

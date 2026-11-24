@@ -50,6 +50,10 @@ extern "C" {
 #define CONFIG_VOX
 /* FM AI noise reduction, RNNoise on the CSK6 (lib/rnnoise) */
 #define CONFIG_NOISE_REDUCTION
+/* Broadcast FM radio, 87.5-108 MHz, on the BK1080 (Menu > FM radio) */
+#define CONFIG_BCAST_FM
+/* NOAA weather channels and weather alert watch (Menu > Weather) */
+#define CONFIG_WEATHER
 
 /* Battery type */
 #define CONFIG_BAT_LIION

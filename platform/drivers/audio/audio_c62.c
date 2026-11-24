@@ -125,6 +125,18 @@ void audio_terminate(void)
     k_mutex_unlock(&board_mutex);
 }
 
+#ifdef CONFIG_WEATHER
+void audio_setToneWatch(uint16_t hz)
+{
+    csk6codec_setToneWatch(hz);
+}
+
+uint8_t audio_getToneRatio(void)
+{
+    return csk6codec_getToneRatio();
+}
+#endif
+
 #ifdef CONFIG_NOISE_REDUCTION
 void audio_setNoiseReduction(uint8_t rxLevel, uint8_t txLevel)
 {

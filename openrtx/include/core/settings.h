@@ -78,6 +78,13 @@ typedef struct
 #ifdef CONFIG_VOX
     uint8_t voxDelay;             // FM VOX hang time, index (core/vox.h)
 #endif
+#ifdef CONFIG_BCAST_FM
+    uint16_t bcastFreq;           // Broadcast FM station, 100 kHz units
+    uint16_t bcastPreset[9];      // Saved stations, 100 kHz units, 0 empty
+#endif
+#ifdef CONFIG_WEATHER
+    uint8_t wxAlert;              // Weather alert watch: 0 off, 1 to 7 WX1-7
+#endif
 #ifdef CONFIG_NOISE_REDUCTION
     uint8_t nrRx;                 // FM AI noise reduction, received, 0 off
     uint8_t nrTx;                 // FM AI noise reduction, microphone, 0 off
@@ -130,6 +137,13 @@ static const settings_t default_settings =
 #endif
 #ifdef CONFIG_VOX
     1,                            // VOX hang time 1 s
+#endif
+#ifdef CONFIG_BCAST_FM
+    1000,                         // 100.0 MHz
+    { 0 },                        // No stations saved
+#endif
+#ifdef CONFIG_WEATHER
+    0,                            // No weather alert watch
 #endif
 #ifdef CONFIG_NOISE_REDUCTION
     0,                            // No noise reduction on received audio
