@@ -125,6 +125,13 @@ void audio_terminate(void)
     k_mutex_unlock(&board_mutex);
 }
 
+#ifdef CONFIG_REPLAY
+void audio_setRxRecord(bool on)
+{
+    csk6codec_setRxRecord(on);
+}
+#endif
+
 #ifdef CONFIG_NOISE_REDUCTION
 void audio_setNoiseReduction(uint8_t rxLevel, uint8_t txLevel)
 {

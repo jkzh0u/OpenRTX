@@ -222,6 +222,9 @@ enum settingsFMItems
     FM_NR_RX,
     FM_NR_TX,
 #endif
+#ifdef CONFIG_DTMF
+    FM_TX_HASH,
+#endif
 };
 
 /**

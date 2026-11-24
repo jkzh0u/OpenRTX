@@ -22,6 +22,8 @@
 #include "rtx/rtx.h"
 #include "interfaces/audio.h"
 #include "core/bcast.h"
+#include "core/dtmf.h"
+#include "core/replay.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -354,6 +356,15 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
         snprintf(text, sizeof(text), "TX %s", freq);
     else if (tx)
         snprintf(text, sizeof(text), "Transmitting");
+#ifdef CONFIG_DTMF
+    /* DTMF keys sent in this transmission, the last ones that fit */
+    if (tx && dtmf_sent()[0] != '\0') {
+        const char *keys = dtmf_sent();
+        size_t n = strlen(keys);
+        snprintf(text, sizeof(text), "DTMF %s",
+                 (n > 10) ? keys + n - 10 : keys);
+    }
+#endif
     else if (rx)
         snprintf(text, sizeof(text), "Receiving  S%u",
                  rssiToSlevel(last_state.rssi));
@@ -672,6 +683,28 @@ void _ui_drawBcast(ui_state_t *ui_state)
     unsigned rssi = st.rssi;
     _ui_mdMeter("SIG", rssi, 80, _ui_mdTraffic(rssi, 40, 20), 0, "SNR", st.snr,
                 15, mdGroup);
+}
+#endif
+
+#ifdef CONFIG_REPLAY
+/**
+ * Instant replay playing: an amber banner over the top bar, with which
+ * transmission (1 the last) of how many, and how far into it.
+ */
+void _ui_drawReplay(void)
+{
+    struct replayStatus r;
+
+    replay_get(&r);
+    if (!r.playing)
+        return;
+
+    uint16_t h = layout.top_h;
+    point_t origin = { 0, 0 };
+    gfx_drawRect(origin, CONFIG_SCREEN_WIDTH, h, yellow_fab413, true);
+    point_t pos = { 0, (uint16_t)(layout.top_pos.y) };
+    gfx_print(pos, layout.top_font, TEXT_ALIGN_CENTER, color_black,
+              "Replay %u/%u  %us/%us", r.index, r.count, r.played, r.length);
 }
 #endif
 

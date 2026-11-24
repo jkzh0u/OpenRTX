@@ -183,6 +183,14 @@ bool audio_checkPathCompatibility(const enum AudioSource p1Source,
 void audio_setMicMonitor(bool on);
 
 /**
+ * On platforms with CONFIG_REPLAY: keep the transceiver's received audio
+ * heard on the speaker for instant replay (core/replay.h).
+ *
+ * @param on: true while the channel is heard.
+ */
+void audio_setRxRecord(bool on);
+
+/**
  * On platforms with CONFIG_NOISE_REDUCTION: AI noise reduction of FM audio.
  *
  * @param rxLevel: for received audio, 0 off, 1 to 10.

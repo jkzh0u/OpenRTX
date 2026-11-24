@@ -52,6 +52,11 @@ extern "C" {
 #define CONFIG_NOISE_REDUCTION
 /* Broadcast FM radio, 87.5-108 MHz, on the BK1080 (Menu > FM radio) */
 #define CONFIG_BCAST_FM
+/* Instant replay of what was received, FM and TETRA (P2), 30 s in PSRAM */
+#define CONFIG_REPLAY
+#define CONFIG_REPLAY_SECTION ".psram_section"
+/* DTMF from the keypad while transmitting in FM */
+#define CONFIG_DTMF
 
 /* Battery type */
 #define CONFIG_BAT_LIION

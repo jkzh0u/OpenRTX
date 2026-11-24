@@ -17,6 +17,7 @@
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
 #include "interfaces/delays.h"
+#include "core/replay.h"
 
 #define QUEUE_FRAMES 16     /* 480 ms */
 #define PREBUFFER_FRAMES 5  /* 150 ms: frame 18 leaves a 113 ms gap */
@@ -147,6 +148,10 @@ static void playBurst(void)
         struct frame f;
         if (pop(&f)) {
             oa_dec_frame(&decoder, f.bits, f.bfi, out);
+#ifdef CONFIG_REPLAY
+            /* The speech, before any alert is mixed in */
+            replay_record(out, OA_FRAME_SAMPLES);
+#endif
             playFrames++;
             silence = 0;
         } else {

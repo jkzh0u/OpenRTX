@@ -45,6 +45,8 @@
 #include "core/fast_copy.h"
 #include "core/spectrum.h"
 #include "core/bcast.h"
+#include "core/dtmf.h"
+#include "core/replay.h"
 #include "core/voicePrompts.h"
 #include "core/voicePromptUtils.h"
 #include "interfaces/platform.h"
@@ -71,6 +73,7 @@ void _ui_drawTetraFieldTest(ui_state_t *ui_state);
 void _ui_drawFastCopy(ui_state_t *ui_state);
 void _ui_drawSpectrum(ui_state_t *ui_state);
 void _ui_drawBcast(ui_state_t *ui_state);
+void _ui_drawReplay(void);
 void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
@@ -196,6 +199,20 @@ uint8_t audio_getNoiseReductionLoad(bool *overload)
     if (overload != NULL)
         *overload = false;
     return 27;
+}
+
+/* Instant replay and DTMF: what the screens show */
+static struct replayStatus replay;
+static const char *dtmfKeys = "";
+
+void replay_get(struct replayStatus *out)
+{
+    *out = replay;
+}
+
+const char *dtmf_sent(void)
+{
+    return dtmfKeys;
 }
 
 /* Broadcast FM: what the screen shows */
@@ -394,7 +411,8 @@ enum screen {
     SCREEN_FIELD_TEST,
     SCREEN_FAST_COPY,
     SCREEN_SPECTRUM,
-    SCREEN_BCAST
+    SCREEN_BCAST,
+    SCREEN_NONE
 };
 
 /* Shown on the next broadcast FM scenes */
@@ -437,11 +455,15 @@ static void draw(const char *name, enum screen screen)
         _ui_drawFastCopy(&ui);
     else if (screen == SCREEN_SPECTRUM)
         _ui_drawSpectrum(&ui);
-    else if (screen == SCREEN_BCAST) {
+    else if (screen == SCREEN_NONE) {
+        /* Drawn by the caller */
+    } else if (screen == SCREEN_BCAST) {
         strcpy(ui.bcast_digits, bcastDigits);
         _ui_drawBcast(&ui);
     } else
         _ui_drawMainVFO(&ui);
+    if (replay.playing)
+        _ui_drawReplay();
     gfx_render();
     printf("%s\n", outPath);
 }
@@ -503,6 +525,14 @@ static void tetraScenes(unsigned mcc, unsigned mnc, uint32_t group,
     tetra.phaseErr = 12;
     tetra.carrierHz = -234;
     scene("tetra-2-cell", false);
+    /* Instant replay over the TETRA screen */
+    replay.playing = true;
+    replay.index = 1;
+    replay.count = 2;
+    replay.length = 7;
+    replay.played = 2;
+    scene("tetra-2e-replay", false);
+    replay.playing = false;
     scene("tetra-2b-cell-memory", true);
 
     /* A memory channel number being typed */
@@ -696,6 +726,22 @@ static void fmScenes(void)
     pttStatus = true;
     scene("fm-4-transmitting", true);
     pttStatus = false;
+
+    /* DTMF sent while transmitting */
+    pttStatus = true;
+    dtmfKeys = "123#";
+    scene("fm-4b-transmitting-dtmf", true);
+    dtmfKeys = "";
+    pttStatus = false;
+
+    /* Instant replay of the second last transmission */
+    replay.playing = true;
+    replay.index = 2;
+    replay.count = 3;
+    replay.length = 12;
+    replay.played = 4;
+    scene("fm-12-replay", true);
+    replay.playing = false;
 
     /* A DCS channel: D023N both ways */
     last_state.channel.rxDcs = 1;

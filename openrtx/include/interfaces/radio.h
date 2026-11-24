@@ -168,6 +168,17 @@ void radio_bcastMute(bool mute);
 void radio_bcastSignal(uint8_t *rssi, uint8_t *snr, bool *railed);
 #endif
 
+#ifdef CONFIG_DTMF
+/**
+ * Send a DTMF key's two tones while transmitting (core/dtmf.h), the
+ * microphone muted meanwhile.
+ *
+ * @param low: row tone, Hz, or 0 to stop.
+ * @param high: column tone, Hz.
+ */
+void radio_setTxDtmf(uint16_t low, uint16_t high);
+#endif
+
 #ifdef CONFIG_SPECTRUM
 /**
  * Spectrum view (core/spectrum.h): get ready to read the signal strength

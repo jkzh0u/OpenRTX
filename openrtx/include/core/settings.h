@@ -82,6 +82,9 @@ typedef struct
     uint16_t bcastFreq;           // Broadcast FM station, 100 kHz units
     uint16_t bcastPreset[9];      // Saved stations, 100 kHz units, 0 empty
 #endif
+#ifdef CONFIG_DTMF
+    uint8_t txHash1750;           // # while transmitting: 0 DTMF #, 1 1750 Hz
+#endif
 #ifdef CONFIG_NOISE_REDUCTION
     uint8_t nrRx;                 // FM AI noise reduction, received, 0 off
     uint8_t nrTx;                 // FM AI noise reduction, microphone, 0 off
@@ -138,6 +141,9 @@ static const settings_t default_settings =
 #ifdef CONFIG_BCAST_FM
     1000,                         // 100.0 MHz
     { 0 },                        // No stations saved
+#endif
+#ifdef CONFIG_DTMF
+    0,                            // # sends DTMF # while transmitting
 #endif
 #ifdef CONFIG_NOISE_REDUCTION
     0,                            // No noise reduction on received audio

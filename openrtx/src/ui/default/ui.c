@@ -68,6 +68,8 @@
 #include "core/roger_beep.h"
 #include "core/vox.h"
 #include "core/bcast.h"
+#include "core/dtmf.h"
+#include "core/replay.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
@@ -228,6 +230,9 @@ const char* settings_fm_items[] =
 #ifdef CONFIG_NOISE_REDUCTION
     "AI denoise RX",
     "AI denoise TX",
+#endif
+#ifdef CONFIG_DTMF
+    "# in TX",
 #endif
 };
 
@@ -1114,6 +1119,12 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 #endif
 
+#ifdef CONFIG_DTMF
+        case FM_TX_HASH:
+            state.settings.txHash1750 = !state.settings.txHash1750;
+            break;
+#endif
+
 #ifdef CONFIG_NOISE_REDUCTION
         case FM_NR_RX:
             state.settings.nrRx =
@@ -1579,6 +1590,88 @@ static void _ui_spectrumKey(kbd_msg_t msg, bool *sync_rtx)
         spectrum_stop();
         state.ui_screen = ui_state.last_main_state;
     }
+}
+#endif
+
+#ifdef CONFIG_DTMF
+/**
+ * Keypad keys while transmitting in FM: their DTMF tones, for as long as
+ * they are held. # is 1750 Hz instead with Settings > FM > # in TX.
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_dtmfKey(kbd_msg_t msg)
+{
+    bool tx = (state.channel.mode == OPMODE_FM)
+           && (rtx_getCurrentStatus().opStatus == TX);
+    bool held = dtmf_current() != 0;
+
+    if (!tx) {
+        if (held)
+            dtmf_key(0);
+        return false;
+    }
+
+    char key = 0;
+    keyboard_t number = msg.keys & KBD_NUM_MASK;
+    if (number != 0 && msg.keys == number && (number & (number - 1)) == 0)
+        key = (char)('0' + __builtin_ctz(number));
+    else if (msg.keys == KEY_STAR)
+        key = '*';
+    else if (msg.keys == KEY_HASH && !state.settings.txHash1750)
+        key = '#';
+
+    if (key != 0) {
+        dtmf_key(key);
+        return true;
+    }
+    if (held && (msg.keys & (KBD_NUM_MASK | KEY_STAR | KEY_HASH)) == 0) {
+        dtmf_key(0);
+        return msg.keys == 0;
+    }
+    return false;
+}
+#endif
+
+#ifdef CONFIG_REPLAY
+/* In ui_modes.c */
+extern void _ui_drawReplay(void);
+
+/**
+ * P2 on the main screens and the FM radio: instant replay of the last
+ * transmission received; again while it plays, the one before. Held, it
+ * stops. Acts when let go, so that holding it only stops.
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_replayKey(kbd_msg_t msg)
+{
+    static bool pending;
+
+    bool here = (state.ui_screen == MAIN_VFO) || (state.ui_screen == MAIN_MEM);
+    #ifdef CONFIG_BCAST_FM
+    here = here || (state.ui_screen == BCAST_FM);
+    #endif
+    if (!here) {
+        pending = false;
+        return false;
+    }
+
+    if (pending && (msg.keys & KEY_F2) == 0) {
+        pending = false;
+        replay_play();
+        return msg.keys == 0;
+    }
+    if ((msg.keys & KEY_F2) == 0)
+        return false;
+
+    if (msg.long_press) {
+        pending = false;
+        replay_stop();
+    } else {
+        pending = true;
+    }
+    return true;
 }
 #endif
 
@@ -2882,6 +2975,17 @@ void ui_updateFSM(bool *sync_rtx)
             state.tone_enabled = false;
             *sync_rtx = true;
         }
+
+#ifdef CONFIG_DTMF
+        // Keypad keys while transmitting: DTMF
+        if(_ui_dtmfKey(msg))
+            return;
+#endif
+#ifdef CONFIG_REPLAY
+        // P2: instant replay
+        if(_ui_replayKey(msg))
+            return;
+#endif
 
         int priorUIScreen = state.ui_screen;
         switch(state.ui_screen)
@@ -4432,6 +4536,17 @@ bool ui_updateGUI()
             _ui_drawLowBatteryScreen();
             break;
     }
+
+#ifdef CONFIG_REPLAY
+    // Instant replay playing: a banner over the top of the main screens
+    bool replayHere = (state.ui_screen == MAIN_VFO)
+                   || (state.ui_screen == MAIN_MEM);
+    #ifdef CONFIG_BCAST_FM
+    replayHere = replayHere || (state.ui_screen == BCAST_FM);
+    #endif
+    if(replayHere)
+        _ui_drawReplay();
+#endif
 
     // If MACRO menu is active draw it
     if(macro_menu)

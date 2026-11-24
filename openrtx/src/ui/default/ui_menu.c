@@ -714,6 +714,13 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
             break;
 #endif
 
+#ifdef CONFIG_DTMF
+        case FM_TX_HASH:
+            sniprintf(buf, max_len, "%s",
+                      last_state.settings.txHash1750 ? "1750 Hz" : "DTMF #");
+            break;
+#endif
+
 #ifdef CONFIG_NOISE_REDUCTION
         case FM_NR_RX:
         case FM_NR_TX: {

@@ -84,6 +84,7 @@ On the main screen, in any mode:
 | Long **5** | VFO: change mode, if 5 is the first digit typed (it is then dropped) |
 | Long **\*** | FM: fast copy, read the channel of a radio keyed next to this one (section 10) |
 | Long **0** | FM: scan the memory channels, or in VFO mode the band (section 10) |
+| **P2** | Instant replay of the last transmission received, FM or T; again while it plays, the one before; held, stop (section 10) |
 | Side key + number | Shortcut, see below |
 
 In memory mode a short press of a number types a channel number, shown
@@ -1007,6 +1008,7 @@ The main screen shows, from the top:
 | VOX delay | How long VOX keeps transmitting after you stop talking: 0.5, 1 (at first), 1.5, 2 or 3 s. Saved |
 | AI denoise RX | AI noise reduction of what you hear: Off (at first), or 1 (light, noise 3 dB down) to 10 (strong, 30 dB down). Saved. See below |
 | AI denoise TX | The same for your microphone, before it is transmitted. Saved |
+| # in TX | What **#** sends while transmitting: DTMF # (at first) or 1750 Hz, for repeaters opened by a 1750 Hz tone burst. Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
 **Green** on TX tone or RX tone opens a page listing every choice: Off,
@@ -1142,6 +1144,29 @@ takes, measured on the radio (`5  27%`). If it ever needs more than 85 %,
 it switches itself off so that the audio does not stutter: the value says
 `slow` and `AI` turns red; changing a level tries again. Whether the C62
 keeps up has to be checked on the radio (see FIRST_FLASH.md).
+
+### Instant replay
+
+The radio keeps the last 30 s of what it received, FM and TETRA alike,
+split into transmissions where there was a pause of 0.7 s or more; the
+last 8 are kept, the oldest cut as the 30 s fill up. Bits under 0.25 s
+(a squelch tail) are not kept.
+
+**P2** on the main screen (or the FM radio) plays the last transmission;
+**P2** again while it plays goes to the one before; holding **P2** stops.
+An amber bar at the top says which one of how many (`Replay 2/3`) and how
+far into it. Anything received meanwhile stops the replay and is heard
+instead. FM is kept as heard, after the AI noise reduction; TETRA speech as
+decoded. The broadcast FM radio is not kept.
+
+### DTMF
+
+While transmitting in FM, hold a key: **0** to **9**, **\*** and **#** send
+their DTMF tones for as long as they are held, the microphone off
+meanwhile, for repeater control, autopatch, IRLP or EchoLink nodes. The
+keys sent show below the channel (`DTMF 123#`). With **Settings** > **FM** >
+# in TX set to 1750 Hz, **#** sends the 1750 Hz tone burst instead, as it
+did before.
 
 ### FM radio
 

@@ -261,6 +261,11 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       or hold Up to seek): music from the speaker. If it stays silent, note
       it: the BK1080's audio path is the unknown. Key a second radio on the
       FM channel meanwhile: the radio goes quiet and the channel is heard
+- [ ] Instant replay: after a transmission on FM or T, press **P2**: it
+      plays again, `Replay 1/1` at the top; **P2** twice goes back further
+- [ ] If you are licensed for it: DTMF, hold PTT and press **1** **2** **3**
+      next to a second radio (or a DTMF decoder app): the tones are heard
+      and decoded, `DTMF 123` on the screen
 - [ ] Spectrum: side key + **0** in FM, key a second radio within the
       view: a bar rises at its frequency; **green** tunes the VFO to it
 

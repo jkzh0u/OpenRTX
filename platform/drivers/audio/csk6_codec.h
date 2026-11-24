@@ -54,6 +54,13 @@ void csk6codec_setMicMonitor(bool on);
 uint8_t csk6codec_getMicLevel(void);
 
 /**
+ * Keep the received FM audio heard for instant replay (CONFIG_REPLAY).
+ *
+ * @param on: true while the channel is heard.
+ */
+void csk6codec_setRxRecord(bool on);
+
+/**
  * AI noise reduction of FM audio (CONFIG_NOISE_REDUCTION).
  *
  * @param rx: level for received audio, 0 off, 1 to 10.

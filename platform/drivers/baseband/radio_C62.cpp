@@ -625,6 +625,34 @@ void radio_setTxTone(uint16_t hz)
                         | (66u << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN));
 }
 
+#ifdef CONFIG_DTMF
+void radio_setTxDtmf(uint16_t low, uint16_t high)
+{
+    if (radioStatus != TX)
+        return;
+
+    if (low == 0) {
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_70, 0);
+        /* Microphone back on */
+        BK4819_writeReg(&c62_bk4819, BK4819_REG_50, 0x3B20);
+        return;
+    }
+
+    /* Both tone generators, in units of 0.0954 Hz, the microphone off as
+     * on the UV-K5 */
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_50, 0xBB20);
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_71,
+                    (uint16_t)(((uint32_t)low * 1048576u + 50000u) / 100000u));
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_72,
+                    (uint16_t)(((uint32_t)high * 1048576u + 50000u) / 100000u));
+    BK4819_writeReg(&c62_bk4819, BK4819_REG_70,
+                    BK4819_REG_70_MASK_ENABLE_TONE1
+                        | (83u << BK4819_REG_70_SHIFT_TONE1_TUNING_GAIN)
+                        | BK4819_REG_70_MASK_ENABLE_TONE2
+                        | (83u << BK4819_REG_70_SHIFT_TONE2_TUNING_GAIN));
+}
+#endif
+
 enum opstatus radio_getStatus()
 {
     return radioStatus;

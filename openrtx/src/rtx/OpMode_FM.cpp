@@ -14,6 +14,7 @@
 #include "core/spectrum.h"
 #include "core/vox.h"
 #include "core/bcast.h"
+#include "core/dtmf.h"
 #include "interfaces/audio.h"
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
@@ -70,6 +71,10 @@ void OpMode_FM::enable()
  * tells the channel's squelch.
  */
 static bool audioOpen;
+#ifdef CONFIG_DTMF
+/* The DTMF key being sent, 0 for none */
+static char dtmfSending;
+#endif
 /* The transceiver's own audio on (the path turns it on when opened) */
 static bool afOn;
 
@@ -151,6 +156,9 @@ void OpMode_FM::disable()
     audioPath_release(txAudioPath);
     audioOpen = false;
     afOn      = false;
+    #ifdef CONFIG_REPLAY
+    audio_setRxRecord(false);
+    #endif
     #ifdef CONFIG_BCAST_FM
     bcast_halt();
     #endif
@@ -353,6 +361,11 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
         sqlOpen = chanOpen && audioOpen;
     }
 
+    #ifdef CONFIG_REPLAY
+    // Instant replay keeps what is heard of the channel
+    audio_setRxRecord(sqlOpen && (status->opStatus == RX));
+    #endif
+
     #ifdef CONFIG_NOISE_REDUCTION
     // Settings > FM, applied by the audio driver to the FM audio
     audio_setNoiseReduction(state.settings.nrRx, state.settings.nrTx);
@@ -384,10 +397,34 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
         radio_enableTx();
 
         status->opStatus = TX;
+        #ifdef CONFIG_DTMF
+        dtmf_clear();
+        dtmfSending = 0;
+        #endif
     }
+
+    #ifdef CONFIG_DTMF
+    // A keypad key held while transmitting: its DTMF tones
+    if(keyed && (status->opStatus == TX) && (dtmf_current() != dtmfSending))
+    {
+        uint16_t low = 0, high = 0;
+        dtmfSending = dtmf_current();
+        if(dtmfSending != 0)
+            dtmf_tones(dtmfSending, &low, &high);
+        radio_setTxDtmf(low, high);
+    }
+    #endif
 
     if(!keyed && (status->opStatus == TX))
     {
+        #ifdef CONFIG_DTMF
+        if(dtmfSending != 0)
+        {
+            radio_setTxDtmf(0, 0);
+            dtmfSending = 0;
+        }
+        #endif
+
         #ifdef CONFIG_ROGER_BEEP
         rogerBeep_play(state.settings.rogerBeep, radio_setTxTone);
         #endif

@@ -20,6 +20,9 @@
 #ifdef CONFIG_NOISE_REDUCTION
 #include "rnnoise.h"
 #endif
+#ifdef CONFIG_REPLAY
+#include "core/replay.h"
+#endif
 #ifdef C62_BASEBAND_DUMP
 #include "baseband_dump_c62.h"
 #endif
@@ -384,9 +387,44 @@ static void apply_routes(void)
     }
 }
 
+#ifdef CONFIG_REPLAY
+/* Received FM audio for instant replay: what goes to the speaker, averaged
+ * over 6 samples to 8 kHz, handed over 10 ms at a time */
+#define REC_DECIMATE (DSP_SAMPLE_RATE / REPLAY_RATE)
+#define REC_BLOCK (REPLAY_RATE / 100)
+static volatile bool rec_on;
+static int32_t rec_sum;
+static unsigned int rec_phase;
+static int16_t rec_buf[REC_BLOCK];
+static size_t rec_fill;
+
+static void rec_sample(int16_t sample)
+{
+    rec_sum += sample;
+    if (++rec_phase < REC_DECIMATE)
+        return;
+    rec_buf[rec_fill++] = (int16_t)(rec_sum / REC_DECIMATE);
+    rec_sum = 0;
+    rec_phase = 0;
+    if (rec_fill == REC_BLOCK) {
+        replay_record(rec_buf, rec_fill);
+        rec_fill = 0;
+    }
+}
+
+void csk6codec_setRxRecord(bool on)
+{
+    rec_on = on;
+}
+#endif
+
 /** Hand a captured sample to the FM outputs taking it from its source */
 static void fm_push(unsigned int source, int16_t sample)
 {
+#ifdef CONFIG_REPLAY
+    if (rec_on && source == SOURCE_RTX && output_source[SINK_SPK] == SOURCE_RTX)
+        rec_sample(sample);
+#endif
     for (unsigned int sink = 0; sink < 2; sink++) {
         if (output_source[sink] != (int)source)
             continue;
