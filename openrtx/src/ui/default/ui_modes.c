@@ -23,6 +23,9 @@
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
+#ifdef CONFIG_SPECTRUM
+#include "core/spectrum.h"
+#endif
 
 /* Colours, as on the TETRA screens */
 static const color_t mdGroup = { 90, 200, 255, 255 };  /* Sky blue */
@@ -290,7 +293,6 @@ static void _ui_drawFmInfo(void)
  */
 void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
 {
-    (void)ui_state;
     const channel_t *ch = &last_state.channel;
     rtxStatus_t rtx = rtx_getCurrentStatus();
     bool tx = platform_getPttStatus() && (rtx.opStatus == TX);
@@ -333,8 +335,22 @@ void _ui_drawFmMain(ui_state_t *ui_state, bool memory)
     else if (rx)
         snprintf(text, sizeof(text), "Receiving  S%u",
                  rssiToSlevel(last_state.rssi));
-    gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER,
-              tx ? mdTx : (rx ? mdVoice : mdMuted), "%s", text);
+    color_t smallColor = tx ? mdTx : (rx ? mdVoice : mdMuted);
+#ifdef CONFIG_SCAN
+    if (!tx && !rx && ui_state->scan_on) {
+        const char *what = ui_state->scan_stopped   ? "Paused" :
+                           (ui_state->scan_dir > 0) ? "Scan up" :
+                                                      "Scan down";
+        if (memory)
+            snprintf(text, sizeof(text), "%s  Ch %u", what,
+                     last_state.channel_index + 1);
+        else
+            snprintf(text, sizeof(text), "%s", what);
+        smallColor = yellow_fab413;
+    }
+#endif
+    gfx_print(small, layout.line4_font, TEXT_ALIGN_CENTER, smallColor, "%s",
+              text);
 
     /* Signal, with the squelch level as a tick; the squelch opens at
      * -127 + level * 66 / 15 dBm (OpMode_FM) */
@@ -413,6 +429,148 @@ void _ui_drawFastCopy(ui_state_t *ui_state)
               "green copies, red cancels");
 }
 
+#endif
+
+#ifdef CONFIG_SPECTRUM
+/* Distance between the points of the spectrum view at each zoom, Hz: the
+ * view is SPECTRUM_BINS of them wide */
+static const uint32_t spectrumSteps[SPECTRUM_ZOOMS] = {
+    2500, 5000, 6250, 12500, 25000, 50000, 100000, 250000,
+};
+
+uint32_t _ui_spectrumStep(uint8_t zoom)
+{
+    return spectrumSteps[(zoom < SPECTRUM_ZOOMS) ? zoom : SPECTRUM_ZOOM_START];
+}
+
+int _ui_spectrumPeak(const struct spectrumSweep *s)
+{
+    int best = -1;
+
+    if (s->count == 0)
+        return -1;
+    for (int i = 0; i < SPECTRUM_BINS; i++) {
+        if (s->rssi[i] == SPECTRUM_NONE)
+            continue;
+        if (best < 0 || s->rssi[i] > s->rssi[best])
+            best = i;
+    }
+    return best;
+}
+
+/** A distance in Hz as text: 12.5k, 1M, 2.5M */
+static void _ui_specHz(char *buf, size_t len, uint32_t hz)
+{
+    if (hz >= 1000000 && hz % 1000000 == 0)
+        snprintf(buf, len, "%luM", (unsigned long)(hz / 1000000));
+    else if (hz >= 1000000)
+        snprintf(buf, len, "%lu.%luM", (unsigned long)(hz / 1000000),
+                 (unsigned long)(hz % 1000000 / 100000));
+    else if (hz % 1000 == 0)
+        snprintf(buf, len, "%luk", (unsigned long)(hz / 1000));
+    else if (hz % 100 == 0)
+        snprintf(buf, len, "%lu.%luk", (unsigned long)(hz / 1000),
+                 (unsigned long)(hz % 1000 / 100));
+    else
+        snprintf(buf, len, "%lu.%02luk", (unsigned long)(hz / 1000),
+                 (unsigned long)(hz % 1000 / 10));
+}
+
+/* Bottom and top of the graph's scale, dBm */
+#define SPEC_FLOOR (-130)
+#define SPEC_TOP (-40)
+
+/**
+ * Spectrum view: the frequency in the middle and the width above, a bar
+ * for each point, the edges below and the strongest signal at the bottom.
+ * From side key + 0 in FM.
+ */
+void _ui_drawSpectrum(ui_state_t *ui_state)
+{
+    static struct spectrumSweep s;
+    uint32_t step = _ui_spectrumStep(ui_state->spec_zoom);
+    char text[32], freq[16], width[12];
+
+    spectrum_get(&s);
+    gfx_clearScreen();
+
+    /* The view asked for: the frequency in the middle, then its width */
+    _ui_mdFreq(freq, sizeof(freq), ui_state->spec_center);
+    point_t pos = { 0, 11 };
+    gfx_print(pos, FONT_SIZE_8PT, TEXT_ALIGN_CENTER, color_white, "%s", freq);
+    _ui_specHz(text, sizeof(text), step);
+    _ui_specHz(width, sizeof(width), step * SPECTRUM_BINS);
+    pos.y = 20;
+    gfx_print(pos, FONT_SIZE_5PT, TEXT_ALIGN_CENTER, mdMuted,
+              "%s wide  step %s", width, text);
+
+    /* The graph, two pixels a point */
+    const uint16_t top = 24, bottom = 101;
+    const uint16_t barW = CONFIG_SCREEN_WIDTH / SPECTRUM_BINS;
+    const uint16_t left = (CONFIG_SCREEN_WIDTH - barW * SPECTRUM_BINS) / 2;
+    int peak = _ui_spectrumPeak(&s);
+    rssi_t sql = -127 + (last_state.settings.sqlLevel * 66) / 15;
+    bool current = (s.count > 0) && (s.center == ui_state->spec_center)
+                && (s.step == step);
+
+    for (uint16_t y = top; y < bottom; y += 18) {
+        point_t a = { left, y };
+        point_t b = { (uint16_t)(CONFIG_SCREEN_WIDTH - left - 1), y };
+        gfx_drawLine(a, b, mdTrack);
+    }
+    point_t ca = { (uint16_t)(left + barW * (SPECTRUM_BINS / 2)), top };
+    for (uint16_t y = top; y < bottom; y += 4) {
+        point_t a = { ca.x, y };
+        point_t b = { ca.x, (uint16_t)(y + 1) };
+        gfx_drawLine(a, b, yellow_fab413);
+    }
+
+    for (int i = 0; current && i < SPECTRUM_BINS; i++) {
+        int16_t v = s.rssi[i];
+        if (v == SPECTRUM_NONE || v <= SPEC_FLOOR)
+            continue;
+        if (v > SPEC_TOP)
+            v = SPEC_TOP;
+        uint16_t h = (uint16_t)((v - SPEC_FLOOR) * (bottom - top)
+                                / (SPEC_TOP - SPEC_FLOOR));
+        if (h == 0)
+            continue;
+        color_t c = (i == peak)       ? color_white :
+                    (s.rssi[i] > sql) ? mdVoice :
+                                        mdGroup;
+        point_t bar = { (uint16_t)(left + barW * i), (uint16_t)(bottom - h) };
+        gfx_drawRect(bar, barW, h, c, true);
+    }
+    point_t base = { left, bottom };
+    gfx_drawRect(base, (uint16_t)(barW * SPECTRUM_BINS), 1, mdMuted, true);
+
+    /* The edges */
+    uint32_t half = step * (SPECTRUM_BINS / 2);
+    uint32_t lo = ui_state->spec_center - half;
+    uint32_t hi = ui_state->spec_center + half;
+    pos.y = 110;
+    pos.x = 1;
+    gfx_print(pos, FONT_SIZE_5PT, TEXT_ALIGN_LEFT, mdMuted, "%lu.%03lu",
+              (unsigned long)(lo / 1000000),
+              (unsigned long)(lo % 1000000 / 1000));
+    pos.x = 0;
+    gfx_print(pos, FONT_SIZE_5PT, TEXT_ALIGN_RIGHT, mdMuted, "%lu.%03lu",
+              (unsigned long)(hi / 1000000),
+              (unsigned long)(hi % 1000000 / 1000));
+
+    /* The strongest signal, which green tunes to */
+    pos.x = 0;
+    pos.y = 124;
+    if (!current || peak < 0) {
+        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, mdMuted,
+                  "sweeping...");
+        return;
+    }
+    _ui_mdFreq(freq, sizeof(freq), spectrum_binHz(s.center, s.step, peak));
+    bool strong = s.rssi[peak] > sql;
+    gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, strong ? mdVoice : mdMuted,
+              "%s  %d dBm", freq, (int)s.rssi[peak]);
+}
 #endif
 
 #endif /* CONFIG_UI_FM_SCREEN */

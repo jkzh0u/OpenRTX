@@ -72,6 +72,9 @@ typedef struct
     uint8_t rogerBeep;            // FM roger beep style, 0 off (roger_beep.h)
     uint8_t talkPermit;           // FM talk permit tone style, 0 off
 #endif
+#ifdef CONFIG_SCAN
+    uint8_t scanResume;           // FM scan resume, 0 carrier (ui_default.h)
+#endif
 }
 __attribute__((packed)) settings_t;
 
@@ -114,6 +117,9 @@ static const settings_t default_settings =
 #ifdef CONFIG_ROGER_BEEP
     0,                            // No roger beep
     0,                            // No talk permit tone
+#endif
+#ifdef CONFIG_SCAN
+    0,                            // Scan resumes when the signal has gone
 #endif
 };
 

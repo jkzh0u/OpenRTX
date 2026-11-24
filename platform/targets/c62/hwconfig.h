@@ -42,6 +42,10 @@ extern "C" {
 #define CONFIG_DCS
 /* FM fast copy: read a nearby radio's frequency and tone (long *) */
 #define CONFIG_FAST_COPY
+/* FM spectrum view (side key + 0) */
+#define CONFIG_SPECTRUM
+/* FM scan of the memory channels or the VFO (long 0) */
+#define CONFIG_SCAN
 
 /* Battery type */
 #define CONFIG_BAT_LIION

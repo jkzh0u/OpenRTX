@@ -548,6 +548,16 @@ int _ui_getFMValueName(char* buf, uint8_t max_len, uint8_t index)
             break;
 #endif
 
+#ifdef CONFIG_SCAN
+        case FM_SCAN_RESUME: {
+            static const char *names[] = { "Carrier", "Time", "Stop" };
+            uint8_t r = last_state.settings.scanResume;
+            sniprintf(buf, max_len, "%s",
+                      names[(r < SCAN_RESUME_NUM) ? r : 0]);
+            break;
+        }
+#endif
+
         case FM_TX_TONE:
         case FM_RX_TONE: {
             if (index == FM_TX_TONE)
@@ -1567,7 +1577,13 @@ static bool _ui_drawMacroGrid(ui_state_t *ui_state)
         {2, 2, 1, "9", NULL, "keypad",
          ui_state->input_locked ? "unlock" : "lock", true, 8},
         {0, 3, 1, NULL, NULL, "squelch", sql, fm, -1},
-#ifdef CONFIG_TETRA_LOG
+#if defined(CONFIG_SPECTRUM) && defined(CONFIG_TETRA_LOG)
+        // 0: the spectrum view in FM, else sending the TETRA log
+        {1, 3, 1, "0", NULL, fm ? "scope" : "log", fm ? "band" : "send",
+         true, -1},
+#elif defined(CONFIG_SPECTRUM)
+        {1, 3, 1, "0", NULL, "scope", "band", fm, -1},
+#elif defined(CONFIG_TETRA_LOG)
         {1, 3, 1, "0", NULL, "log", "send", true, -1},
 #else
         {1, 3, 1, NULL, NULL, "", NULL, false, -1},

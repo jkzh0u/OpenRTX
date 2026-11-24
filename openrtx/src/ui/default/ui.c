@@ -69,6 +69,9 @@
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
 #endif
+#ifdef CONFIG_SPECTRUM
+#include "core/spectrum.h"
+#endif
 #ifdef CONFIG_MEMCH
 #include "core/memch.h"
 #endif
@@ -209,6 +212,9 @@ const char* settings_fm_items[] =
 #ifdef CONFIG_ROGER_BEEP
     "Talk permit",
     "Roger beep",
+#endif
+#ifdef CONFIG_SCAN
+    "Scan resume",
 #endif
 };
 
@@ -980,6 +986,14 @@ static void _ui_changeFmSetting(uint8_t item, int step)
             break;
 #endif
 
+#ifdef CONFIG_SCAN
+        case FM_SCAN_RESUME:
+            state.settings.scanResume =
+                (uint8_t)((state.settings.scanResume + SCAN_RESUME_NUM + step)
+                          % SCAN_RESUME_NUM);
+            break;
+#endif
+
         case FM_RX_TONE: {
             uint8_t idx = state.channel.fm.rxTone;
             bool dcs = state.channel.rxDcs, inv = state.channel.rxDcsInv;
@@ -1079,6 +1093,336 @@ static void _ui_fastCopyApply(bool *sync_rtx)
     state.vfo_channel = state.channel;
     state.ui_screen = MAIN_VFO;
     *sync_rtx = true;
+}
+#endif
+
+#ifdef CONFIG_SCAN
+/*
+ * FM scan, from a long 0: memory mode goes through the memory channels (the
+ * FM ones), VFO mode steps the frequency through its band. It hops on each
+ * status update (100 ms) while nothing is heard, and stops where the
+ * squelch opens.
+ */
+
+/* After a hop, before the signal there counts: the rtx thread retunes and
+ * the RSSI filter settles */
+#define SCAN_SETTLE_MS 90
+/* A carrier on a channel with a receive tone: how long to wait for the
+ * tone before going on */
+#define SCAN_TONE_MS 600
+/* Status updates in a row with the squelch open before stopping */
+#define SCAN_OPENS 2
+/* Carrier resume: going on once nothing is heard for this long */
+#define SCAN_CARRIER_MS 2000
+/* Time resume: going on this long after stopping */
+#define SCAN_TIME_MS 5000
+
+/**
+ * @return the number of memory channels, in the bank if one is in use.
+ */
+static uint16_t _ui_scanChannelCount(void)
+{
+    if(state.bank_enabled)
+    {
+        bankHdr_t bank = { 0 };
+        cps_readBankHeader(&bank, state.bank);
+        return bank.ch_count;
+    }
+
+    channel_t ch;
+    uint16_t n = 0;
+    while((n < 4096) && (cps_readChannel(&ch, n) != -1))
+        n++;
+    return n;
+}
+
+/** The next memory channel, the FM ones only */
+static void _ui_scanHopMemory(bool *sync_rtx)
+{
+    uint16_t count = ui_state.scan_count;
+    int32_t idx = state.channel_index;
+
+    for(uint16_t tries = 0; tries < count; tries++)
+    {
+        idx = (idx + ui_state.scan_dir + count) % count;
+        if((_ui_fsm_loadChannel((int16_t)idx, sync_rtx) != -1)
+           && (state.channel_index == idx)
+           && (state.channel.mode == OPMODE_FM))
+            return;
+    }
+}
+
+/** The next frequency, one step on, within the band of the current one */
+static void _ui_scanHopVfo(bool *sync_rtx)
+{
+    const hwInfo_t *hw = platform_getHwInfo();
+    freq_t rx = state.channel.rx_frequency;
+    int32_t shift = (int32_t)(state.channel.tx_frequency - rx);
+    freq_t step = freq_steps[state.step_index];
+    freq_t lo = hw->uhf_minFreq * 1000000u;
+    freq_t hi = hw->uhf_maxFreq * 1000000u;
+
+    if(hw->vhf_band && (rx <= hw->vhf_maxFreq * 1000000u))
+    {
+        lo = hw->vhf_minFreq * 1000000u;
+        hi = hw->vhf_maxFreq * 1000000u;
+    }
+
+    if(ui_state.scan_dir > 0)
+        rx = (rx + step > hi) ? lo : rx + step;
+    else
+        rx = (rx < lo + step) ? hi : rx - step;
+
+    state.channel.rx_frequency = rx;
+    state.channel.tx_frequency = rx + shift;
+    if(!_ui_freq_check_limits(state.channel.tx_frequency))
+        state.channel.tx_frequency = rx;
+    state.vfo_channel = state.channel;
+    *sync_rtx = true;
+}
+
+static void _ui_scanHop(long long now, bool *sync_rtx)
+{
+    if(state.ui_screen == MAIN_MEM)
+        _ui_scanHopMemory(sync_rtx);
+    else
+        _ui_scanHopVfo(sync_rtx);
+
+    ui_state.scan_stopped = false;
+    ui_state.scan_opens = 0;
+    ui_state.scan_tick = now;
+}
+
+static void _ui_scanStop(void)
+{
+    ui_state.scan_on = false;
+    ui_state.scan_stopped = false;
+}
+
+/**
+ * Long 0 in FM, on the main screens: start scanning upwards.
+ */
+static void _ui_scanStart(bool *sync_rtx)
+{
+    if(state.channel.mode != OPMODE_FM)
+        return;
+
+    if(state.ui_screen == MAIN_MEM)
+    {
+        ui_state.scan_count = _ui_scanChannelCount();
+        if(ui_state.scan_count < 2)
+            return;
+    }
+
+    ui_state.scan_on = true;
+    ui_state.scan_dir = 1;
+    _ui_scanHop(getTick(), sync_rtx);
+}
+
+/**
+ * Keys while scanning: up and down turn it that way and hop at once, any
+ * other key stops it on the channel where it is.
+ *
+ * @return true if the key was used.
+ */
+static bool _ui_scanKey(kbd_msg_t msg, bool *sync_rtx)
+{
+    if(!ui_state.scan_on)
+        return false;
+
+    // Releases, and the long press of the key that started it
+    if((msg.keys == 0) || msg.long_press)
+        return true;
+
+    if(msg.keys & (KEY_UP | KNOB_RIGHT))
+    {
+        ui_state.scan_dir = 1;
+        _ui_scanHop(getTick(), sync_rtx);
+    }
+    else if(msg.keys & (KEY_DOWN | KNOB_LEFT))
+    {
+        ui_state.scan_dir = -1;
+        _ui_scanHop(getTick(), sync_rtx);
+    }
+    else
+    {
+        _ui_scanStop();
+    }
+    return true;
+}
+
+/**
+ * On each status update: hop on, stop on a signal, or go on after one.
+ */
+static void _ui_scanTick(long long now, bool *sync_rtx)
+{
+    if(!ui_state.scan_on)
+        return;
+
+    // Out of the main screens, out of FM or transmitting: over
+    bool main = (state.ui_screen == MAIN_MEM) || (state.ui_screen == MAIN_VFO);
+    if(!main || (state.channel.mode != OPMODE_FM) || platform_getPttStatus())
+    {
+        _ui_scanStop();
+        return;
+    }
+
+    bool open = rtx_rxSquelchOpen();
+
+    if(ui_state.scan_stopped)
+    {
+        if(open)
+            ui_state.scan_heard = now;
+
+        bool resume = false;
+        if(state.settings.scanResume == SCAN_RESUME_TIME)
+            resume = (now - ui_state.scan_tick) >= SCAN_TIME_MS;
+        else
+            resume = (now - ui_state.scan_heard) >= SCAN_CARRIER_MS;
+        if(resume)
+            _ui_scanHop(now, sync_rtx);
+        return;
+    }
+
+    if((now - ui_state.scan_tick) < SCAN_SETTLE_MS)
+        return;
+
+    if(open)
+    {
+        if(++ui_state.scan_opens < SCAN_OPENS)
+            return;
+        if(state.settings.scanResume == SCAN_RESUME_STOP)
+        {
+            _ui_scanStop();
+            return;
+        }
+        ui_state.scan_stopped = true;
+        ui_state.scan_tick = now;
+        ui_state.scan_heard = now;
+        return;
+    }
+    ui_state.scan_opens = 0;
+
+    // A carrier, but the tone squelch is still closed: wait a little for
+    // the tone, unless it is someone else's
+    rssi_t sql = -127 + (state.settings.sqlLevel * 66) / 15;
+    if(state.channel.fm.rxToneEn && (rtx_getRssi() > sql + 1)
+       && ((now - ui_state.scan_tick) < SCAN_TONE_MS))
+        return;
+
+    _ui_scanHop(now, sync_rtx);
+}
+#endif
+
+#ifdef CONFIG_SPECTRUM
+/* In ui_modes.c */
+extern void _ui_drawSpectrum(ui_state_t *ui_state);
+
+#define SPECTRUM_MIN_HZ 136000000u
+#define SPECTRUM_MAX_HZ 600000000u
+
+static void _ui_spectrumView(void)
+{
+    uint32_t half = _ui_spectrumStep(ui_state.spec_zoom) * (SPECTRUM_BINS / 2);
+
+    if(ui_state.spec_center < SPECTRUM_MIN_HZ + half)
+        ui_state.spec_center = SPECTRUM_MIN_HZ + half;
+    if(ui_state.spec_center > SPECTRUM_MAX_HZ - half)
+        ui_state.spec_center = SPECTRUM_MAX_HZ - half;
+    spectrum_setView(ui_state.spec_center,
+                     _ui_spectrumStep(ui_state.spec_zoom));
+}
+
+/**
+ * Side key + 0 in FM, on the main screens: the spectrum view, around the
+ * frequency in use.
+ */
+static void _ui_spectrumOpen(void)
+{
+    ui_state.last_main_state = state.ui_screen;
+    ui_state.spec_center = state.channel.rx_frequency;
+    ui_state.spec_zoom = SPECTRUM_ZOOM_START;
+    _ui_spectrumView();
+    spectrum_start(ui_state.spec_center,
+                   _ui_spectrumStep(ui_state.spec_zoom));
+    state.ui_screen = SPECTRUM;
+}
+
+/**
+ * Green in the spectrum view: the VFO to the strongest signal.
+ */
+static void _ui_spectrumTune(bool *sync_rtx)
+{
+    struct spectrumSweep s;
+    spectrum_get(&s);
+    int peak = _ui_spectrumPeak(&s);
+    if(peak < 0)
+        return;
+
+    freq_t hz = spectrum_binHz(s.center, s.step, (unsigned)peak);
+    if(!_ui_freq_check_limits(hz))
+        return;
+
+    if(ui_state.last_main_state == MAIN_MEM)
+        state.channel = state.vfo_channel;
+    state.channel.mode = OPMODE_FM;
+    state.channel.rx_frequency = hz;
+    state.channel.tx_frequency = hz;
+    state.vfo_channel = state.channel;
+    state.ui_screen = MAIN_VFO;
+    *sync_rtx = true;
+}
+
+/**
+ * Keys of the spectrum view: up and down move it a quarter of its width,
+ * * and # zoom in and out, green tunes the VFO to the strongest signal,
+ * red goes back.
+ */
+static void _ui_spectrumKey(kbd_msg_t msg, bool *sync_rtx)
+{
+    uint32_t quarter = _ui_spectrumStep(ui_state.spec_zoom)
+                     * (SPECTRUM_BINS / 4);
+
+    if(msg.keys == 0)
+        return;
+
+    if(msg.keys & (KEY_UP | KNOB_RIGHT))
+    {
+        ui_state.spec_center += quarter;
+        _ui_spectrumView();
+    }
+    else if(msg.keys & (KEY_DOWN | KNOB_LEFT))
+    {
+        ui_state.spec_center -= quarter;
+        _ui_spectrumView();
+    }
+    else if(msg.long_press)
+    {
+        // Nothing held does more
+    }
+    else if(msg.keys & KEY_STAR)
+    {
+        if(ui_state.spec_zoom > 0)
+            ui_state.spec_zoom--;
+        _ui_spectrumView();
+    }
+    else if(msg.keys & KEY_HASH)
+    {
+        if(ui_state.spec_zoom + 1 < SPECTRUM_ZOOMS)
+            ui_state.spec_zoom++;
+        _ui_spectrumView();
+    }
+    else if(msg.keys & KEY_ENTER)
+    {
+        _ui_spectrumTune(sync_rtx);
+        if(state.ui_screen != SPECTRUM)
+            spectrum_stop();
+    }
+    else if(msg.keys & KEY_ESC)
+    {
+        spectrum_stop();
+        state.ui_screen = ui_state.last_main_state;
+    }
 }
 #endif
 
@@ -1588,9 +1932,16 @@ static bool _ui_memNumberKeys(kbd_msg_t msg, bool *sync_rtx)
     if(msg.long_press)
     {
         memPendingKey = 0;
-        // 0 has no function: still a digit
         if(digit == 0)
         {
+            #ifdef CONFIG_SCAN
+            // Long 0 in FM: scan; once a number is started, still a digit
+            if(!typing && (state.channel.mode == OPMODE_FM))
+            {
+                _ui_scanStart(sync_rtx);
+                return true;
+            }
+            #endif
             _ui_chEntryDigit(0, sync_rtx);
             return true;
         }
@@ -1729,6 +2080,19 @@ static void _ui_fsm_menuMacro(kbd_msg_t msg, bool *sync_rtx)
             break;
     }
 
+#ifdef CONFIG_SPECTRUM
+    // Side key + 0 in FM: the spectrum view
+    bool mainScreen = (state.ui_screen == MAIN_VFO)
+                   || (state.ui_screen == MAIN_MEM);
+    if((msg.keys & KEY_0) && !msg.long_press && mainScreen
+       && (state.channel.mode == OPMODE_FM))
+    {
+        macro_latched = false;
+        macro_menu = false;
+        _ui_spectrumOpen();
+        return;
+    }
+#endif
 #ifdef CONFIG_TETRA_LOG
     // Side key + 0: send the stored TETRA log over the cable
     if((msg.keys & KEY_0) && !msg.long_press)
@@ -2237,6 +2601,13 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else
                 {
+                    #ifdef CONFIG_SCAN
+                    if(_ui_scanKey(msg, sync_rtx))
+                    {
+                        // Scanning: up, down, or stop
+                    }
+                    else
+                    #endif
                     #ifdef CONFIG_TETRA
                     if(_ui_tetraKeys(msg))
                     {
@@ -2373,6 +2744,19 @@ void ui_updateFSM(bool *sync_rtx)
                     state.ui_screen = MAIN_VFO;
                     _ui_cycleMode(sync_rtx, queueFlags);
                 }
+                #ifdef CONFIG_SCAN
+                // Only the 0 typed, and held: scan in FM (no frequency
+                // starts with 0)
+                else if(msg.long_press && (msg.keys == KEY_0)
+                        && (ui_state.input_set == SET_RX)
+                        && (ui_state.input_position == 1)
+                        && (ui_state.input_number == 0)
+                        && (state.channel.mode == OPMODE_FM))
+                {
+                    state.ui_screen = MAIN_VFO;
+                    _ui_scanStart(sync_rtx);
+                }
+                #endif
                 else if(msg.keys & KEY_ENTER)
                 {
                     _ui_fsm_confirmVFOInput(sync_rtx);
@@ -2472,6 +2856,13 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 else
                 {
+                    #ifdef CONFIG_SCAN
+                    if(_ui_scanKey(msg, sync_rtx))
+                    {
+                        // Scanning: up, down, or stop
+                    }
+                    else
+                    #endif
                     if(_ui_memNumberKeys(msg, sync_rtx))
                     {
                         // Channel number, or a long press function
@@ -2562,6 +2953,11 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
             // Top menu screen
+            #ifdef CONFIG_SPECTRUM
+            case SPECTRUM:
+                _ui_spectrumKey(msg, sync_rtx);
+                break;
+            #endif
             #ifdef CONFIG_FAST_COPY
             // Fast copy: green copies what was found, red stops
             case FAST_COPY:
@@ -3460,6 +3856,9 @@ void ui_updateFSM(bool *sync_rtx)
     }
     else if(event.type == EVENT_STATUS)
     {
+#ifdef CONFIG_SCAN
+        _ui_scanTick(now, sync_rtx);
+#endif
         // Channel number typed and left: jump to it
         if(ui_state.ch_entry_digits > 0)
         {
@@ -3487,7 +3886,13 @@ void ui_updateFSM(bool *sync_rtx)
         tetraCall = _ui_tetraCallActive();
         #endif
 
-        if (txOngoing || rtx_rxSquelchOpen() || tetraCall ||
+        bool watching = false;
+        #ifdef CONFIG_SPECTRUM
+        // The spectrum view keeps the screen on
+        watching = (state.ui_screen == SPECTRUM);
+        #endif
+
+        if (txOngoing || rtx_rxSquelchOpen() || tetraCall || watching ||
             (state.volume != last_state.volume))
         {
             _ui_exitStandby(now);
@@ -3567,6 +3972,11 @@ bool ui_updateGUI()
 #ifdef CONFIG_FAST_COPY
         case FAST_COPY:
             _ui_drawFastCopy(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_SPECTRUM
+        case SPECTRUM:
+            _ui_drawSpectrum(&ui_state);
             break;
 #endif
         // Flash backup and restore screen

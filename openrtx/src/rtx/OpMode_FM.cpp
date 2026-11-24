@@ -11,6 +11,7 @@
 #include "core/state.h"
 #include "core/roger_beep.h"
 #include "core/fast_copy.h"
+#include "core/spectrum.h"
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
 #include <string.h>
@@ -124,24 +125,33 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
 {
     (void) newCfg;
 
+    #if defined(CONFIG_FAST_COPY) || defined(CONFIG_SPECTRUM)
+    // Fast copy or the spectrum view has the radio: no reception, no
+    // transmission
+    static bool borrowed;
+    bool borrow = false;
     #ifdef CONFIG_FAST_COPY
-    // Fast copy has the radio: no reception, no transmission
-    static bool fastCopying;
-    if(fastCopy_run(getTick()))
+    borrow = fastCopy_run(getTick());
+    #endif
+    #ifdef CONFIG_SPECTRUM
+    if(!borrow)
+        borrow = spectrum_run();
+    #endif
+    if(borrow)
     {
         if(sqlOpen)
         {
             audioPath_release(rxAudioPath);
             sqlOpen = false;
         }
-        fastCopying = true;
-        sleepFor(0u, 30u);
+        borrowed = true;
+        sleepFor(0u, 10u);
         return;
     }
-    if(fastCopying)
+    if(borrowed)
     {
         // Receive normally again, with the configuration's settings
-        fastCopying = false;
+        borrowed = false;
         radio_disableRtx();
         status->opStatus = OFF;
         enterRx = true;

@@ -246,6 +246,11 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
 - [ ] Fast copy: hold **\*** in FM, key a second radio next to the C62
       (set to a tone or DCS code): the frequency, then the tone or code,
       appear; **green** copies them into the VFO
+- [ ] Scan: squelch above Off, hold **0** in memory mode: `Scan up`, the
+      channels change about 10 times a second; key a second radio on one of
+      them: it stops there and plays it, then goes on 2 s after you let go
+- [ ] Spectrum: side key + **0** in FM, key a second radio within the
+      view: a bar rises at its frequency; **green** tunes the VFO to it
 
 ## If something goes wrong
 

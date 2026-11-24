@@ -43,6 +43,7 @@
 #include "protocols/TETRA/TetraStatus.h"
 #include "core/settings.h"
 #include "core/fast_copy.h"
+#include "core/spectrum.h"
 #include "core/voicePrompts.h"
 #include "core/voicePromptUtils.h"
 #include "interfaces/platform.h"
@@ -67,6 +68,7 @@ void _ui_drawTetraRecent(ui_state_t *ui_state);
 void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 void _ui_drawTetraFieldTest(ui_state_t *ui_state);
 void _ui_drawFastCopy(ui_state_t *ui_state);
+void _ui_drawSpectrum(ui_state_t *ui_state);
 void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
 /* Menus, ui_menu.c */
@@ -184,6 +186,36 @@ bool memch_read(uint16_t slot, channel_t *ch)
 void fastCopy_get(struct fastCopyResult *out)
 {
     *out = fastCopy;
+}
+
+static struct spectrumSweep sweep;
+
+void spectrum_get(struct spectrumSweep *out)
+{
+    *out = sweep;
+}
+
+/**
+ * A made up sweep: noise, a strong signal and a weak one, each spreading
+ * over the points beside it.
+ */
+static void fakeSweep(uint32_t center, uint32_t step)
+{
+    static const int16_t skirt[] = { 0, -14, -26, -34 };
+
+    memset(&sweep, 0, sizeof(sweep));
+    sweep.center = center;
+    sweep.step = step;
+    sweep.count = 12;
+    for (int i = 0; i < SPECTRUM_BINS; i++)
+        sweep.rssi[i] = (int16_t)(-127 + (i * 7 % 5));
+    for (int k = -3; k <= 3; k++) {
+        int a = 70 + k, b = 30 + k, d = (k < 0) ? -k : k;
+        if (-68 + skirt[d] > sweep.rssi[a])
+            sweep.rssi[a] = (int16_t)(-68 + skirt[d]);
+        if (d < 2 && -104 + skirt[d] / 2 > sweep.rssi[b])
+            sweep.rssi[b] = (int16_t)(-104 + skirt[d] / 2);
+    }
 }
 
 static bool fmRxOpen;
@@ -336,8 +368,15 @@ enum screen {
     SCREEN_RECENT,
     SCREEN_DETAIL,
     SCREEN_FIELD_TEST,
-    SCREEN_FAST_COPY
+    SCREEN_FAST_COPY,
+    SCREEN_SPECTRUM
 };
+
+/* FM scan shown on the next scenes: 0 off, 1 scanning, 2 paused */
+static int scanShown;
+/* The spectrum view shown */
+static uint32_t specCenter;
+static uint8_t specZoom;
 
 /* Memory channel number being typed, drawn on the next scene */
 static uint16_t chEntry;
@@ -353,6 +392,11 @@ static void draw(const char *name, enum screen screen)
     ui.ch_entry = chEntry;
     ui.ch_entry_digits = (chEntry > 0) ? 1 : 0;
     ui.menu_selected = scroll;
+    ui.scan_on = scanShown != 0;
+    ui.scan_stopped = scanShown == 2;
+    ui.scan_dir = 1;
+    ui.spec_center = specCenter;
+    ui.spec_zoom = specZoom;
     if (screen == SCREEN_MEM)
         _ui_drawMainMEM(&ui);
     else if (screen == SCREEN_RECENT)
@@ -363,6 +407,8 @@ static void draw(const char *name, enum screen screen)
         _ui_drawTetraFieldTest(&ui);
     else if (screen == SCREEN_FAST_COPY)
         _ui_drawFastCopy(&ui);
+    else if (screen == SCREEN_SPECTRUM)
+        _ui_drawSpectrum(&ui);
     else
         _ui_drawMainVFO(&ui);
     gfx_render();
@@ -641,6 +687,38 @@ static void fmScenes(void)
     fastCopy.tone = RTX_TONE_DCS | 0023;
     draw("fm-6d-fast-copy-dcs", SCREEN_FAST_COPY);
     memset(&fastCopy, 0, sizeof(fastCopy));
+
+    /* Scan: going through the memory channels, then stopped on one */
+    last_state.channel.rx_frequency = 146520000;
+    last_state.channel.tx_frequency = 146520000;
+    last_state.channel.fm.txToneEn = 0;
+    last_state.channel.fm.rxToneEn = 0;
+    last_state.channel.power = 5000;
+    strcpy(last_state.channel.name, "Calling 2m");
+    last_state.rssi = -124;
+    scanShown = 1;
+    scene("fm-7-scanning-memory", true);
+    scene("fm-7b-scanning-vfo", false);
+    last_state.rssi = -72;
+    fmRxOpen = true;
+    scanShown = 2;
+    scene("fm-7c-scan-stopped", true);
+    fmRxOpen = false;
+    last_state.rssi = -124;
+    scene("fm-7d-scan-paused", true);
+    scanShown = 0;
+
+    /* Spectrum: 1 MHz around 146.520, then zoomed out, then the first
+     * sweep not done yet */
+    specCenter = 146520000;
+    specZoom = SPECTRUM_ZOOM_START;
+    fakeSweep(specCenter, _ui_spectrumStep(specZoom));
+    draw("fm-8-spectrum", SCREEN_SPECTRUM);
+    specZoom = SPECTRUM_ZOOM_START + 2;
+    fakeSweep(specCenter, _ui_spectrumStep(specZoom));
+    draw("fm-8b-spectrum-wide", SCREEN_SPECTRUM);
+    memset(&sweep, 0, sizeof(sweep));
+    draw("fm-8c-spectrum-sweeping", SCREEN_SPECTRUM);
     last_state.channel = saved;
     strcpy(last_state.channel.name, savedName);
     last_state.rssi = -85;

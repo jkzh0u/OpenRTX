@@ -141,6 +141,25 @@ bool radio_fastCopyToneResult(uint16_t *tone);
 void radio_fastCopyStop();
 #endif
 
+#ifdef CONFIG_SPECTRUM
+/**
+ * Spectrum view (core/spectrum.h): get ready to read the signal strength
+ * across a band, audio off. While receiving.
+ */
+void radio_spectrumStart();
+
+/**
+ * Tune to a frequency and read the signal strength there.
+ *
+ * @param hz: frequency, Hz.
+ * @return the signal strength, dBm.
+ */
+rssi_t radio_spectrumRssi(uint32_t hz);
+
+/** Done. Reception is set up again with radio_enableRx(). */
+void radio_spectrumStop();
+#endif
+
 #ifdef CONFIG_ROGER_BEEP
 /**
  * While transmitting, add a tone to the transmitted audio, for roger beeps

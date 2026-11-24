@@ -83,6 +83,7 @@ On the main screen, in any mode:
 | Long **1** to **9** | Memory: the side key shortcut of that number, without the side key. Long **9** also unlocks the keypad |
 | Long **5** | VFO: change mode, if 5 is the first digit typed (it is then dropped) |
 | Long **\*** | FM: fast copy, read the channel of a radio keyed next to this one (section 10) |
+| Long **0** | FM: scan the memory channels, or in VFO mode the band (section 10) |
 | Side key + number | Shortcut, see below |
 
 In memory mode a short press of a number types a channel number, shown
@@ -105,7 +106,7 @@ own does the same, without the side key.
 | **6** | Transmit power |
 | **7** / **8** | Brightness down / up |
 | **9** | Lock or unlock the keypad |
-| **0** | Send the TETRA log kept by the radio over the cable (see 5, Receive log) |
+| **0** | FM: the spectrum view (section 10). Other modes: send the TETRA log kept by the radio over the cable (see 5, Receive log) |
 
 In T mode, on the main screen:
 
@@ -1001,6 +1002,7 @@ The main screen shows, from the top:
 | TX tone | The tone sent: a CTCSS tone, 67.0 to 254.1 Hz, or a DCS code, D023N to D754N, then the inverted D023I to D754I |
 | RX tone | The tone the squelch waits for, from the same list. A DCS code opens it whether it arrives normal or inverted |
 | Talk permit | A tone in the radio's own speaker when you press PTT, telling you to talk, as on Motorola radios: Off (at first), Beep, Double, Motorola (Motorola's trunking talk permit: four 910 Hz bursts, getting longer), Triple (three short 1000 Hz beeps), Melody (four quick notes, G C G E) or Chime. Not transmitted; the transmitter keys up just after it, 0.1 to 0.2 s later. Saved |
+| Scan resume | What scan does after stopping on a signal: Carrier (at first: goes on 2 s after the signal ends), Time (goes on after 5 s, signal or not) or Stop (the scan ends there). Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
 Width, power and tones belong to the channel in use: in VFO mode they
@@ -1058,5 +1060,46 @@ while it measures. It reads the frequency the other radio transmits on, so
 for a repeater it gives the input; set the receive frequency afterwards. A
 DCS code may come out as its equivalent (D023I is the same signal as
 D047N, and so on), which works the same.
+
+### Scan
+
+Hold **0** in FM to scan. In memory mode it goes through the memory
+channels, the list's FM channels and the saved ones (TETRA channels are
+skipped); in VFO mode it steps the frequency by the VFO step through the
+band it is in (137 to 174 or 400 to 480 MHz), wrapping round at the ends.
+In VFO mode **0** must be the first key you press.
+
+It tries about 10 channels a second, and stops where the squelch opens:
+set the squelch above Off first, or it stops on the first channel. On a
+channel with a receive tone it waits up to 0.6 s for the tone and goes on
+if it does not come, so other users of the frequency do not stop it. Then
+it goes on as **Settings** > **FM** > Scan resume says.
+
+The line under the name or frequency shows `Scan up` or `Scan down` (with
+the channel number in memory mode), `Receiving` on a signal, and `Paused`
+while it waits to go on. **Up** / **Down** turn it that way and move on
+at once, PTT talks on the channel it stopped on and ends the scan, any
+other key ends it where it is. In VFO mode a full band at 12.5 kHz steps
+takes about 5 minutes; a wider step is quicker.
+
+### Spectrum view
+
+Side key + **0** in FM shows the signal strength across a band, as the
+UV-K5 spectrum mod does: 80 bars, several sweeps a second,
+starting 1 MHz wide around the frequency in use. Bars above the squelch
+level are green, the strongest is white, and the dotted line marks the
+middle.
+
+| Key | Does |
+|---|---|
+| **Up** / **Down** | Move a quarter of the width up or down |
+| **\*** / **#** | Zoom in / out: 200 kHz to 20 MHz wide (2.5 to 250 kHz between bars) |
+| **Green** | Tune the VFO to the strongest signal, shown at the bottom |
+| **Red** | Back |
+
+Nothing is heard while it is open: the receiver is busy sweeping. Each
+bar is the signal on one frequency, read with a 12.5 kHz filter, so at
+wide zooms a narrow signal between two bars can be missed. The screen
+stays on while the view is open.
 
 Transmitting needs a licence for the band and frequency you use.

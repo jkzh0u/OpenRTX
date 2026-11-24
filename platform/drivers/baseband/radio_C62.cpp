@@ -538,6 +538,45 @@ void radio_fastCopyStop()
 }
 #endif
 
+#ifdef CONFIG_SPECTRUM
+/*
+ * Spectrum view: retune and read REG_67, as the UV-K5's spectrum mod does.
+ * The RSSI needs a moment on the new frequency once the synthesizer has
+ * locked.
+ */
+#define SPECTRUM_SETTLE_US 1500
+
+static bool spectrumVhf; /* LNA in use for the spectrum */
+
+void radio_spectrumStart()
+{
+    BK4819_SetAF(&c62_bk4819, 0);
+    bk4819_disable_ctdcss(&c62_bk4819);
+    bk4819_SetFilterBandwidth(&c62_bk4819, BW_12_5);
+    spectrumVhf = rxVhf;
+}
+
+rssi_t radio_spectrumRssi(uint32_t hz)
+{
+    bool vhf = vhfLna(hz);
+    if (vhf != spectrumVhf) {
+        gpioDev_clear(&c62_bk4819_gpio,
+                      vhf ? GPIO_UHF_RX_LNA : GPIO_VHF_RX_LNA);
+        gpioDev_set(&c62_bk4819_gpio, vhf ? GPIO_VHF_RX_LNA : GPIO_UHF_RX_LNA);
+        spectrumVhf = vhf;
+    }
+    bk4819_set_freq(&c62_bk4819, hz + rxOffset);
+    delayUs(SPECTRUM_SETTLE_US);
+    return bk4819_get_rssi(&c62_bk4819);
+}
+
+void radio_spectrumStop()
+{
+    gpioDev_clear(&c62_bk4819_gpio, GPIO_VHF_RX_LNA);
+    gpioDev_clear(&c62_bk4819_gpio, GPIO_UHF_RX_LNA);
+}
+#endif
+
 void radio_setTxTone(uint16_t hz)
 {
     if (radioStatus != TX)

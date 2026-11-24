@@ -213,6 +213,7 @@ target_compile_definitions(app PRIVATE CONFIG_MEMCH)
 
 # FM fast copy (CONFIG_FAST_COPY in hwconfig.h)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/fast_copy.c)
+target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/spectrum.c)
 
 # Channels and TETRA names come from the channel list image in flash
 target_sources(app PRIVATE

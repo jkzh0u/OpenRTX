@@ -58,7 +58,17 @@ enum uiScreen
     TETRA_FIELD_TEST,
     SETTINGS_TETRA,
     FAST_COPY,
-    SETTINGS_MEMORY
+    SETTINGS_MEMORY,
+    SPECTRUM
+};
+
+/* FM scan: what it does after stopping on a signal (settings.scanResume) */
+enum scanResume
+{
+    SCAN_RESUME_CARRIER = 0, // Goes on once the signal has gone a while
+    SCAN_RESUME_TIME,        // Goes on after a few seconds, signal or not
+    SCAN_RESUME_STOP,        // Ends the scan there
+    SCAN_RESUME_NUM
 };
 
 enum SetRxTx
@@ -196,6 +206,9 @@ enum settingsFMItems
     FM_TALK_PERMIT,
     FM_ROGER_BEEP,
 #endif
+#ifdef CONFIG_SCAN
+    FM_SCAN_RESUME,
+#endif
 };
 
 /**
@@ -291,11 +304,42 @@ typedef struct ui_state_t
     bool mem_delete_armed;
     const char *mem_status;
 #endif
+#ifdef CONFIG_SCAN
+    // FM scan: running, its direction (+1 or -1), listening or stopped on a
+    // signal, when it last hopped or stopped, when the squelch was last
+    // open, checks in a row with the squelch open, and memory channels
+    bool scan_on;
+    int8_t scan_dir;
+    bool scan_stopped;
+    long long scan_tick;
+    long long scan_heard;
+    uint8_t scan_opens;
+    uint16_t scan_count;
+#endif
+#ifdef CONFIG_SPECTRUM
+    // Spectrum view: the frequency in the middle and the zoom
+    uint32_t spec_center;
+    uint8_t spec_zoom;
+#endif
 #if defined(CONFIG_UI_NO_KEYBOARD)
     uint8_t macro_menu_selected;
 #endif // UI_NO_KEYBOARD
 }
 ui_state_t;
+
+#ifdef CONFIG_SPECTRUM
+/* Spectrum view zooms (ui_modes.c): the first is the narrowest */
+#define SPECTRUM_ZOOMS 8
+#define SPECTRUM_ZOOM_START 3
+
+struct spectrumSweep;
+
+/** @return the distance between the points at a zoom, Hz. */
+uint32_t _ui_spectrumStep(uint8_t zoom);
+
+/** @return the strongest point of a sweep, or -1 before the first. */
+int _ui_spectrumPeak(const struct spectrumSweep *s);
+#endif
 
 extern layout_t layout;
 extern state_t last_state;
