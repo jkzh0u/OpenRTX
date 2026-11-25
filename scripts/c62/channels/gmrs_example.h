@@ -5,11 +5,11 @@
  */
 
 /*
- * GMRS channel list: the 22 GMRS channels, the 8 repeater channels and a
- * home channel. Build and flash it next to the firmware (scripts/c62/
- * README.md, section 6):
+ * Example GMRS channel list: the 22 GMRS channels, the 8 repeater channels
+ * and two channels of your own to change. Copy it, edit it, then build and
+ * flash it next to the firmware (scripts/c62/README.md, section 6):
  *
- *     python3 scripts/chlist.py scripts/c62/channels/gmrs.h -o channels.bin
+ *     python3 scripts/chlist.py my_gmrs.h -o channels.bin
  *     cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
  *         0x2c0000 channels.bin
  *
@@ -58,5 +58,9 @@ FM_CHANNEL("GMRS 20R", 462675000, 467675000, 25000, 0, 0)
 FM_CHANNEL("GMRS 21R", 462700000, 467700000, 25000, 0, 0)
 FM_CHANNEL("GMRS 22R", 462725000, 467725000, 25000, 0, 0)
 
-/* Home channel: simplex on 462.700 MHz (GMRS 21), 241.8 Hz both ways */
-FM_CHANNEL("Home Channel", 462700000, 462700000, 25000, 2418, 2418)
+/*
+ * Your own channels go here, e.g. a simplex channel with a CTCSS tone both
+ * ways (100.0 Hz), or one with a DCS code:
+ */
+FM_CHANNEL("Family", 462700000, 462700000, 25000, 1000, 1000)
+FM_CHANNEL("Camp DCS", 462625000, 462625000, 25000, D023N, D023N)
