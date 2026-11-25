@@ -954,8 +954,8 @@ int _ui_handleToneSelectScroll(bool direction_up);
 #define TONE_PICK_DIGITS_MS 2000
 
 /**
- * Green on TX tone or RX tone in Settings > FM: the list of every tone,
- * on the one in use.
+ * Green on TX tone or RX tone in Settings > FM: the kinds of tone, on the
+ * one in use.
  */
 static void _ui_tonePickOpen(bool tx)
 {
@@ -968,6 +968,8 @@ static void _ui_tonePickOpen(bool tx)
                                 : _ui_tonePickPos(ch->fm.rxToneEn,
                                                   ch->fm.rxTone, ch->rxDcs,
                                                   ch->rxDcsInv);
+    ui_state.tone_pick_kind = _ui_tonePickKind(ui_state.tone_pick_pos);
+    ui_state.tone_pick_list = false;
     ui_state.tone_pick_digits[0] = '\0';
     state.ui_screen = TONE_PICK;
 }
@@ -1001,19 +1003,64 @@ static void _ui_tonePickApply(void)
     }
 }
 
+/** Open the list of a kind, on the choice in it if it has it */
+static void _ui_tonePickList(uint8_t kind)
+{
+    ui_state.tone_pick_kind = kind;
+    ui_state.tone_pick_list = true;
+    ui_state.tone_pick_digits[0] = '\0';
+    if(_ui_tonePickKind(ui_state.tone_pick_pos) != kind)
+        ui_state.tone_pick_pos = _ui_tonePickStart(kind);
+}
+
 /**
- * Keys of the tone picker: up and down move one, * and # to the previous
- * or next group, numbers jump to the tone or code starting with them
- * (885 for 88.5, 023 for D023), green picks, red goes back.
+ * Keys of the tone picker. On the kinds: up and down, green opens the kind's
+ * list (Off is used at once), 1 to 3 open CTCSS, DCS and DCS inverted
+ * straight away. In a list: up and down move one, * and # to the list of the
+ * kind before or after, numbers jump to the tone or code starting with them
+ * (885 for 88.5, 023 for D023), green picks, red back to the kinds.
  */
 static void _ui_tonePickKey(kbd_msg_t msg, bool *sync_rtx)
 {
-    uint16_t count = _ui_tonePickCount();
-    uint16_t pos = ui_state.tone_pick_pos;
+    uint8_t kinds = _ui_tonePickKinds();
+    uint8_t kind = ui_state.tone_pick_kind;
     long long now = getTick();
 
     if((msg.keys == 0) || msg.long_press)
         return;
+
+    if(!ui_state.tone_pick_list)
+    {
+        if(input_isNumberPressed(msg))
+        {
+            uint8_t k = input_getPressedNumber(msg);
+            if((k > TP_KIND_OFF) && (k < kinds))
+                _ui_tonePickList(k);
+        }
+        else if(msg.keys & (KEY_UP | KNOB_LEFT))
+            ui_state.tone_pick_kind = (kind + kinds - 1) % kinds;
+        else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
+            ui_state.tone_pick_kind = (kind + 1) % kinds;
+        else if(msg.keys & KEY_ENTER)
+        {
+            if(kind != TP_KIND_OFF)
+            {
+                _ui_tonePickList(kind);
+                return;
+            }
+            ui_state.tone_pick_pos = 0;
+            _ui_tonePickApply();
+            *sync_rtx = true;
+            state.ui_screen = SETTINGS_FM;
+        }
+        else if(msg.keys & KEY_ESC)
+            state.ui_screen = SETTINGS_FM;
+        return;
+    }
+
+    uint16_t start = _ui_tonePickStart(kind);
+    uint16_t count = _ui_tonePickEnd(kind) - start;
+    uint16_t i = ui_state.tone_pick_pos - start;
 
     if(input_isNumberPressed(msg))
     {
@@ -1024,7 +1071,7 @@ static void _ui_tonePickKey(kbd_msg_t msg, bool *sync_rtx)
         ui_state.tone_pick_digits[n] = '0' + input_getPressedNumber(msg);
         ui_state.tone_pick_digits[n + 1] = '\0';
         ui_state.tone_pick_tick = now;
-        int found = _ui_tonePickFind(pos, ui_state.tone_pick_digits);
+        int found = _ui_tonePickFind(kind, ui_state.tone_pick_digits);
         if(found >= 0)
             ui_state.tone_pick_pos = (uint16_t)found;
         return;
@@ -1033,25 +1080,17 @@ static void _ui_tonePickKey(kbd_msg_t msg, bool *sync_rtx)
     ui_state.tone_pick_digits[0] = '\0';
 
     if(msg.keys & (KEY_UP | KNOB_LEFT))
-        ui_state.tone_pick_pos = (pos + count - 1) % count;
+        ui_state.tone_pick_pos = start + (i + count - 1) % count;
     else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
-        ui_state.tone_pick_pos = (pos + 1) % count;
-    else if(msg.keys & KEY_STAR)
+        ui_state.tone_pick_pos = start + (i + 1) % count;
+    else if(msg.keys & (KEY_STAR | KEY_HASH))
     {
-        // The start of this group, or of the one before
-        uint16_t group = _ui_tonePickGroup(pos);
-        if((group == pos) && (pos > 0))
-            group = _ui_tonePickGroup(pos - 1);
-        ui_state.tone_pick_pos = group;
-    }
-    else if(msg.keys & KEY_HASH)
-    {
-        // The start of the next group, round to Off after the last
-        uint16_t group = _ui_tonePickGroup(pos);
-        uint16_t next = pos;
-        while((next < count) && (_ui_tonePickGroup(next) == group))
-            next++;
-        ui_state.tone_pick_pos = (next < count) ? next : 0;
+        // The kind before or after, not Off
+        uint8_t lists = kinds - 1;
+        uint8_t k = kind - 1;
+        k = (msg.keys & KEY_STAR) ? (k + lists - 1) % lists
+                                  : (k + 1) % lists;
+        _ui_tonePickList(k + 1);
     }
     else if(msg.keys & KEY_ENTER)
     {
@@ -1061,7 +1100,8 @@ static void _ui_tonePickKey(kbd_msg_t msg, bool *sync_rtx)
     }
     else if(msg.keys & KEY_ESC)
     {
-        state.ui_screen = SETTINGS_FM;
+        ui_state.tone_pick_list = false;
+        ui_state.tone_pick_digits[0] = '\0';
     }
 }
 

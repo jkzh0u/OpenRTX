@@ -492,12 +492,13 @@ void _ui_stepTone(uint8_t *index, bool *dcs, bool *inv, int step)
 }
 
 /*
- * Tone picker (Settings > FM > TX tone or RX tone): every choice in one
- * list, Off first, then the CTCSS tones, then with CONFIG_DCS the DCS codes
- * normal, then inverted. A position in that list stands for a choice.
+ * Tone picker (Settings > FM > TX tone or RX tone): first the kind, Off,
+ * CTCSS, then with CONFIG_DCS DCS normal and inverted, then a list of the
+ * kind's tones or codes. Every choice has a position: Off first, the CTCSS
+ * tones, the DCS codes normal, then inverted.
  */
 
-/* First position of each group */
+/* First position of each kind */
 #define TP_CTCSS 1
 #define TP_DCS (TP_CTCSS + CTCSS_FREQ_NUM)
 #define TP_DCS_INV (TP_DCS + DCS_CODE_NUM)
@@ -509,6 +510,47 @@ uint16_t _ui_tonePickCount(void)
 #else
     return TP_DCS;
 #endif
+}
+
+uint8_t _ui_tonePickKinds(void)
+{
+#ifdef CONFIG_DCS
+    return TP_KIND_DCS_INV + 1;
+#else
+    return TP_KIND_CTCSS + 1;
+#endif
+}
+
+uint16_t _ui_tonePickStart(uint8_t kind)
+{
+    switch (kind) {
+        case TP_KIND_CTCSS:
+            return TP_CTCSS;
+        case TP_KIND_DCS:
+            return TP_DCS;
+        case TP_KIND_DCS_INV:
+            return TP_DCS_INV;
+        default:
+            return 0;
+    }
+}
+
+uint16_t _ui_tonePickEnd(uint8_t kind)
+{
+    if (kind + 1 >= _ui_tonePickKinds())
+        return _ui_tonePickCount();
+    return _ui_tonePickStart(kind + 1);
+}
+
+uint8_t _ui_tonePickKind(uint16_t pos)
+{
+    if (pos >= TP_DCS_INV)
+        return TP_KIND_DCS_INV;
+    if (pos >= TP_DCS)
+        return TP_KIND_DCS;
+    if (pos >= TP_CTCSS)
+        return TP_KIND_CTCSS;
+    return TP_KIND_OFF;
 }
 
 uint16_t _ui_tonePickPos(bool enabled, uint8_t index, bool dcs, bool inv)
@@ -539,32 +581,16 @@ void _ui_tonePickGet(uint16_t pos, bool *enabled, uint8_t *index, bool *dcs,
         *index = (uint8_t)((pos - TP_DCS) % DCS_CODE_NUM);
 }
 
-uint16_t _ui_tonePickGroup(uint16_t pos)
-{
-    if (pos >= TP_DCS_INV)
-        return TP_DCS_INV;
-    if (pos >= TP_DCS)
-        return TP_DCS;
-    if (pos >= TP_CTCSS)
-        return TP_CTCSS;
-    return 0;
-}
-
-int _ui_tonePickFind(uint16_t pos, const char *digits)
+int _ui_tonePickFind(uint8_t kind, const char *digits)
 {
     size_t n = strlen(digits);
-    uint16_t group = _ui_tonePickGroup(pos);
-    uint16_t end = (group == TP_DCS_INV) ? _ui_tonePickCount()
-                 : (group == TP_DCS)     ? TP_DCS_INV
-                                         : TP_DCS;
     char text[8];
 
-    if (n == 0)
+    if ((n == 0) || (kind == TP_KIND_OFF))
         return -1;
-    if (group == 0)
-        group = TP_CTCSS;
 
-    for (uint16_t p = group; p < end; p++) {
+    for (uint16_t p = _ui_tonePickStart(kind); p < _ui_tonePickEnd(kind);
+         p++) {
         if (p < TP_DCS)
             sniprintf(text, sizeof(text), "%u",
                       ctcss_tone[p - TP_CTCSS] / 10);
@@ -579,9 +605,8 @@ int _ui_tonePickFind(uint16_t pos, const char *digits)
     return -1;
 }
 
-/** One line of the picker: the choice, and its group on the right */
-static void _ui_tonePickLine(uint16_t pos, char *name, size_t nlen,
-                             const char **group)
+/** The name of a choice: Off, 88.5 Hz, D023 N */
+static void _ui_tonePickName(uint16_t pos, char *name, size_t nlen)
 {
     bool enabled, dcs, inv;
     uint8_t index;
@@ -589,19 +614,41 @@ static void _ui_tonePickLine(uint16_t pos, char *name, size_t nlen,
     _ui_tonePickGet(pos, &enabled, &index, &dcs, &inv);
     if (!enabled) {
         sniprintf(name, nlen, "%s", currentLanguage->off);
-        *group = "no tone";
         return;
     }
 #ifdef CONFIG_DCS
     if (dcs) {
         sniprintf(name, nlen, "D%03o %c", dcs_code[index], inv ? 'I' : 'N');
-        *group = inv ? "DCS inv" : "DCS";
         return;
     }
 #endif
     uint16_t tone = ctcss_tone[index];
     sniprintf(name, nlen, "%u.%u Hz", tone / 10, tone % 10);
-    *group = "CTCSS";
+}
+
+static const char *_ui_tonePickKindName(uint8_t kind)
+{
+    static const char *const names[] = { "Off", "CTCSS", "DCS", "DCS inv" };
+    return names[kind % 4];
+}
+
+/** One row of the picker, selected or not, text on the right */
+static void _ui_tonePickRow(point_t *pos, bool selected, const char *name,
+                            const char *right, color_t side)
+{
+    color_t text = color_white;
+
+    if (selected) {
+        point_t r = { 0, (uint16_t)(pos->y - layout.menu_h + 3) };
+        gfx_drawRect(r, CONFIG_SCREEN_WIDTH, layout.menu_h, color_white,
+                     true);
+        text = color_black;
+        side = color_black;
+    }
+    gfx_print(*pos, layout.menu_font, TEXT_ALIGN_LEFT, text, "%s", name);
+    point_t at = { pos->x, (uint16_t)(pos->y - 1) };
+    gfx_print(at, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT, side, "%s", right);
+    pos->y += layout.menu_h;
 }
 
 void _ui_drawTonePick(ui_state_t *ui_state)
@@ -613,45 +660,64 @@ void _ui_drawTonePick(ui_state_t *ui_state)
                                           ch->txDcs, ch->txDcsInv)
                         : _ui_tonePickPos(ch->fm.rxToneEn, ch->fm.rxTone,
                                           ch->rxDcs, ch->rxDcsInv);
-    uint16_t count = _ui_tonePickCount();
-    uint16_t sel = ui_state->tone_pick_pos;
+    uint8_t kind = ui_state->tone_pick_kind;
     point_t pos = layout.line1_pos;
-    uint16_t rows = (CONFIG_SCREEN_HEIGHT - 1 - pos.y) / layout.menu_h + 1;
     char name[16];
-    const char *group;
+    char right[16];
 
     gfx_clearScreen();
+
+    if (!ui_state->tone_pick_list) {
+        // The kinds, the one in use showing its tone
+        gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+                  color_white, tx ? "TX tone" : "RX tone");
+        for (uint8_t k = 0; k < _ui_tonePickKinds(); k++) {
+            uint16_t n = _ui_tonePickEnd(k) - _ui_tonePickStart(k);
+            color_t side = muted;
+
+            if (_ui_tonePickKind(inUse) == k) {
+                if (k == TP_KIND_OFF)
+                    sniprintf(right, sizeof(right), "in use");
+                else
+                    _ui_tonePickName(inUse, right, sizeof(right));
+                side = yellow_fab413;
+            } else if (k == TP_KIND_OFF) {
+                right[0] = '\0';
+            } else {
+                sniprintf(right, sizeof(right), "%u %s", n,
+                          (k == TP_KIND_CTCSS) ? "tones" : "codes");
+            }
+            _ui_tonePickRow(&pos, k == kind, _ui_tonePickKindName(k), right,
+                            side);
+        }
+        return;
+    }
+
+    // The tones or codes of one kind
+    uint16_t start = _ui_tonePickStart(kind);
+    uint16_t count = _ui_tonePickEnd(kind) - start;
+    uint16_t sel = ui_state->tone_pick_pos - start;
+    uint16_t rows = (CONFIG_SCREEN_HEIGHT - 1 - pos.y) / layout.menu_h + 1;
+
     if (ui_state->tone_pick_digits[0] != '\0')
         gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
                   yellow_fab413, "Go to %s_", ui_state->tone_pick_digits);
     else
         gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
-                  color_white, tx ? "TX tone" : "RX tone");
+                  color_white, "%s %s", tx ? "TX" : "RX",
+                  _ui_tonePickKindName(kind));
 
     // The selection in the middle, where it can be
     uint16_t first = (sel > rows / 2) ? sel - rows / 2 : 0;
     if (first + rows > count)
         first = (count > rows) ? count - rows : 0;
 
-    for (uint16_t p = first; p < count && pos.y < CONFIG_SCREEN_HEIGHT;
-         p++) {
-        color_t text = color_white;
-        color_t side = (p == inUse) ? yellow_fab413 : muted;
-
-        _ui_tonePickLine(p, name, sizeof(name), &group);
-        if (p == inUse)
-            group = "in use";
-        if (p == sel) {
-            point_t r = { 0, (uint16_t)(pos.y - layout.menu_h + 3) };
-            gfx_drawRect(r, CONFIG_SCREEN_WIDTH, layout.menu_h, color_white,
-                         true);
-            text = color_black;
-            side = color_black;
-        }
-        gfx_print(pos, layout.menu_font, TEXT_ALIGN_LEFT, text, "%s", name);
-        point_t right = { pos.x, (uint16_t)(pos.y - 1) };
-        gfx_print(right, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT, side, "%s", group);
-        pos.y += layout.menu_h;
+    for (uint16_t i = first; i < count && pos.y < CONFIG_SCREEN_HEIGHT;
+         i++) {
+        uint16_t p = start + i;
+        _ui_tonePickName(p, name, sizeof(name));
+        _ui_tonePickRow(&pos, i == sel, name, (p == inUse) ? "in use" : "",
+                        yellow_fab413);
     }
 }
 

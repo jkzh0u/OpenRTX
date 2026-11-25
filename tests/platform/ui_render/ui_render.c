@@ -983,37 +983,43 @@ static void memorySaved(ui_state_t *ui_state)
 }
 
 /** Settings > Memory, typing the name of M1 */
-/** TX tone picker: 67.0 in use, 88.5 selected */
+/** TX tone picker, CTCSS list: 67.0 in use, 88.5 selected */
 static void tonePickCtcss(ui_state_t *ui_state)
 {
     ui_state->tone_pick_tx = true;
-    ui_state->tone_pick_pos = (uint16_t)_ui_tonePickFind(1, "88");
+    ui_state->tone_pick_kind = TP_KIND_CTCSS;
+    ui_state->tone_pick_list = true;
+    ui_state->tone_pick_pos = (uint16_t)_ui_tonePickFind(TP_KIND_CTCSS, "88");
     _ui_drawTonePick(ui_state);
 }
 
-/** RX tone picker: D754I in use, at the end of the list */
+/** RX tone picker, DCS inverted list: D754I, the end of the list */
 static void tonePickDcs(ui_state_t *ui_state)
 {
     ui_state->tone_pick_tx = false;
+    ui_state->tone_pick_kind = TP_KIND_DCS_INV;
+    ui_state->tone_pick_list = true;
     ui_state->tone_pick_pos = _ui_tonePickCount() - 1;
     _ui_drawTonePick(ui_state);
 }
 
-/** TX tone picker: 0 2 typed, on the DCS codes */
+/** TX tone picker: 0 2 typed in the DCS codes */
 static void tonePickTyping(ui_state_t *ui_state)
 {
     ui_state->tone_pick_tx = true;
+    ui_state->tone_pick_kind = TP_KIND_DCS;
+    ui_state->tone_pick_list = true;
     strcpy(ui_state->tone_pick_digits, "02");
-    ui_state->tone_pick_pos =
-        (uint16_t)_ui_tonePickFind(_ui_tonePickPos(true, 0, true, false), "02");
+    ui_state->tone_pick_pos = (uint16_t)_ui_tonePickFind(TP_KIND_DCS, "02");
     _ui_drawTonePick(ui_state);
 }
 
-/** TX tone picker on Off, the top of the list */
-static void tonePickOff(ui_state_t *ui_state)
+/** TX tone picker first page, the kinds: CTCSS selected, 67.0 in use */
+static void tonePickKinds(ui_state_t *ui_state)
 {
     ui_state->tone_pick_tx = true;
-    ui_state->tone_pick_pos = 0;
+    ui_state->tone_pick_kind = TP_KIND_CTCSS;
+    ui_state->tone_pick_list = false;
     _ui_drawTonePick(ui_state);
 }
 
@@ -1070,10 +1076,10 @@ static void menuScenes(void)
     last_state.channel.fm.rxTone = 103;
     last_state.channel.fm.rxToneEn = 1;
     menu("menu-07c-fm-dcs", _ui_drawSettingsFM, 5);
+    menu("menu-07g2-tone-pick-kinds", tonePickKinds, 0);
     menu("menu-07h-tone-pick", tonePickCtcss, 0);
     menu("menu-07i-tone-pick-dcs", tonePickDcs, 0);
     menu("menu-07j-tone-pick-typing", tonePickTyping, 0);
-    menu("menu-07k-tone-pick-off", tonePickOff, 0);
     last_state.channel = before;
     menu("menu-08-accessibility", _ui_drawSettingsAccessibility, 0);
     menu("menu-08b-tetra", _ui_drawSettingsTetra, 0);

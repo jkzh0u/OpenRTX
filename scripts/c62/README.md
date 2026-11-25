@@ -1057,18 +1057,20 @@ The main screen shows, from the top:
 | # in TX | What **#** sends while transmitting: DTMF # (at first) or 1750 Hz, for repeaters opened by a 1750 Hz tone burst. Saved |
 | Roger beep | Tones sent when you let go of PTT, so others know you have finished: Off (at first), Classic (two rising tones), Single, Double, Chirp (three quick rising tones), Bloop (falling), Morse K (dah dit dah, "over"), Sweep (a rising whistle) or Moto MDC (the "brrrp" of a Motorola data burst). Saved |
 
-**Green** on TX tone or RX tone opens a page listing every choice: Off,
-then the CTCSS tones, then the DCS codes normal (`DCS`), then inverted
-(`DCS inv`). The one in use says `in use` in amber. Picking Off turns that
-direction's tone off, picking a tone turns it on, so Tone mode follows.
+**Green** on TX tone or RX tone first asks which kind: Off, CTCSS, DCS
+(normal) or DCS inv (inverted). The kind in use shows its tone on the
+right in amber, the others how many tones or codes they have. Picking Off
+turns that direction's tone off at once; the others open a list of just
+that kind's tones or codes, where the one in use says `in use`. Picking a
+tone turns it on, so Tone mode follows.
 
-| Key | Does |
-|---|---|
-| **Up** / **Down** | One up or down |
-| **\*** / **#** | The previous / next group: Off, CTCSS, DCS, DCS inv |
-| Numbers | Go to the first tone of the group starting with them: `8` `8` for 88.5, `1` `0` `3` for 103.5; in a DCS group `0` `2` `3` for D023. On Off they look in the CTCSS tones. Forgotten after 2 s |
-| **Green** | Use the one selected |
-| **Red** | Back, without changing it |
+| Key | On the kinds | In a list |
+|---|---|---|
+| **Up** / **Down** | One up or down | One up or down, round from the last to the first |
+| Numbers | **1**, **2**, **3**: straight to the CTCSS, DCS or DCS inv list | Go to the first tone or code starting with the numbers: `8` `8` for 88.5, `1` `0` `3` for 103.5, `0` `2` `3` for D023. Forgotten after 2 s |
+| **\*** / **#** | | The list of the kind before / after (CTCSS, DCS, DCS inv) |
+| **Green** | Open the kind's list (Off: use it) | Use the one selected |
+| **Red** | Back, without changing it | Back to the kinds |
 
 Width, power and tones belong to the channel in use: in VFO mode they
 stay with the VFO, on a memory channel they last until you leave it (the

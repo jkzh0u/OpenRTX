@@ -332,9 +332,12 @@ typedef struct ui_state_t
     bool mem_delete_armed;
     const char *mem_status;
 #endif
-    // Tone picker: TX or RX tone, the choice selected (_ui_tonePick...()),
+    // Tone picker: TX or RX tone, the kind selected (TP_KIND_...), whether
+    // its list is open, the choice selected in it (_ui_tonePick...()),
     // digits typed to jump and when the last one was
     bool tone_pick_tx;
+    uint8_t tone_pick_kind;
+    bool tone_pick_list;
     uint16_t tone_pick_pos;
     char tone_pick_digits[4];
     long long tone_pick_tick;
@@ -428,12 +431,32 @@ void _ui_toneName(char *buf, size_t len, uint8_t index, bool dcs, bool inv);
 void _ui_stepTone(uint8_t *index, bool *dcs, bool *inv, int step);
 
 /*
- * Tone picker: every choice in one list, Off, the CTCSS tones, then the
- * DCS codes normal and inverted, a position standing for each.
+ * Tone picker: the kind first, then its tones or codes. Every choice has a
+ * position: Off, the CTCSS tones, then the DCS codes normal and inverted.
  */
+
+enum {
+    TP_KIND_OFF = 0,
+    TP_KIND_CTCSS,
+    TP_KIND_DCS,     //< CONFIG_DCS
+    TP_KIND_DCS_INV, //< CONFIG_DCS
+};
 
 /** @return the number of choices. */
 uint16_t _ui_tonePickCount(void);
+
+/** @return the number of kinds: Off, CTCSS, with CONFIG_DCS DCS normal and
+ * inverted. */
+uint8_t _ui_tonePickKinds(void);
+
+/** @return the first position of a kind. */
+uint16_t _ui_tonePickStart(uint8_t kind);
+
+/** @return the position after the last of a kind. */
+uint16_t _ui_tonePickEnd(uint8_t kind);
+
+/** @return the kind of a position. */
+uint8_t _ui_tonePickKind(uint16_t pos);
 
 /** @return the position of a channel's tone setting. */
 uint16_t _ui_tonePickPos(bool enabled, uint8_t index, bool dcs, bool inv);
@@ -442,16 +465,13 @@ uint16_t _ui_tonePickPos(bool enabled, uint8_t index, bool dcs, bool inv);
 void _ui_tonePickGet(uint16_t pos, bool *enabled, uint8_t *index, bool *dcs,
                      bool *inv);
 
-/** @return the first position of the group of a position. */
-uint16_t _ui_tonePickGroup(uint16_t pos);
-
 /**
- * @param pos: position now, whose group is searched (Off: the CTCSS tones).
+ * @param kind: the kind searched.
  * @param digits: digits typed: the whole Hz of a CTCSS tone, or the octal
  * digits of a DCS code.
- * @return the first position in the group starting with them, or -1.
+ * @return the first position of the kind starting with them, or -1.
  */
-int _ui_tonePickFind(uint16_t pos, const char *digits);
+int _ui_tonePickFind(uint8_t kind, const char *digits);
 
 /** Draw the picker. */
 void _ui_drawTonePick(ui_state_t *ui_state);
