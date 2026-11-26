@@ -76,13 +76,6 @@ void csk6codec_setNoiseReduction(uint8_t rx, uint8_t tx);
 uint8_t csk6codec_getNoiseReductionLoad(bool *overload);
 
 /**
- * CONFIG_APRS: hand the received FM audio to the APRS decoder.
- *
- * @param on: true to.
- */
-void csk6codec_setAprsRx(bool on);
-
-/**
  * @return rounds of the codec worker so far, about one a millisecond while
  * it runs (self test).
  */

@@ -132,13 +132,6 @@ void audio_setRxRecord(bool on)
 }
 #endif
 
-#ifdef CONFIG_APRS
-void audio_setAprsRx(bool on)
-{
-    csk6codec_setAprsRx(on);
-}
-#endif
-
 #ifdef CONFIG_NOISE_REDUCTION
 void audio_setNoiseReduction(uint8_t rxLevel, uint8_t txLevel)
 {

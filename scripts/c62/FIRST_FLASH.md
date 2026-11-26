@@ -278,14 +278,6 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
       and decoded, `DTMF 123` on the screen
 - [ ] Spectrum: side key + **0** in FM, key a second radio within the
       view: a bar rises at its frequency; **green** tunes the VFO to it
-- [ ] APRS: VFO on 144.390 MHz, squelch set; within an hour or so
-      **Menu** > **APRS** lists stations, with distances once your position
-      is set in **Settings** > **APRS**
-- [ ] If you are licensed for it: APRS beacon, set the callsign and
-      position, **Beacon now**, back to the main screen: the red LED for
-      about a second; aprs.fi shows your position if an igate heard it.
-      Note how it sounds on another radio (a buzz like a fax: good; quiet
-      or harsh: the level needs adjusting)
 
 ## If something goes wrong
 

@@ -59,9 +59,6 @@ extern "C" {
 #define CONFIG_DTMF
 /* Hardware self test (Menu > Self test, selftest_c62.c) */
 #define CONFIG_SELFTEST
-/* APRS in FM: stations heard (Menu > APRS) and a position beacon */
-#define CONFIG_APRS
-#define CONFIG_APRS_SECTION ".psram_section"
 /* TETRA calls saved on the radio (Menu > Saved calls, CONFIG_TETRA_CALLREC
  * set by the build with the speech decoder): recorded in PSRAM */
 #define CONFIG_TETRA_CALLREC_SECTION ".psram_section"

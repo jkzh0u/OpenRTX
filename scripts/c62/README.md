@@ -1289,41 +1289,4 @@ bar is the signal on one frequency, read with a 12.5 kHz filter, so at
 wide zooms a narrow signal between two bars can be missed. The screen
 stays on while the view is open.
 
-### APRS
-
-In FM, the radio decodes APRS packets (1200 baud AFSK) on whatever it
-hears with the squelch open: tune the VFO, or a channel, to the APRS
-frequency, **144.390 MHz** in North America (144.800 in Europe), with no
-RX tone. The packets are still heard as they come; decoding takes the
-audio before the AI noise reduction, which would spoil it.
-
-**Menu** > **APRS** lists the stations heard, the last heard first: the
-callsign, how far and in which direction if both positions are known
-(else how long ago), and the comment or status. Objects show under their
-own name. **Green** shows one: what it is (car, house, digi...), the
-digipeater it came through, its position, distance, speed and heading,
-how many times it was heard, and its comment. **#** shows the messages
-heard, to anyone; those to your callsign are in amber. Up to 24 stations
-and 12 messages are kept, until the radio is turned off.
-
-**Settings** > **APRS**:
-
-| Setting | Does |
-|---|---|
-| Decode | On (at first) or off |
-| Beacon | Manual (at first), or a beacon every 10, 20, 30 or 60 minutes |
-| Beacon now | **Green** sends one. It says `Waiting` until it goes, `Sent 3m ago` after |
-| Lat / Lon | Your position. **Green**, then the digits of the degrees and 5 decimals (`4365320` for 43.65320), **#** for south or west, **\*** to take a digit back, **green** to keep it. Find it on a map app |
-| Symbol | How others see you: Person (at first), Car, House, Bike, Truck, Van, Boat, Antenna |
-| Path | WIDE1,WIDE2 (WIDE1-1,WIDE2-1, at first: for a handheld or car), WIDE2 (WIDE2-1, a fixed station) or Direct |
-| Callsign | Your callsign, set in **Settings** > **M17** (with an SSID if you like: `VA3ABC-7`) |
-
-The beacon is a position report, `!4339.19N/07922.99W[OpenRTX C62`, to
-APZRTX. It is only sent where PTT would transmit: on the main screen, on a
-channel that may transmit, when the channel is clear and PTT is not held.
-A beacon asked for from Settings goes when you are back on the main
-screen. Nothing is sent without a callsign and a position. The tone
-level, which sets the deviation, is a first guess: check it against
-another radio or an SDR, aiming for about 3 kHz.
-
 Transmitting needs a licence for the band and frequency you use.

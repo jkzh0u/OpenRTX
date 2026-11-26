@@ -85,10 +85,6 @@
 #include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
-#endif
-#ifdef CONFIG_APRS
-#include "protocols/APRS/Aprs.h"
-#include "protocols/APRS/AprsStatus.h"
 #ifdef CONFIG_TETRA_LOG
 #include "protocols/TETRA/TetraLog.h"
 #endif
@@ -151,9 +147,6 @@ const char *menu_items[] =
     "Messages",
     "Activity",
 #endif
-#ifdef CONFIG_APRS
-    "APRS",
-#endif
     "Settings",
     "Info",
 #ifdef CONFIG_SELFTEST
@@ -184,9 +177,6 @@ const char *settings_items[] =
 #endif
 #ifdef CONFIG_TETRA
     "TETRA",
-#endif
-#ifdef CONFIG_APRS
-    "APRS",
 #endif
     "Accessibility",
     "Default Settings"
@@ -273,22 +263,6 @@ const char *settings_tetra_items[] =
     "Freq. correct",
 #endif
 };
-#endif
-
-#ifdef CONFIG_APRS
-const char *settings_aprs_items[] =
-{
-    "Decode",
-    "Beacon",
-    "Beacon now",
-    "Lat",
-    "Lon",
-    "Symbol",
-    "Path",
-    "Callsign",
-};
-const uint8_t settings_aprs_num =
-    sizeof(settings_aprs_items) / sizeof(settings_aprs_items[0]);
 #endif
 
 const char * settings_accessibility_items[] =
@@ -983,205 +957,9 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
 
 int _ui_handleToneSelectScroll(bool direction_up);
 
-#if defined(CONFIG_SELFTEST) || defined(CONFIG_APRS)
-static void _ui_menuBack(uint8_t prev_state);
-#endif
-#ifdef CONFIG_APRS
-static void _ui_menuUp(uint8_t menu_entries);
-static void _ui_menuDown(uint8_t menu_entries);
-#endif
-
-#ifdef CONFIG_APRS
-/* Beacon intervals, Settings > APRS > Beacon (OpMode_FM.cpp) */
-#define APRS_INTERVALS 5
-
-/**
- * Keys of Menu > APRS. Stations: up / down, green shows one, # the
- * messages, red back. One station: up / down the next ones, red back.
- * Messages: up / down, red or # back to the stations.
- */
-static void _ui_aprsKey(kbd_msg_t msg)
-{
-    if(msg.long_press || msg.keys == 0)
-        return;
-
-    if(state.ui_screen == APRS_MSGS)
-    {
-        uint8_t count = aprsStatus_messageCount();
-        if(msg.keys & (KEY_UP | KNOB_LEFT))
-        {
-            if(ui_state.aprs_msg_sel > 0)
-                ui_state.aprs_msg_sel--;
-        }
-        else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
-        {
-            if(ui_state.aprs_msg_sel + 1 < count)
-                ui_state.aprs_msg_sel++;
-        }
-        else if(msg.keys & (KEY_ESC | KEY_HASH))
-            state.ui_screen = APRS_LIST;
-        return;
-    }
-
-    uint8_t count = aprsStatus_stationCount();
-    if(msg.keys & (KEY_UP | KNOB_LEFT))
-    {
-        if(ui_state.aprs_sel > 0)
-            ui_state.aprs_sel--;
-    }
-    else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
-    {
-        if(ui_state.aprs_sel + 1 < count)
-            ui_state.aprs_sel++;
-    }
-    else if((msg.keys & KEY_ENTER) && count > 0
-            && state.ui_screen == APRS_LIST)
-        state.ui_screen = APRS_DETAIL;
-    else if((msg.keys & KEY_HASH) && state.ui_screen == APRS_LIST)
-    {
-        ui_state.aprs_msg_sel = 0;
-        state.ui_screen = APRS_MSGS;
-    }
-    else if(msg.keys & KEY_ESC)
-    {
-        if(state.ui_screen == APRS_DETAIL)
-            state.ui_screen = APRS_LIST;
-        else
-            _ui_menuBack(MENU_TOP);
-    }
-}
-
-/** The position typed, in millionths of a degree; false if out of range */
-static bool _ui_aprsTyped(bool lat, int32_t *out)
-{
-    const char *d = ui_state.aprs_digits;
-    int n = (int)strlen(d);
-    int degDigits = lat ? 2 : 3;
-    int32_t deg = 0, frac = 0;
-
-    // Digits not typed are zeros: degrees, then 5 decimals
-    for(int i = 0; i < degDigits + 5; i++)
-    {
-        int v = (i < n) ? d[i] - '0' : 0;
-        if(i < degDigits)
-            deg = deg * 10 + v;
-        else
-            frac = frac * 10 + v;
-    }
-    int32_t micro = deg * 1000000 + frac * 10;
-    if(micro > (lat ? 90000000 : 180000000))
-        return false;
-    *out = ui_state.aprs_neg ? -micro : micro;
-    return true;
-}
-
-static void _ui_changeAprsSetting(uint8_t item, int step)
-{
-    settings_t *s = &state.settings;
-
-    switch(item)
-    {
-        case AP_RX:
-            s->aprsRxOff = !s->aprsRxOff;
-            break;
-        case AP_BEACON:
-            s->aprsBeacon = (s->aprsBeacon + APRS_INTERVALS + step)
-                          % APRS_INTERVALS;
-            break;
-        case AP_SYMBOL:
-            s->aprsSymbol = (uint8_t)((s->aprsSymbol + APRS_SYMBOLS + step)
-                                      % APRS_SYMBOLS);
-            break;
-        case AP_PATH:
-            s->aprsPath = (s->aprsPath + APRS_PATHS + step) % APRS_PATHS;
-            break;
-        default:
-            break;
-    }
-}
-
-/**
- * Keys of Settings > APRS. Green on Send beacon asks for one. Green on
- * Latitude or Longitude, then the digits of the degrees and 5 decimals,
- * # for south or west, * to take a digit back, green to keep it. The other
- * settings: green, then up / down.
- */
-static void _ui_aprsSettingsKey(kbd_msg_t msg)
-{
-    uint8_t item = ui_state.menu_selected;
-    bool position = (item == AP_LAT) || (item == AP_LON);
-
-    if(msg.long_press || msg.keys == 0)
-        return;
-
-    if(ui_state.edit_mode && position)
-    {
-        size_t n = strlen(ui_state.aprs_digits);
-        size_t max = (item == AP_LAT) ? 7 : 8;
-
-        if(input_isNumberPressed(msg) && n < max)
-        {
-            ui_state.aprs_digits[n] = '0' + input_getPressedNumber(msg);
-            ui_state.aprs_digits[n + 1] = '\0';
-        }
-        else if((msg.keys & KEY_STAR) && n > 0)
-            ui_state.aprs_digits[n - 1] = '\0';
-        else if(msg.keys & KEY_HASH)
-            ui_state.aprs_neg = !ui_state.aprs_neg;
-        else if(msg.keys & KEY_ENTER)
-        {
-            int32_t v;
-            if(n > 0 && _ui_aprsTyped(item == AP_LAT, &v))
-            {
-                if(item == AP_LAT)
-                    state.settings.aprsLat = v;
-                else
-                    state.settings.aprsLon = v;
-                state.settings.aprsPosSet = 1;
-                ui_state.edit_mode = false;
-            }
-        }
-        else if(msg.keys & KEY_ESC)
-            ui_state.edit_mode = false;
-        return;
-    }
-
-    if(ui_state.edit_mode
-       && (msg.keys & (KEY_UP | KEY_DOWN | KNOB_LEFT | KNOB_RIGHT)))
-    {
-        int step = (msg.keys & (KEY_UP | KNOB_RIGHT)) ? 1 : -1;
-        _ui_changeAprsSetting(item, step);
-    }
-    else if(msg.keys & (KEY_UP | KNOB_LEFT))
-        _ui_menuUp(settings_aprs_num);
-    else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
-        _ui_menuDown(settings_aprs_num);
-    else if(msg.keys & KEY_ENTER)
-    {
-        if(item == AP_SEND)
-            aprsStatus_requestBeacon();
-        else if(position)
-        {
-            ui_state.aprs_digits[0] = '\0';
-            ui_state.aprs_neg = (item == AP_LAT)
-                              ? (state.settings.aprsLat < 0)
-                              : (state.settings.aprsLon < 0);
-            ui_state.edit_mode = true;
-        }
-        else if(item != AP_CALL)
-            ui_state.edit_mode = !ui_state.edit_mode;
-    }
-    else if(msg.keys & KEY_ESC)
-    {
-        if(ui_state.edit_mode)
-            ui_state.edit_mode = false;
-        else
-            _ui_menuBack(MENU_SETTINGS);
-    }
-}
-#endif
-
 #ifdef CONFIG_SELFTEST
+static void _ui_menuBack(uint8_t prev_state);
+
 /** Open the self test on the parts page, running the checks */
 static void _ui_selfTestOpen(void)
 {
@@ -3969,12 +3747,6 @@ void ui_updateFSM(bool *sync_rtx)
                             state.ui_screen = TETRA_ACTIVITY;
                             break;
 #endif
-#ifdef CONFIG_APRS
-                        case M_APRS:
-                            ui_state.aprs_sel = 0;
-                            state.ui_screen = APRS_LIST;
-                            break;
-#endif
 #ifdef CONFIG_TETRA_CALLREC
                         case M_SAVED_CALLS:
                             ui_state.saved_sel = 0;
@@ -4141,11 +3913,6 @@ void ui_updateFSM(bool *sync_rtx)
 #ifdef CONFIG_TETRA
                         case S_TETRA:
                             state.ui_screen = SETTINGS_TETRA;
-                            break;
-#endif
-#ifdef CONFIG_APRS
-                        case S_APRS:
-                            state.ui_screen = SETTINGS_APRS;
                             break;
 #endif
                         case S_ACCESSIBILITY:
@@ -4708,18 +4475,6 @@ void ui_updateFSM(bool *sync_rtx)
                 break;
             }
 
-#ifdef CONFIG_APRS
-            case APRS_LIST:
-            case APRS_DETAIL:
-            case APRS_MSGS:
-                _ui_aprsKey(msg);
-                break;
-
-            case SETTINGS_APRS:
-                _ui_aprsSettingsKey(msg);
-                break;
-#endif
-
             // Activity: up / down select, green shows one, red goes back
             case TETRA_ACTIVITY:
             case TETRA_ACTIVITY_DETAIL:
@@ -5088,20 +4843,6 @@ bool ui_updateGUI()
 #ifdef CONFIG_SELFTEST
         case SELF_TEST:
             _ui_drawSelfTest(&ui_state);
-            break;
-#endif
-#ifdef CONFIG_APRS
-        case APRS_LIST:
-            _ui_drawAprsList(&ui_state);
-            break;
-        case APRS_DETAIL:
-            _ui_drawAprsDetail(&ui_state);
-            break;
-        case APRS_MSGS:
-            _ui_drawAprsMessages(&ui_state);
-            break;
-        case SETTINGS_APRS:
-            _ui_drawSettingsAprs(&ui_state);
             break;
 #endif
 #ifdef CONFIG_MEMCH

@@ -224,13 +224,6 @@ target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/bcast.c)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/replay.c)
 target_sources(app PRIVATE ${OPENRTX_ROOT}/openrtx/src/core/dtmf.c)
 
-# APRS in FM (CONFIG_APRS in hwconfig.h)
-target_sources(app PRIVATE
-    ${OPENRTX_ROOT}/openrtx/src/protocols/APRS/Afsk.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/APRS/Aprs.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/APRS/AprsStatus.c
-    ${OPENRTX_ROOT}/openrtx/src/protocols/APRS/Ax25.c)
-
 # AI noise reduction of FM audio (CONFIG_NOISE_REDUCTION): RNNoise, built
 # for speed, as it runs in real time on the audio worker
 set(RNNOISE_SOURCES

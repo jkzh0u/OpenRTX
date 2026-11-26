@@ -71,11 +71,6 @@ set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
     "$ROOT/openrtx/src/core/roger_beep.c" \
     "$ROOT/openrtx/src/ui/default/ui_main.c" \
     "$ROOT/openrtx/src/ui/default/ui_menu.c" \
-    "$ROOT/openrtx/src/ui/default/ui_aprs.c" \
-    "$ROOT/openrtx/src/protocols/APRS/Afsk.c" \
-    "$ROOT/openrtx/src/protocols/APRS/Aprs.c" \
-    "$ROOT/openrtx/src/protocols/APRS/AprsStatus.c" \
-    "$ROOT/openrtx/src/protocols/APRS/Ax25.c" \
     "$ROOT/openrtx/src/ui/default/ui_modes.c" \
     "$ROOT/openrtx/src/ui/default/ui_strings.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraIds.c" \

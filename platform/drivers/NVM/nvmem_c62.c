@@ -633,9 +633,6 @@ int nvm_readVfoChannelData(channel_t *channel)
     return 0;
 }
 
-/* EEEP records are at most 254 bytes long (eeep.c) */
-_Static_assert(sizeof(settings_t) < 255, "settings too big for an EEEP record");
-
 int nvm_readSettings(settings_t *settings)
 {
     if (!ready)

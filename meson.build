@@ -79,7 +79,6 @@ openrtx_inc = ['openrtx/include', 'platform']
 ui_src_default = ['openrtx/src/ui/default/ui.c',
                   'openrtx/src/ui/default/ui_main.c',
                   'openrtx/src/ui/default/ui_menu.c',
-                  'openrtx/src/ui/default/ui_aprs.c',
                   'openrtx/src/ui/default/ui_modes.c',
                   'openrtx/src/ui/default/ui_strings.c']
 
@@ -1367,14 +1366,6 @@ tetra_activity_test = executable('tetra_activity_test',
                                             'tests/unit/tetra_activity.cpp'],
                                  kwargs  : unit_test_opts)
 
-aprs_test = executable('aprs_test',
-                       sources : ['openrtx/src/protocols/APRS/Afsk.c',
-                                  'openrtx/src/protocols/APRS/Aprs.c',
-                                  'openrtx/src/protocols/APRS/AprsStatus.c',
-                                  'openrtx/src/protocols/APRS/Ax25.c',
-                                  'tests/unit/aprs.cpp'],
-                       kwargs  : unit_test_opts)
-
 tetra_roam_test = executable('tetra_roam_test',
                              sources : ['openrtx/src/protocols/TETRA/TetraRoam.c',
                                         'tests/unit/tetra_roam.cpp'],
@@ -1436,7 +1427,6 @@ test('CPS Builtin Image Test', cps_builtin_image_test,
      depends : cps_builtin_image)
 test('TETRA Calls Test',     tetra_calls_test)
 test('TETRA Activity Test',  tetra_activity_test)
-test('APRS Test',            aprs_test)
 test('TETRA Roam Test',      tetra_roam_test)
 test('TETRA Log Test',       tetra_log_test)
 test('TETRA Focus Test',     tetra_focus_test)
