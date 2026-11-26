@@ -23,6 +23,10 @@
 #ifdef CONFIG_REPLAY
 #include "core/replay.h"
 #endif
+#ifdef CONFIG_APRS
+#include "protocols/APRS/Afsk.h"
+#include "protocols/APRS/AprsStatus.h"
+#endif
 #ifdef C62_BASEBAND_DUMP
 #include "baseband_dump_c62.h"
 #endif
@@ -418,6 +422,37 @@ void csk6codec_setRxRecord(bool on)
 }
 #endif
 
+#ifdef CONFIG_APRS
+/* Received FM audio for the APRS decoder: as it comes from the receiver,
+ * before the noise reduction, averaged over 5 samples to 9600 Hz */
+#define APRS_DECIMATE (DSP_SAMPLE_RATE / AFSK_RX_RATE)
+#define APRS_BLOCK (AFSK_RX_RATE / 100)
+static volatile bool aprs_on;
+static int32_t aprs_sum;
+static unsigned int aprs_phase;
+static int16_t aprs_buf[APRS_BLOCK];
+static size_t aprs_fill;
+
+static void aprs_sample(int16_t sample)
+{
+    aprs_sum += sample;
+    if (++aprs_phase < APRS_DECIMATE)
+        return;
+    aprs_buf[aprs_fill++] = (int16_t)(aprs_sum / APRS_DECIMATE);
+    aprs_sum = 0;
+    aprs_phase = 0;
+    if (aprs_fill == APRS_BLOCK) {
+        aprsStatus_pushAudio(aprs_buf, aprs_fill);
+        aprs_fill = 0;
+    }
+}
+
+void csk6codec_setAprsRx(bool on)
+{
+    aprs_on = on;
+}
+#endif
+
 /** Hand a captured sample to the FM outputs taking it from its source */
 static void fm_push(unsigned int source, int16_t sample)
 {
@@ -617,6 +652,10 @@ static void capture_frame(void)
                 }
                 in->phase = (in->phase + 1) % ep->divisor;
             }
+#ifdef CONFIG_APRS
+            if (aprs_on && source == SOURCE_RTX)
+                aprs_sample(sample);
+#endif
             fm_capture(source, sample);
         }
     }

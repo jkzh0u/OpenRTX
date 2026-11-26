@@ -73,7 +73,11 @@ enum uiScreen
     TETRA_MESSAGE,
     TETRA_ACTIVITY,
     TETRA_ACTIVITY_DETAIL,
-    SELF_TEST
+    SELF_TEST,
+    APRS_LIST,
+    APRS_DETAIL,
+    APRS_MSGS,
+    SETTINGS_APRS
 };
 
 /* FM scan: what it does after stopping on a signal (settings.scanResume) */
@@ -111,6 +115,9 @@ enum menuItems
     M_MESSAGES,
     M_ACTIVITY,
 #endif
+#ifdef CONFIG_APRS
+    M_APRS,
+#endif
     M_SETTINGS,
     M_INFO,
 #ifdef CONFIG_SELFTEST
@@ -141,6 +148,9 @@ enum settingsItems
 #endif
 #ifdef CONFIG_TETRA
     S_TETRA,
+#endif
+#ifdef CONFIG_APRS
+    S_APRS,
 #endif
     S_ACCESSIBILITY,
     S_RESET2DEFAULTS,
@@ -221,6 +231,20 @@ enum settingsMemoryItems
     MEM_SAVE,
     MEM_RENAME,
     MEM_DELETE
+};
+#endif
+
+#ifdef CONFIG_APRS
+enum settingsAprsItems
+{
+    AP_RX = 0,   // Decode on or off
+    AP_BEACON,   // Beacon interval
+    AP_SEND,     // Send a beacon
+    AP_LAT,      // Own latitude
+    AP_LON,      // Own longitude
+    AP_SYMBOL,   // Beacon symbol
+    AP_PATH,     // Beacon path
+    AP_CALL,     // Callsign, from Settings > M17
 };
 #endif
 
@@ -360,6 +384,15 @@ typedef struct ui_state_t
     // Activity: the talkgroup selected or shown, 0 the busiest
     uint8_t activity_sel;
 #endif
+#ifdef CONFIG_APRS
+    // APRS: the station selected or shown, 0 the last heard; the message
+    // selected; digits of a latitude or longitude being typed, and south
+    // or west
+    uint8_t aprs_sel;
+    uint8_t aprs_msg_sel;
+    char aprs_digits[9];
+    bool aprs_neg;
+#endif
 #ifdef CONFIG_SELFTEST
     // Self test: the page (SELFTEST_PAGE_...), the first line shown, the
     // results of the checks, and on the keys page the keys seen so far,
@@ -424,6 +457,15 @@ uint32_t _ui_spectrumStep(uint8_t zoom);
 int _ui_spectrumPeak(const struct spectrumSweep *s);
 #endif
 
+#ifdef CONFIG_APRS
+/** Draw Menu > APRS: stations heard, one in full, messages (ui_main.c). */
+void _ui_drawAprsList(ui_state_t *ui_state);
+void _ui_drawAprsDetail(ui_state_t *ui_state);
+void _ui_drawAprsMessages(ui_state_t *ui_state);
+/** Draw Settings > APRS (ui_menu.c). */
+void _ui_drawSettingsAprs(ui_state_t *ui_state);
+#endif
+
 #ifdef CONFIG_SELFTEST
 /* Self test pages */
 enum {
@@ -456,6 +498,10 @@ extern const char * settings_accessibility_items[];
 #ifdef CONFIG_TETRA
 extern const char *settings_tetra_items[];
 extern const uint8_t settings_tetra_num;
+#endif
+#ifdef CONFIG_APRS
+extern const char *settings_aprs_items[];
+extern const uint8_t settings_aprs_num;
 #endif
 extern const char *backup_restore_items[];
 

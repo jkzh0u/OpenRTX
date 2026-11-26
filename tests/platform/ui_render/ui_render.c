@@ -39,6 +39,9 @@
 #include "interfaces/display.h"
 #include "interfaces/cps_io.h"
 #include "protocols/TETRA/TetraActivity.h"
+#include "protocols/APRS/Aprs.h"
+#include "protocols/APRS/AprsStatus.h"
+#include "protocols/APRS/Ax25.h"
 #include "protocols/TETRA/TetraCalls.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
@@ -1113,6 +1116,90 @@ static void selfTestRegs(ui_state_t *ui_state)
     _ui_drawSelfTest(ui_state);
 }
 
+/* APRS heard around Toronto, through the real decoder's bookkeeping */
+static void aprsHear(const char *src, const char *via, const char *info,
+                     long long ago)
+{
+    struct ax25Frame f;
+    uint8_t frame[AX25_MAX_FRAME];
+
+    memset(&f, 0, sizeof(f));
+    ax25_parseCall(src, &f.src);
+    ax25_parseCall("APRS", &f.dst);
+    if (via != NULL) {
+        ax25_parseCall(via, &f.digi[0]);
+        f.digi[0].repeated = true;
+        ax25_parseCall("WIDE2", &f.digi[1]);
+        f.ndigi = 2;
+    }
+    f.control = 0x03;
+    f.pid = 0xf0;
+    f.infoLen = (uint16_t)strlen(info);
+    memcpy(f.info, info, f.infoLen);
+    size_t len = ax25_encode(&f, frame, sizeof(frame));
+    aprsStatus_frame(frame, len - 2, now - ago);
+}
+
+static void aprsFill(void)
+{
+    static bool filled;
+    if (filled)
+        return;
+    filled = true;
+    last_state.settings.aprsPosSet = 1;
+    last_state.settings.aprsLat = 43653200;
+    last_state.settings.aprsLon = -79383200;
+    strcpy(last_state.settings.callsign, "VA3ABC-7");
+    aprsHear("VE3YYZ-10", NULL, "!4341.00N/07936.50W#PHG5360 Toronto digi",
+             3000000);
+    aprsHear("VE3XX", NULL, ":VA3ABC-7 :Are you on the net tonight?{12",
+             600000);
+    aprsHear("VA3RTX-9", "VE3YYZ-10", "!4346.12N/07925.07W>045/031Commuting",
+             240000);
+    aprsHear("VE3KPG", NULL, ">Monitoring 146.520", 90000);
+    aprsHear("VE3KPG", NULL, ":BLN1     :Net Thursday 8 pm on VE3TWR", 80000);
+    aprsHear("VA3HIK-7", "VE3YYZ-10", "!4338.40N\\07923.70W[On the trail",
+             20000);
+}
+
+static void aprsList(ui_state_t *ui_state)
+{
+    aprsFill();
+    ui_state->aprs_sel = 1;
+    _ui_drawAprsList(ui_state);
+}
+
+static void aprsDetail(ui_state_t *ui_state)
+{
+    aprsFill();
+    ui_state->aprs_sel = 2;
+    _ui_drawAprsDetail(ui_state);
+}
+
+static void aprsMessages(ui_state_t *ui_state)
+{
+    aprsFill();
+    ui_state->aprs_msg_sel = 0;
+    _ui_drawAprsMessages(ui_state);
+}
+
+static void aprsSettings(ui_state_t *ui_state)
+{
+    aprsFill();
+    ui_state->menu_selected = AP_LAT;
+    _ui_drawSettingsAprs(ui_state);
+}
+
+static void aprsSettingsTyping(ui_state_t *ui_state)
+{
+    aprsFill();
+    ui_state->menu_selected = AP_LON;
+    ui_state->edit_mode = true;
+    ui_state->aprs_neg = true;
+    strcpy(ui_state->aprs_digits, "07938");
+    _ui_drawSettingsAprs(ui_state);
+}
+
 /** Settings > Memory after saving to slot M2 */
 static void memorySaved(ui_state_t *ui_state)
 {
@@ -1228,6 +1315,11 @@ static void menuScenes(void)
     menu("menu-09-reset", _ui_drawSettingsReset2Defaults, 0);
     menu("menu-09m-activity", activityList, 0);
     menu("menu-09n-activity-detail", activityDetail, 0);
+    menu("menu-09p-aprs", aprsList, 0);
+    menu("menu-09q-aprs-detail", aprsDetail, 0);
+    menu("menu-09r-aprs-messages", aprsMessages, 0);
+    menu("menu-09s-aprs-settings", aprsSettings, 0);
+    menu("menu-09t-aprs-settings-typing", aprsSettingsTyping, 0);
     menu("menu-10-info", _ui_drawMenuInfo, 0);
     menu("menu-10b-selftest-parts", selfTestParts, 0);
     menu("menu-10c-selftest-live", selfTestLive, 0);

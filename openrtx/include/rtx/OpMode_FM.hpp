@@ -77,6 +77,12 @@ public:
 
 private:
 
+    /**
+     * CONFIG_APRS: send an APRS position beacon now, blocking until it is
+     * sent, then receive again.
+     */
+    void sendAprsBeacon(rtxStatus_t *const status);
+
     bool   rfSqlOpen;   ///< Flag for RF squelch status (analog squelch).
     bool   sqlOpen;     ///< Flag for squelch status.
     bool   enterRx;     ///< Flag for RX management.

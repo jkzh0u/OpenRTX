@@ -15,6 +15,11 @@
 #include "core/vox.h"
 #include "core/bcast.h"
 #include "core/dtmf.h"
+#ifdef CONFIG_APRS
+#include "protocols/APRS/Afsk.h"
+#include "protocols/APRS/Aprs.h"
+#include "protocols/APRS/AprsStatus.h"
+#endif
 #include "interfaces/audio.h"
 #include "core/audio_path.h"
 #include "core/audio_stream.h"
@@ -147,6 +152,121 @@ static bool voxUpdate(const rtxStatus_t *status, bool sqlOpen)
 }
 #endif
 
+#ifdef CONFIG_APRS
+/* APRS beacon audio: 48 kHz, as the transmitter path takes it */
+#define APRS_TX_RATE 48000
+/* Flags before the frame, for the receivers to lock: 300 ms */
+#define APRS_TX_DELAY_FLAGS 45
+#define APRS_TX_TAIL_FLAGS 4
+/* Tone level: sets the deviation, to adjust on the radio */
+#define APRS_TX_LEVEL 10000
+/* Comment of the beacon */
+#define APRS_COMMENT "OpenRTX C62"
+/* First timed beacon this long after power on */
+#define APRS_FIRST_MS 60000
+
+/* Beacon intervals, Settings > APRS > Beacon: 0 by hand only */
+static const uint32_t aprsIntervalMs[] = { 0, 600000, 1200000, 1800000,
+                                           3600000 };
+
+/**
+ * @return true when a beacon is due: asked for, or the interval is over.
+ */
+static bool aprsBeaconDue(long long now)
+{
+    static long long started;
+    uint8_t i = state.settings.aprsBeacon;
+
+    if(started == 0)
+        started = now;
+    if(!state.settings.aprsPosSet)
+        return false;
+    if(aprsStatus_beaconRequested())
+        return true;
+    if(i == 0 || i >= sizeof(aprsIntervalMs) / sizeof(aprsIntervalMs[0]))
+        return false;
+
+    long long last = aprsStatus_lastBeacon();
+    if(last == 0)
+        return now - started >= APRS_FIRST_MS;
+    return now - last >= (long long)aprsIntervalMs[i];
+}
+
+void OpMode_FM::sendAprsBeacon(rtxStatus_t *const status)
+{
+    static uint8_t frame[AX25_MAX_FRAME];
+    static struct afskMod mod;
+    static stream_sample_t buf[2 * 480]; // Two halves of 10 ms
+    const size_t half = sizeof(buf) / sizeof(buf[0]) / 2;
+    char table, code;
+
+    aprs_symbol(state.settings.aprsSymbol, &table, &code);
+    size_t len = aprs_beaconFrame(frame, sizeof(frame),
+                                  state.settings.callsign,
+                                  state.settings.aprsPath,
+                                  state.settings.aprsLat,
+                                  state.settings.aprsLon, table, code,
+                                  APRS_COMMENT);
+    if(len == 0)
+    {
+        // No callsign: nothing can be sent, the request is dropped
+        aprsStatus_beaconSent(getTick());
+        return;
+    }
+
+    // As for PTT: receiving stops
+    audioPath_release(rxAudioPath);
+    audioOpen = false;
+    afOn = false;
+    sqlOpen = false;
+    radio_disableRtx();
+
+    pathId path = audioPath_request(SOURCE_MCU, SINK_RTX, PRIO_TX);
+    if(audioPath_getStatus(path) == PATH_OPEN)
+    {
+        memset(buf, 0, sizeof(buf));
+        streamId stream = audioStream_start(path, buf, 2 * half,
+                                            APRS_TX_RATE,
+                                            STREAM_OUTPUT | BUF_CIRC_DOUBLE);
+        if(stream >= 0)
+        {
+            radio_enableTx();
+            status->opStatus = TX;
+            platform_ledOn(RED);
+
+            afskMod_init(&mod, frame, len, APRS_TX_RATE,
+                         APRS_TX_DELAY_FLAGS, APRS_TX_TAIL_FLAGS,
+                         APRS_TX_LEVEL);
+            outputStream_sync(stream, false);
+            // The frame, then two halves of silence so that all of it goes
+            int silent = 0;
+            while(silent < 2)
+            {
+                stream_sample_t *out = outputStream_getIdleBuffer(stream);
+                if(out == NULL)
+                    break;
+                size_t n = afskMod_render(&mod, out, half);
+                if(n < half)
+                {
+                    memset(&out[n], 0, (half - n) * sizeof(out[0]));
+                    if(n == 0)
+                        silent++;
+                }
+                outputStream_sync(stream, true);
+            }
+            audioStream_stop(stream);
+            platform_ledOff(RED);
+        }
+    }
+    audioPath_release(path);
+
+    radio_disableRtx();
+    status->opStatus = OFF;
+    enterRx = true;
+    aprsStatus_beaconSent(getTick());
+}
+#endif
+
 void OpMode_FM::disable()
 {
     // Clean shutdown.
@@ -168,6 +288,9 @@ void OpMode_FM::disable()
     enterRx   = false;
     #ifdef CONFIG_NOISE_REDUCTION
     audio_setNoiseReduction(0, 0);
+    #endif
+    #ifdef CONFIG_APRS
+    audio_setAprsRx(false);
     #endif
     #ifdef CONFIG_VOX
     if(voxMonitoring)
@@ -369,6 +492,19 @@ void OpMode_FM::update(rtxStatus_t *const status, const bool newCfg)
     #ifdef CONFIG_NOISE_REDUCTION
     // Settings > FM, applied by the audio driver to the FM audio
     audio_setNoiseReduction(state.settings.nrRx, state.settings.nrTx);
+    #endif
+
+    #ifdef CONFIG_APRS
+    // APRS: what is heard is decoded, as it comes from the receiver
+    audio_setAprsRx(sqlOpen && (status->opStatus == RX)
+                    && !state.settings.aprsRxOff);
+    aprsStatus_process(getTick());
+
+    // A beacon: on a clear channel, not while PTT is held, and only where
+    // PTT would transmit (the main screen, a channel that may)
+    if((status->opStatus == RX) && !chanOpen && (status->txDisable == 0)
+       && !platform_getPttStatus() && aprsBeaconDue(getTick()))
+        sendAprsBeacon(status);
     #endif
 
     // TX logic: PTT, or VOX (not while something is heard: the speaker

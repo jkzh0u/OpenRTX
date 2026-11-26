@@ -91,6 +91,16 @@ typedef struct
     uint8_t nrRx;                 // FM AI noise reduction, received, 0 off
     uint8_t nrTx;                 // FM AI noise reduction, microphone, 0 off
 #endif
+#ifdef CONFIG_APRS
+    uint8_t aprsRxOff   : 1,      // APRS not decoded in FM
+            aprsPosSet  : 1,      // aprsLat and aprsLon are set
+            aprsPath    : 2,      // Beacon path, enum aprsPath
+            aprsBeacon  : 3,      // Beacon interval, index, 0 manual only
+            _aprsReserved : 1;
+    uint8_t aprsSymbol;           // Beacon symbol, index (ui_default.h)
+    int32_t aprsLat;              // Own position, millionths of a degree
+    int32_t aprsLon;
+#endif
 }
 __attribute__((packed)) settings_t;
 

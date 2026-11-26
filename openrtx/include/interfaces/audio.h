@@ -191,6 +191,15 @@ void audio_setMicMonitor(bool on);
 void audio_setRxRecord(bool on);
 
 /**
+ * On platforms with CONFIG_APRS: hand the transceiver's received audio to
+ * the APRS decoder (protocols/APRS/AprsStatus.h), as it comes, before any
+ * noise reduction.
+ *
+ * @param on: true while the channel is heard.
+ */
+void audio_setAprsRx(bool on);
+
+/**
  * On platforms with CONFIG_NOISE_REDUCTION: AI noise reduction of FM audio.
  *
  * @param rxLevel: for received audio, 0 off, 1 to 10.
