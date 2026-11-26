@@ -9,6 +9,7 @@
 #include <string.h>
 #include <tetra/tetra.h>
 #include "interfaces/delays.h"
+#include "protocols/TETRA/TetraActivity.h"
 #include "protocols/TETRA/TetraConfig.h"
 #include "protocols/TETRA/TetraFocus.h"
 #include "protocols/TETRA/TetraIds.h"
@@ -29,6 +30,10 @@ static struct tetraFocus focus;   /* The call played and shown */
 static struct tetraMessage messages[TETRA_MESSAGES_KEPT];
 static uint8_t msgNext;
 static uint8_t msgCount;
+
+/* Activity log: calls and talk time per talkgroup since power on. Every
+ * call heard, whatever the filter. */
+static struct tetraActivity activity;
 
 bool tetraStatus_callNow(uint16_t *callId, uint32_t *dst, uint32_t *talker,
                          bool *group, uint16_t *la)
@@ -141,6 +146,24 @@ uint8_t tetraStatus_messageCount(void)
     return n;
 }
 
+uint8_t tetraStatus_activityCount(void)
+{
+    pthread_mutex_lock(&statusMutex);
+    uint8_t n = activity.count;
+    pthread_mutex_unlock(&statusMutex);
+    return n;
+}
+
+bool tetraStatus_activity(uint8_t n, struct tetraActivityEntry *out)
+{
+    pthread_mutex_lock(&statusMutex);
+    long long now = getTick();
+    tetraActivity_update(&activity, now);
+    bool ok = tetraActivity_get(&activity, n, now, out);
+    pthread_mutex_unlock(&statusMutex);
+    return ok;
+}
+
 bool tetraStatus_message(uint8_t n, struct tetraMessage *out)
 {
     bool ok = false;
@@ -203,10 +226,36 @@ static void onNetwork(const struct tetra_network *nw)
     }
 }
 
+/** What a call event means for the activity log */
+static uint8_t activityWhat(enum tetra_call_what what)
+{
+    switch (what) {
+        case TETRA_CALL_SETUP:
+        case TETRA_CALL_LATE_ENTRY:
+        case TETRA_CALL_RESTORE:
+        case TETRA_CALL_TX_GRANTED:
+        case TETRA_CALL_TX_CONTINUE:
+            return TETRA_ACTIVITY_TALK;
+        case TETRA_CALL_TX_CEASED:
+        case TETRA_CALL_TX_WAIT:
+        case TETRA_CALL_TX_INTERRUPT:
+            return TETRA_ACTIVITY_CEASE;
+        case TETRA_CALL_RELEASE:
+            return TETRA_ACTIVITY_RELEASE;
+        default:
+            return TETRA_ACTIVITY_SEEN;
+    }
+}
+
 static void onCall(const struct tetra_call *c)
 {
     long long now = getTick();
     bool alarm = tetraIds_isAlarm(c->dst_ssi) || tetraIds_isAlarm(c->src_ssi);
+
+    /* Uplink requests say nothing of what is heard */
+    if (c->what != TETRA_CALL_TX_DEMAND)
+        tetraActivity_note(&activity, activityWhat(c->what), c->call_id,
+                           c->dst_ssi, c->group, now);
 
     if (c->what == TETRA_CALL_RELEASE) {
         tetraFocus_release(&focus, c->call_id);
@@ -267,6 +316,10 @@ static void onCall(const struct tetra_call *c)
 static bool onTraffic(const struct tetra_traffic *t)
 {
     long long now = getTick();
+
+    /* Speech flowing, whichever call is played */
+    tetraActivity_note(&activity, TETRA_ACTIVITY_TALK, t->call_id, 0, false,
+                       now);
 
     /* On a followed call's carrier, all traffic is that call's */
     if (status.followHz == 0

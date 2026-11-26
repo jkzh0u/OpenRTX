@@ -36,6 +36,7 @@ target_sources(app
     ${OPENRTX_ROOT}/platform/targets/c62/hwconfig.c
     ${OPENRTX_ROOT}/platform/targets/c62/dsp.c
     ${OPENRTX_ROOT}/platform/targets/c62/lsf.c
+    ${OPENRTX_ROOT}/platform/targets/c62/selftest_c62.c
 )
 
 #
@@ -153,6 +154,7 @@ if(C62_TETRA)
     $<TARGET_PROPERTY:zephyr_interface,INTERFACE_SYSTEM_INCLUDE_DIRECTORIES>)
   target_link_libraries(app PRIVATE tetra)
   target_sources(app PRIVATE
+    ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraActivity.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraCalls.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraDemod.c
     ${OPENRTX_ROOT}/openrtx/src/protocols/TETRA/TetraFilter.c

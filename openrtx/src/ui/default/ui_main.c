@@ -18,6 +18,7 @@
 #ifdef CONFIG_TETRA
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraRoam.h"
+#include "protocols/TETRA/TetraActivity.h"
 #include "protocols/TETRA/TetraStatus.h"
 #include "protocols/TETRA/TetraCallRec.h"
 
@@ -924,6 +925,188 @@ void _ui_drawTetraSaved(ui_state_t *ui_state)
     }
 }
 #endif
+
+/**
+ * Talk time: 0:45, 12:03, 1:02:03.
+ */
+static void _ui_activityTime(char *buf, size_t len, uint32_t ms)
+{
+    uint32_t s = ms / 1000;
+
+    if (s < 3600)
+        snprintf(buf, len, "%lu:%02lu", (unsigned long)(s / 60),
+                 (unsigned long)(s % 60));
+    else
+        snprintf(buf, len, "%lu:%02lu:%02lu", (unsigned long)(s / 3600),
+                 (unsigned long)(s / 60 % 60), (unsigned long)(s % 60));
+}
+
+/** Calls and when last heard: "12 calls, 3m ago" or "talking now" */
+static void _ui_activityLine(char *buf, size_t len,
+                             const struct tetraActivityEntry *e,
+                             long long now)
+{
+    char age[12];
+
+    if (e->talking) {
+        snprintf(buf, len, "%u call%s, talking now", e->calls,
+                 e->calls == 1 ? "" : "s");
+        return;
+    }
+    _ui_tetraAge(age, sizeof(age), now - e->last);
+    snprintf(buf, len, "%u call%s, %s ago", e->calls,
+             e->calls == 1 ? "" : "s", age);
+}
+
+/**
+ * Activity: talkgroups and radios called since power on, the busiest
+ * first, with their talk time. Menu > Activity.
+ */
+void _ui_drawTetraActivity(ui_state_t *ui_state)
+{
+    const uint16_t rowH = layout.menu_h + 9;
+    uint8_t count = tetraStatus_activityCount();
+    long long now = getTick();
+
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "Activity");
+    if (count == 0) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "None yet");
+        gfx_print(layout.line3_pos, FONT_SIZE_6PT, TEXT_ALIGN_CENTER,
+                  tetraMuted, "calls heard since power on");
+        return;
+    }
+
+    uint16_t rows = (CONFIG_SCREEN_HEIGHT - layout.line1_pos.y + layout.menu_h)
+                  / rowH;
+    if (rows == 0)
+        rows = 1;
+    if (ui_state->activity_sel >= count)
+        ui_state->activity_sel = count - 1;
+    uint8_t sel = ui_state->activity_sel;
+    uint8_t first = (sel >= rows) ? (uint8_t)(sel - rows + 1) : 0;
+    point_t pos = layout.line1_pos;
+
+    for (uint8_t n = first; n < count && n < first + rows; n++) {
+        struct tetraActivityEntry e;
+        if (!tetraStatus_activity(n, &e))
+            break;
+        bool selected = n == sel;
+        color_t ink = selected ? color_black : color_white;
+        color_t small = selected ? color_black
+                      : e.talking ? tetraVoice
+                                  : tetraMuted;
+        char name[24], talk[12], fitted[32], line[40];
+
+        if (selected) {
+            point_t bar = { 0, (uint16_t)(pos.y - layout.menu_h + 3) };
+            gfx_drawRect(bar, CONFIG_SCREEN_WIDTH, rowH, color_white, true);
+        }
+
+        _ui_activityTime(talk, sizeof(talk), e.talkMs);
+        point_t right = { layout.horizontal_pad, pos.y };
+        gfx_print(right, layout.menu_font, TEXT_ALIGN_RIGHT, ink, "%s", talk);
+        uint16_t room = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad - 6
+                      - _ui_tetraTextWidth(layout.menu_font, talk);
+        _ui_tetraSsiName(name, sizeof(name), e.dst, e.group);
+        _ui_tetraFit(fitted, sizeof(fitted), layout.menu_font, room, "", name,
+                     "");
+        point_t left = { layout.horizontal_pad, pos.y };
+        gfx_print(left, layout.menu_font, TEXT_ALIGN_LEFT, ink, "%s", fitted);
+
+        _ui_activityLine(line, sizeof(line), &e, now);
+        point_t sub = { layout.horizontal_pad, (uint16_t)(pos.y + 9) };
+        gfx_print(sub, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, small, "%s", line);
+        pos.y += rowH;
+    }
+}
+
+/**
+ * One talkgroup's activity: talk time, calls, transmissions, and a bar for
+ * the talk time of each of the last 24 hours.
+ */
+void _ui_drawTetraActivityDetail(ui_state_t *ui_state)
+{
+    struct tetraActivityEntry e;
+    char name[24], fitted[32], talk[12], line[40];
+    uint16_t width = CONFIG_SCREEN_WIDTH - 2 * layout.horizontal_pad;
+    long long now = getTick();
+
+    gfx_clearScreen();
+    if (!tetraStatus_activity(ui_state->activity_sel, &e)) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  color_white, "Gone");
+        return;
+    }
+
+    _ui_tetraSsiName(name, sizeof(name), e.dst, e.group);
+    _ui_tetraFit(fitted, sizeof(fitted), layout.top_font, width, "", name,
+                 "");
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER,
+              e.group ? tetraGroup : color_white, "%s", fitted);
+
+    point_t pos = { layout.horizontal_pad, layout.line1_pos.y };
+    _ui_activityTime(talk, sizeof(talk), e.talkMs);
+    gfx_print(pos, layout.menu_font, TEXT_ALIGN_LEFT, color_white,
+              "Talk time %s", talk);
+
+    pos.y += 11;
+    snprintf(line, sizeof(line), "%u call%s, %u transmission%s", e.calls,
+             e.calls == 1 ? "" : "s", e.talks, e.talks == 1 ? "" : "s");
+    gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, tetraMuted, "%s", line);
+
+    pos.y += 9;
+    if (e.talking) {
+        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, tetraVoice,
+                  "Talking now");
+    } else {
+        char age[12];
+        _ui_tetraAge(age, sizeof(age), now - e.last);
+        gfx_print(pos, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, tetraMuted,
+                  "Last heard %s ago", age);
+    }
+
+    /* The last 24 hours, the oldest on the left, scaled to the busiest
+     * hour, at least 5 minutes */
+    uint16_t labelY = CONFIG_SCREEN_HEIGHT - 2;
+    uint16_t base = labelY - 9;
+    uint16_t top = pos.y + 6;
+    uint16_t height = (base > top) ? base - top : 1;
+    uint16_t barW = width / TETRA_ACTIVITY_HOURS;
+    uint16_t left = layout.horizontal_pad
+                  + (width - barW * TETRA_ACTIVITY_HOURS) / 2;
+    uint16_t peak = 300;
+
+    for (unsigned k = 0; k < TETRA_ACTIVITY_HOURS; k++)
+        if (e.hourSec[k] > peak)
+            peak = e.hourSec[k];
+
+    point_t axis = { left, base };
+    gfx_drawRect(axis, barW * TETRA_ACTIVITY_HOURS, 1, tetraMuted, true);
+    for (unsigned k = 0; k < TETRA_ACTIVITY_HOURS; k++) {
+        uint16_t sec = e.hourSec[k];
+        if (sec == 0)
+            continue;
+        uint16_t h = (uint16_t)((uint32_t)sec * height / peak);
+        if (h == 0)
+            h = 1;
+        point_t bar = { (uint16_t)(left + (TETRA_ACTIVITY_HOURS - 1 - k) * barW),
+                        (uint16_t)(base - h) };
+        gfx_drawRect(bar, barW > 1 ? barW - 1 : 1, h,
+                     k == 0 ? tetraTalk : tetraGroup, true);
+    }
+
+    point_t l = { left, labelY };
+    gfx_print(l, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, tetraMuted, "24h ago");
+    point_t r = { layout.horizontal_pad, labelY };
+    gfx_print(r, FONT_SIZE_6PT, TEXT_ALIGN_RIGHT, tetraMuted, "now");
+    snprintf(line, sizeof(line), "%u/%u", ui_state->activity_sel + 1,
+             tetraStatus_activityCount());
+    point_t c = { 0, labelY };
+    gfx_print(c, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, tetraMuted, "%s", line);
+}
 
 /**
  * Messages (SDS) received, newest first: on each, the sender and how long

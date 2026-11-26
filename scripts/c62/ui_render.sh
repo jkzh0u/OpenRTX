@@ -75,6 +75,7 @@ set -- -std=gnu17 -O1 -w -o "$BUILD/ui_render" \
     "$ROOT/openrtx/src/ui/default/ui_strings.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraIds.c" \
     "$ROOT/openrtx/src/protocols/TETRA/TetraCalls.c" \
+    "$ROOT/openrtx/src/protocols/TETRA/TetraActivity.c" \
     "$ROOT/lib/QRCode/qrcode.c"
 if [ -n "$CHANNELS" ]; then
     set -- "$@" "-DCPS_BUILTIN_LIST=\"$CHANNELS\"" \

@@ -114,6 +114,9 @@ static void channelListInit(void)
         printk("Channel list: not used, damaged or other version (%d)\n", ret);
 }
 
+/* What starting the DSP gave, for the self test (selftest_c62.c) */
+int c62_dspResult = -1;
+
 void platform_init_csk6()
 {
 #ifdef CONFIG_TETRA_LOG
@@ -159,6 +162,7 @@ void platform_init_csk6()
     if (ret == 0)
         ret = lsf_controller_init();
 
+    c62_dspResult = ret;
     battery_restore_pins();
 
     /* Initialise audio, which runs on the DSP */

@@ -15,6 +15,12 @@
 #include "core/event.h"
 #include "hwconfig.h"
 #include "core/ui.h"
+#ifdef CONFIG_SELFTEST
+#include "interfaces/selftest.h"
+
+/* Self test results kept for the parts page */
+#define SELFTEST_ITEMS 16
+#endif
 
 // Maximum menu entry length
 #define MAX_ENTRY_LEN 21
@@ -64,7 +70,10 @@ enum uiScreen
     BCAST_FM,
     TETRA_SAVED,
     TETRA_MESSAGES,
-    TETRA_MESSAGE
+    TETRA_MESSAGE,
+    TETRA_ACTIVITY,
+    TETRA_ACTIVITY_DETAIL,
+    SELF_TEST
 };
 
 /* FM scan: what it does after stopping on a signal (settings.scanResume) */
@@ -100,9 +109,13 @@ enum menuItems
 #endif
 #ifdef CONFIG_TETRA
     M_MESSAGES,
+    M_ACTIVITY,
 #endif
     M_SETTINGS,
     M_INFO,
+#ifdef CONFIG_SELFTEST
+    M_SELF_TEST,
+#endif
 #ifdef CONFIG_TETRA
     M_FIELD_TEST,
 #endif
@@ -344,6 +357,20 @@ typedef struct ui_state_t
 #ifdef CONFIG_TETRA
     // Messages: the one selected or shown, 0 the newest
     uint8_t msg_sel;
+    // Activity: the talkgroup selected or shown, 0 the busiest
+    uint8_t activity_sel;
+#endif
+#ifdef CONFIG_SELFTEST
+    // Self test: the page (SELFTEST_PAGE_...), the first line shown, the
+    // results of the checks, and on the keys page the keys seen so far,
+    // the last ones pressed and whether long
+    uint8_t selftest_page;
+    uint16_t selftest_scroll;
+    uint8_t selftest_count;
+    struct selftestItem selftest_items[SELFTEST_ITEMS];
+    uint32_t selftest_keys_seen;
+    uint32_t selftest_keys_last;
+    bool selftest_keys_long;
 #endif
 #ifdef CONFIG_TETRA_CALLREC
     // Saved calls: the one selected, 0 the newest; a delete waiting for a
@@ -395,6 +422,20 @@ uint32_t _ui_spectrumStep(uint8_t zoom);
 
 /** @return the strongest point of a sweep, or -1 before the first. */
 int _ui_spectrumPeak(const struct spectrumSweep *s);
+#endif
+
+#ifdef CONFIG_SELFTEST
+/* Self test pages */
+enum {
+    SELFTEST_PAGE_PARTS = 0, /**< Each part answers or not */
+    SELFTEST_PAGE_LIVE,      /**< Signal, battery, audio levels, now */
+    SELFTEST_PAGE_KEYS,      /**< Each key, lit once pressed */
+    SELFTEST_PAGE_REGS,      /**< Radio chip registers */
+    SELFTEST_PAGES
+};
+
+/** Draw the self test (ui_menu.c). */
+void _ui_drawSelfTest(ui_state_t *ui_state);
 #endif
 
 extern layout_t layout;

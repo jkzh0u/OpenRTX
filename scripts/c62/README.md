@@ -259,6 +259,22 @@ cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all \
 cskburn -s /dev/ttyUSB0 -C 6 -b 115200 -v --verify-all 0x2c0000 channels.bin
 ```
 
+### Self test
+
+After the first flash, **Menu** > **Self test** checks each part of the
+radio. It only reads: it changes no setting and does not transmit. Four
+pages, **#** and **\*** go from one to the next:
+
+| Page | Shows |
+|---|---|
+| Parts | Each part, green if it works, red if not: Radio chip (the BK4819 answers), FM chip (the BK1080's ID is 1080), PSRAM (written and read back), DSP (started), Audio (running), Battery (between 6.0 and 8.8 V), Ch list (channels and names, or `none`), Memories, Saved calls. **Green** checks again, **Up** / **Down** scroll |
+| Live | Signal (dBm), battery voltage and charge, microphone level (talk into it), PTT, AI noise reduction load, time since power on |
+| Keys | Each key lights up green once pressed, the last one amber, with `long` for a long press. PTT and the side key included. Here every key is only shown: hold **#** or **\*** to change page, hold **red** to leave |
+| Registers | The radio chip's 128 registers, live, two a line; **Up** / **Down** scroll |
+
+**Red** leaves (held on the keys page). A red part says where to look:
+no channel list is `none` in white, not an error.
+
 ## 3. Capture the RX baseband
 
 The dump is off by default, as it shares the cable with the TETRA receive
@@ -593,6 +609,19 @@ many times it came (`x3`: the same text from the same sender within 30 s
 counts once), and the text, up to 127 characters, wrapped. **Up** /
 **Down** go through them, **red** goes back. Kept until the radio is
 turned off.
+
+### Activity
+
+**Menu** > **Activity** shows which talkgroups and radios were called since
+the radio was turned on, the busiest first: the name, the talk time
+(how long someone was talking), the number of calls, and how long ago it
+was last heard, or `talking now`. Every call heard counts, whatever the
+filter, and the call played as well as the others on the cell.
+
+**Green** shows one: talk time, calls and transmissions, when last heard,
+and a bar for each of the last 24 hours, the oldest on the left, the
+current hour in amber. **Up** / **Down** go through them, **red** goes
+back. The 32 busiest are kept, until the radio is turned off.
 
 ### Receive log
 

@@ -38,6 +38,7 @@
 #include "core/graphics.h"
 #include "interfaces/display.h"
 #include "interfaces/cps_io.h"
+#include "protocols/TETRA/TetraActivity.h"
 #include "protocols/TETRA/TetraCalls.h"
 #include "protocols/TETRA/TetraIds.h"
 #include "protocols/TETRA/TetraStatus.h"
@@ -77,6 +78,8 @@ void _ui_drawBcast(ui_state_t *ui_state);
 void _ui_drawReplay(void);
 void _ui_drawTetraSaved(ui_state_t *ui_state);
 void _ui_drawTetraMessages(ui_state_t *ui_state);
+void _ui_drawTetraActivity(ui_state_t *ui_state);
+void _ui_drawTetraActivityDetail(ui_state_t *ui_state);
 void _ui_drawTetraMessage(ui_state_t *ui_state);
 void _ui_drawSettingsMemory(ui_state_t *ui_state);
 
@@ -229,6 +232,100 @@ bool tetraStatus_message(uint8_t n, struct tetraMessage *out)
     *out = msgs[n];
     out->time = now - ago[n];
     return true;
+}
+
+/* TETRA activity: a day on the TTC network, from the real log code, on a
+ * clock of its own that has run for a day (the harness clock is at 100 s) */
+#define ACT_NOW (100 * 3600000LL)
+static struct tetraActivity activity;
+static bool activityFilled;
+
+static void activityCall(uint16_t id, uint32_t dst, long long start,
+                         uint32_t ms)
+{
+    tetraActivity_note(&activity, TETRA_ACTIVITY_TALK, id, dst, true, start);
+    for (uint32_t t = 10000; t < ms; t += 10000)
+        tetraActivity_note(&activity, TETRA_ACTIVITY_SEEN, id, 0, false,
+                           start + t);
+    tetraActivity_note(&activity, TETRA_ACTIVITY_RELEASE, id, 0, false,
+                       start + ms);
+}
+
+static void activityFill(void)
+{
+    const long long hour = 3600000LL;
+    uint16_t id = 1;
+
+    if (activityFilled)
+        return;
+    activityFilled = true;
+    tetraActivity_init(&activity, ACT_NOW - 20 * hour);
+    /* Line 1 busy all day, more at the rush hours */
+    for (int h = 19; h >= 0; h--) {
+        int calls = (h == 1 || h == 2 || h == 10 || h == 11) ? 9 : 3;
+        for (int c = 0; c < calls; c++)
+            activityCall(id++, 101011, ACT_NOW - h * hour - (c + 1) * 300000,
+                         8000 + c * 2500);
+    }
+    for (int h = 6; h >= 0; h -= 2)
+        activityCall(id++, 101162, ACT_NOW - h * hour - 900000, 25000);
+    activityCall(id++, 101167, ACT_NOW - 3 * hour, 12000);
+    activityCall(id++, 100010, ACT_NOW - 50 * 60000, 4000);
+    /* Line 2 talking ACT_NOW */
+    tetraActivity_note(&activity, TETRA_ACTIVITY_TALK, id, 101012, true,
+                       ACT_NOW - 6000);
+}
+
+uint8_t tetraStatus_activityCount(void)
+{
+    activityFill();
+    return activity.count;
+}
+
+bool tetraStatus_activity(uint8_t n, struct tetraActivityEntry *out)
+{
+    activityFill();
+    if (!tetraActivity_get(&activity, n, ACT_NOW, out))
+        return false;
+    out->first += now - ACT_NOW;
+    out->last += now - ACT_NOW;
+    return true;
+}
+
+/* Self test: what a radio with no channel list and a dead FM chip shows */
+size_t selftest_run(struct selftestItem *items, size_t max)
+{
+    static const struct selftestItem fake[] = {
+        { "Radio chip", "answers", SELFTEST_PASS },
+        { "FM chip", "ID ffff", SELFTEST_FAIL },
+        { "PSRAM", "1 KB ok", SELFTEST_PASS },
+        { "DSP", "started", SELFTEST_PASS },
+        { "Audio", "running", SELFTEST_PASS },
+        { "Battery", "7.82 V", SELFTEST_PASS },
+        { "Ch list", "none", SELFTEST_INFO },
+        { "Memories", "3 saved", SELFTEST_PASS },
+        { "Saved calls", "12 saved", SELFTEST_PASS },
+    };
+    size_t n = sizeof(fake) / sizeof(fake[0]);
+    if (n > max)
+        n = max;
+    memcpy(items, fake, n * sizeof(fake[0]));
+    return n;
+}
+
+bool selftest_reg(uint16_t n, uint8_t *addr, uint16_t *value)
+{
+    if (n >= 0x80)
+        return false;
+    *addr = (uint8_t)n;
+    if (value != NULL)
+        *value = (uint16_t)(n * 0x0101u ^ 0x3b20u);
+    return true;
+}
+
+void audio_setMicMonitor(bool on)
+{
+    (void)on;
 }
 
 /* Saved TETRA calls: three, the middle one playing */
@@ -974,6 +1071,48 @@ static void menu(const char *name, menuDraw fn, uint8_t selected)
     printf("%s\n", outPath);
 }
 
+static void activityList(ui_state_t *ui_state)
+{
+    ui_state->activity_sel = 1;
+    _ui_drawTetraActivity(ui_state);
+}
+
+static void activityDetail(ui_state_t *ui_state)
+{
+    ui_state->activity_sel = 0;
+    _ui_drawTetraActivityDetail(ui_state);
+}
+
+static void selfTestParts(ui_state_t *ui_state)
+{
+    ui_state->selftest_page = SELFTEST_PAGE_PARTS;
+    ui_state->selftest_count = (uint8_t)selftest_run(ui_state->selftest_items,
+                                                     SELFTEST_ITEMS);
+    _ui_drawSelfTest(ui_state);
+}
+
+static void selfTestLive(ui_state_t *ui_state)
+{
+    ui_state->selftest_page = SELFTEST_PAGE_LIVE;
+    _ui_drawSelfTest(ui_state);
+}
+
+static void selfTestKeys(ui_state_t *ui_state)
+{
+    ui_state->selftest_page = SELFTEST_PAGE_KEYS;
+    ui_state->selftest_keys_seen = KEY_ENTER | KEY_UP | KEY_DOWN | KEY_1 | KEY_2
+                                 | KEY_5 | KEY_9 | KEY_HASH | KEY_MONI;
+    ui_state->selftest_keys_last = KEY_5;
+    _ui_drawSelfTest(ui_state);
+}
+
+static void selfTestRegs(ui_state_t *ui_state)
+{
+    ui_state->selftest_page = SELFTEST_PAGE_REGS;
+    ui_state->selftest_scroll = 3;
+    _ui_drawSelfTest(ui_state);
+}
+
 /** Settings > Memory after saving to slot M2 */
 static void memorySaved(ui_state_t *ui_state)
 {
@@ -1087,7 +1226,13 @@ static void menuScenes(void)
     menu("menu-07f-memory-save", memorySaved, 1);
     menu("menu-07g-memory-name", memoryNaming, 0);
     menu("menu-09-reset", _ui_drawSettingsReset2Defaults, 0);
+    menu("menu-09m-activity", activityList, 0);
+    menu("menu-09n-activity-detail", activityDetail, 0);
     menu("menu-10-info", _ui_drawMenuInfo, 0);
+    menu("menu-10b-selftest-parts", selfTestParts, 0);
+    menu("menu-10c-selftest-live", selfTestLive, 0);
+    menu("menu-10d-selftest-keys", selfTestKeys, 0);
+    menu("menu-10e-selftest-regs", selfTestRegs, 0);
     menu("menu-11-about", _ui_drawMenuAbout, 0);
     menu("menu-12-shortcuts", macroMenu, 0);
 

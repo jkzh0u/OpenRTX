@@ -70,6 +70,7 @@
 #include "core/bcast.h"
 #include "core/dtmf.h"
 #include "core/replay.h"
+#include "interfaces/audio.h"
 #include "protocols/TETRA/TetraCallRec.h"
 #ifdef CONFIG_FAST_COPY
 #include "core/fast_copy.h"
@@ -144,9 +145,13 @@ const char *menu_items[] =
 #endif
 #ifdef CONFIG_TETRA
     "Messages",
+    "Activity",
 #endif
     "Settings",
     "Info",
+#ifdef CONFIG_SELFTEST
+    "Self test",
+#endif
 #ifdef CONFIG_TETRA
     "Field test",
 #endif
@@ -783,6 +788,8 @@ extern uint32_t _ui_tetraRecentSsi(uint8_t index);
 extern void _ui_drawTetraRecentDetail(ui_state_t *ui_state);
 extern void _ui_drawTetraMessages(ui_state_t *ui_state);
 extern void _ui_drawTetraMessage(ui_state_t *ui_state);
+extern void _ui_drawTetraActivity(ui_state_t *ui_state);
+extern void _ui_drawTetraActivityDetail(ui_state_t *ui_state);
 extern bool _ui_tetraCallActive(void);
 
 /**
@@ -949,6 +956,79 @@ static bool _ui_tetraKeys(kbd_msg_t msg)
 #endif
 
 int _ui_handleToneSelectScroll(bool direction_up);
+
+#ifdef CONFIG_SELFTEST
+static void _ui_menuBack(uint8_t prev_state);
+
+/** Open the self test on the parts page, running the checks */
+static void _ui_selfTestOpen(void)
+{
+    ui_state.selftest_page = SELFTEST_PAGE_PARTS;
+    ui_state.selftest_scroll = 0;
+    ui_state.selftest_keys_seen = 0;
+    ui_state.selftest_keys_last = 0;
+    ui_state.selftest_keys_long = false;
+    ui_state.selftest_count = (uint8_t)selftest_run(ui_state.selftest_items,
+                                                    SELFTEST_ITEMS);
+    state.ui_screen = SELF_TEST;
+}
+
+/** Go to a page of the self test */
+static void _ui_selfTestPage(uint8_t page)
+{
+    // The microphone level is measured only while it is captured
+    audio_setMicMonitor(page == SELFTEST_PAGE_LIVE);
+    ui_state.selftest_page = page;
+    ui_state.selftest_scroll = 0;
+}
+
+/**
+ * Keys of the self test. Long red leaves, long * and # change page from
+ * any page. On the keys page every other key is only shown. On the others
+ * short red leaves too, * and # change page, up and down scroll, and green
+ * runs the checks again.
+ */
+static void _ui_selfTestKey(kbd_msg_t msg)
+{
+    uint8_t page = ui_state.selftest_page;
+
+    if(msg.keys == 0)
+        return;
+
+    if(page == SELFTEST_PAGE_KEYS)
+    {
+        ui_state.selftest_keys_seen |= msg.keys;
+        ui_state.selftest_keys_last = msg.keys;
+        ui_state.selftest_keys_long = msg.long_press;
+    }
+
+    bool keysPage = page == SELFTEST_PAGE_KEYS;
+    bool pageKey = msg.long_press || !keysPage;
+
+    if((msg.keys & KEY_ESC) && pageKey)
+    {
+        _ui_selfTestPage(SELFTEST_PAGE_PARTS);
+        audio_setMicMonitor(false);
+        _ui_menuBack(MENU_TOP);
+    }
+    else if((msg.keys & KEY_HASH) && pageKey)
+        _ui_selfTestPage((page + 1) % SELFTEST_PAGES);
+    else if((msg.keys & KEY_STAR) && pageKey)
+        _ui_selfTestPage((page + SELFTEST_PAGES - 1) % SELFTEST_PAGES);
+    else if(keysPage || msg.long_press)
+        return;
+    else if(msg.keys & (KEY_UP | KNOB_LEFT))
+    {
+        if(ui_state.selftest_scroll > 0)
+            ui_state.selftest_scroll--;
+    }
+    else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
+        ui_state.selftest_scroll++;
+    else if((msg.keys & KEY_ENTER) && page == SELFTEST_PAGE_PARTS)
+        ui_state.selftest_count =
+            (uint8_t)selftest_run(ui_state.selftest_items, SELFTEST_ITEMS);
+}
+#endif
 
 /* Tone picker: digits typed to jump are forgotten after this long */
 #define TONE_PICK_DIGITS_MS 2000
@@ -3067,6 +3147,14 @@ void ui_updateFSM(bool *sync_rtx)
         // unless is the MONI key for the MACRO functions
         if (_ui_exitStandby(now) && !(msg.keys & KEY_MONI))
             return;
+#ifdef CONFIG_SELFTEST
+        // The self test takes every key, the side key too
+        if(state.ui_screen == SELF_TEST)
+        {
+            _ui_selfTestKey(msg);
+            return;
+        }
+#endif
         // If MONI is pressed, activate MACRO functions
         bool moniPressed = msg.keys & KEY_MONI;
         if(moniPressed || macro_latched)
@@ -3654,6 +3742,10 @@ void ui_updateFSM(bool *sync_rtx)
                             ui_state.msg_sel = 0;
                             state.ui_screen = TETRA_MESSAGES;
                             break;
+                        case M_ACTIVITY:
+                            ui_state.activity_sel = 0;
+                            state.ui_screen = TETRA_ACTIVITY;
+                            break;
 #endif
 #ifdef CONFIG_TETRA_CALLREC
                         case M_SAVED_CALLS:
@@ -3668,6 +3760,11 @@ void ui_updateFSM(bool *sync_rtx)
                         case M_INFO:
                             state.ui_screen = MENU_INFO;
                             break;
+#ifdef CONFIG_SELFTEST
+                        case M_SELF_TEST:
+                            _ui_selfTestOpen();
+                            break;
+#endif
 #ifdef CONFIG_TETRA
                         case M_FIELD_TEST:
                             state.ui_screen = TETRA_FIELD_TEST;
@@ -4377,6 +4474,36 @@ void ui_updateFSM(bool *sync_rtx)
                 }
                 break;
             }
+
+            // Activity: up / down select, green shows one, red goes back
+            case TETRA_ACTIVITY:
+            case TETRA_ACTIVITY_DETAIL:
+            {
+                uint8_t count = tetraStatus_activityCount();
+                if(msg.long_press || msg.keys == 0)
+                    break;
+                if(msg.keys & (KEY_UP | KNOB_LEFT))
+                {
+                    if(ui_state.activity_sel > 0)
+                        ui_state.activity_sel--;
+                }
+                else if(msg.keys & (KEY_DOWN | KNOB_RIGHT))
+                {
+                    if(ui_state.activity_sel + 1 < count)
+                        ui_state.activity_sel++;
+                }
+                else if((msg.keys & KEY_ENTER) && count > 0
+                        && state.ui_screen == TETRA_ACTIVITY)
+                    state.ui_screen = TETRA_ACTIVITY_DETAIL;
+                else if(msg.keys & KEY_ESC)
+                {
+                    if(state.ui_screen == TETRA_ACTIVITY_DETAIL)
+                        state.ui_screen = TETRA_ACTIVITY;
+                    else
+                        _ui_menuBack(MENU_TOP);
+                }
+                break;
+            }
             #endif
 
             case SETTINGS_ACCESSIBILITY:
@@ -4705,6 +4832,17 @@ bool ui_updateGUI()
             break;
         case TETRA_MESSAGE:
             _ui_drawTetraMessage(&ui_state);
+            break;
+        case TETRA_ACTIVITY:
+            _ui_drawTetraActivity(&ui_state);
+            break;
+        case TETRA_ACTIVITY_DETAIL:
+            _ui_drawTetraActivityDetail(&ui_state);
+            break;
+#endif
+#ifdef CONFIG_SELFTEST
+        case SELF_TEST:
+            _ui_drawSelfTest(&ui_state);
             break;
 #endif
 #ifdef CONFIG_MEMCH

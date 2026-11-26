@@ -744,6 +744,19 @@ static void finish_outputs(void)
     }
 }
 
+/* Rounds of the worker, for the self test to see it running */
+static volatile uint32_t worker_loops;
+
+uint32_t csk6codec_loops(void)
+{
+    return worker_loops;
+}
+
+int csk6codec_initResult(void)
+{
+    return init_result;
+}
+
 /**
  * Codec worker: opens the DSP streams, then moves samples every millisecond
  * until csk6codec_terminate().
@@ -769,6 +782,7 @@ static void audio_worker(void *a, void *b, void *c)
             capture_frame();
         play_frame();
         finish_outputs();
+        worker_loops++;
         k_mutex_unlock(&audio_mutex);
         k_sleep(K_MSEC(1));
     }

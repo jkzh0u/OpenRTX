@@ -181,6 +181,20 @@ uint8_t tetraStatus_messageCount(void);
  */
 bool tetraStatus_message(uint8_t n, struct tetraMessage *out);
 
+struct tetraActivityEntry;
+
+/** @return the number of talkgroups and radios in the activity log. */
+uint8_t tetraStatus_activityCount(void);
+
+/**
+ * Activity log since power on (TetraActivity.h).
+ *
+ * @param n: 0 for the busiest, by talk time.
+ * @param out: its calls, talk time and talk time per hour.
+ * @return false past the last.
+ */
+bool tetraStatus_activity(uint8_t n, struct tetraActivityEntry *out);
+
 /**
  * The call heard now, without copying the whole status (for the call
  * recorder, on each speech frame).

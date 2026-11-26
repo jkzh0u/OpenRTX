@@ -1361,6 +1361,11 @@ tetra_calls_test = executable('tetra_calls_test',
                                          'tests/unit/tetra_calls.cpp'],
                               kwargs  : unit_test_opts)
 
+tetra_activity_test = executable('tetra_activity_test',
+                                 sources : ['openrtx/src/protocols/TETRA/TetraActivity.c',
+                                            'tests/unit/tetra_activity.cpp'],
+                                 kwargs  : unit_test_opts)
+
 tetra_roam_test = executable('tetra_roam_test',
                              sources : ['openrtx/src/protocols/TETRA/TetraRoam.c',
                                         'tests/unit/tetra_roam.cpp'],
@@ -1421,6 +1426,7 @@ test('TETRA Filter Image Test', tetra_filter_image_test,
 test('CPS Builtin Image Test', cps_builtin_image_test,
      depends : cps_builtin_image)
 test('TETRA Calls Test',     tetra_calls_test)
+test('TETRA Activity Test',  tetra_activity_test)
 test('TETRA Roam Test',      tetra_roam_test)
 test('TETRA Log Test',       tetra_log_test)
 test('TETRA Focus Test',     tetra_focus_test)

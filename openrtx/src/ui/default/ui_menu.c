@@ -721,6 +721,241 @@ void _ui_drawTonePick(ui_state_t *ui_state)
     }
 }
 
+#ifdef CONFIG_SELFTEST
+/*
+ * Self test (Menu > Self test): parts, live figures, keys and registers,
+ * one page each.
+ */
+
+static const color_t stMuted = { 150, 150, 150, 255 };
+static const color_t stPass = { 60, 230, 90, 255 };
+static const color_t stFail = { 240, 60, 50, 255 };
+static const color_t stLast = { 255, 191, 0, 255 };
+
+/* PTT is not a key of the keyboard: its own bit among the keys seen */
+#define SELFTEST_PTT (1UL << 31)
+
+static const struct {
+    uint32_t key;
+    const char *name;
+} stKeys[] = {
+    { KEY_ENTER, "Grn" },   { KEY_UP, "Up" },      { KEY_DOWN, "Dn" },
+    { KEY_ESC, "Red" },   { KEY_1, "1" },        { KEY_2, "2" },
+    { KEY_3, "3" },        { KEY_4, "4" },        { KEY_5, "5" },
+    { KEY_6, "6" },        { KEY_7, "7" },        { KEY_8, "8" },
+    { KEY_9, "9" },        { KEY_STAR, "*" },     { KEY_0, "0" },
+    { KEY_HASH, "#" },     { SELFTEST_PTT, "PTT" }, { KEY_MONI, "Side" },
+    { KEY_F1, "P1" },      { KEY_F2, "P2" },
+};
+
+/* Keys per row of the keys page: the arrows, the keypad, the side */
+static const uint8_t stKeyRows[] = { 4, 3, 3, 3, 3, 4 };
+
+static const char *const stPageNames[] = { "Parts", "Live", "Keys",
+                                           "Registers" };
+
+/** A line of the self test: a name on the left, a value on the right */
+static void _ui_selfTestLine(point_t pos, const char *name, color_t vc,
+                             const char *value)
+{
+    gfx_print(pos, layout.menu_font, TEXT_ALIGN_LEFT, color_white, "%s",
+              name);
+    gfx_print(pos, layout.menu_font, TEXT_ALIGN_RIGHT, vc, "%s", value);
+}
+
+/** Lines that fit below the title */
+static uint16_t _ui_selfTestRows(uint16_t rowH)
+{
+    return (CONFIG_SCREEN_HEIGHT - layout.line1_pos.y + rowH - 9) / rowH;
+}
+
+static void _ui_drawSelfTestParts(ui_state_t *ui_state, point_t pos)
+{
+    uint16_t rows = _ui_selfTestRows(layout.menu_h);
+    uint8_t count = ui_state->selftest_count;
+
+    if (count == 0) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  stMuted, "No checks here");
+        return;
+    }
+    if (ui_state->selftest_scroll + rows > count)
+        ui_state->selftest_scroll = (count > rows) ? count - rows : 0;
+
+    for (uint16_t i = ui_state->selftest_scroll; i < count && rows > 0;
+         i++, rows--) {
+        const struct selftestItem *it = &ui_state->selftest_items[i];
+        color_t c = (it->result == SELFTEST_PASS)   ? stPass
+                  : (it->result == SELFTEST_FAIL) ? stFail
+                                                  : color_white;
+        _ui_selfTestLine(pos, it->name, c, it->value);
+        pos.y += layout.menu_h;
+    }
+}
+
+static void _ui_drawSelfTestLive(ui_state_t *ui_state, point_t pos)
+{
+    char v[24];
+    uint32_t s = (uint32_t)(getTick() / 1000);
+    uint16_t mv = last_state.v_bat;
+
+    (void)ui_state;
+
+    snprintf(v, sizeof(v), "%ld dBm", (long)last_state.rssi);
+    _ui_selfTestLine(pos, "Signal", color_white, v);
+    pos.y += layout.menu_h;
+
+    snprintf(v, sizeof(v), "%u.%02u V %u%%", mv / 1000, mv % 1000 / 10,
+             last_state.charge);
+    _ui_selfTestLine(pos, "Battery", color_white, v);
+    pos.y += layout.menu_h;
+
+    snprintf(v, sizeof(v), "%u", platform_getMicLevel());
+    _ui_selfTestLine(pos, "Mic level", color_white, v);
+    pos.y += layout.menu_h;
+
+    bool ptt = platform_getPttStatus();
+    _ui_selfTestLine(pos, "PTT", ptt ? stLast : color_white,
+                     ptt ? "pressed" : "up");
+    pos.y += layout.menu_h;
+
+#ifdef CONFIG_NOISE_REDUCTION
+    bool overload = false;
+    uint8_t load = audio_getNoiseReductionLoad(&overload);
+    snprintf(v, sizeof(v), "%u%%%s", load, overload ? " over" : "");
+    _ui_selfTestLine(pos, "AI load", overload ? stFail : color_white, v);
+    pos.y += layout.menu_h;
+#endif
+
+    snprintf(v, sizeof(v), "%lu:%02lu:%02lu", (unsigned long)(s / 3600),
+             (unsigned long)(s / 60 % 60), (unsigned long)(s % 60));
+    _ui_selfTestLine(pos, "Uptime", color_white, v);
+}
+
+static void _ui_drawSelfTestKeys(ui_state_t *ui_state, point_t pos)
+{
+    const uint16_t rowH = 14;
+    const uint16_t pad = layout.horizontal_pad;
+    const uint16_t width = CONFIG_SCREEN_WIDTH - 2 * pad;
+    uint32_t seen = ui_state->selftest_keys_seen;
+    uint32_t last = ui_state->selftest_keys_last;
+    unsigned k = 0;
+    char lastText[32] = "";
+
+    if (platform_getPttStatus()) {
+        seen |= SELFTEST_PTT;
+        last = SELFTEST_PTT;
+        ui_state->selftest_keys_seen = seen;
+    }
+
+    pos.y -= layout.menu_h - 3;
+    for (unsigned r = 0; r < sizeof(stKeyRows); r++) {
+        uint16_t n = stKeyRows[r];
+        uint16_t w = width / n;
+        for (unsigned c = 0; c < n; c++, k++) {
+            uint32_t key = stKeys[k].key;
+            bool on = (seen & key) != 0;
+            bool now = (last & key) != 0;
+            point_t box = { (uint16_t)(pad + c * w), pos.y };
+            color_t fill = now ? stLast : stPass;
+
+            if (on)
+                gfx_drawRect(box, w - 2, rowH - 2, fill, true);
+            else
+                gfx_drawRect(box, w - 2, rowH - 2, stMuted, false);
+            point_t t = { box.x, (uint16_t)(box.y + rowH - 4) };
+            // Centred in the box: print centred on a box-wide line
+            uint16_t tw = (uint16_t)(strlen(stKeys[k].name) * 5);
+            t.x = (uint16_t)(box.x + ((w - 2 > tw) ? (w - 2 - tw) / 2 : 0));
+            gfx_print(t, FONT_SIZE_6PT, TEXT_ALIGN_LEFT,
+                      on ? color_black : color_white, "%s", stKeys[k].name);
+            if (now && lastText[0] == '\0')
+                snprintf(lastText, sizeof(lastText), "%s%s",
+                         stKeys[k].name,
+                         ui_state->selftest_keys_long ? " long" : "");
+        }
+        pos.y += rowH;
+    }
+
+    point_t foot = { 0, (uint16_t)(CONFIG_SCREEN_HEIGHT - 2) };
+    if (lastText[0] != '\0')
+        gfx_print(foot, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, stLast,
+                  "Last: %s", lastText);
+    else if (last != 0)
+        gfx_print(foot, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, stLast,
+                  "Last: 0x%08lx", (unsigned long)last);
+    else
+        gfx_print(foot, FONT_SIZE_6PT, TEXT_ALIGN_CENTER, stMuted,
+                  "Press each key. Hold red to leave");
+}
+
+static void _ui_drawSelfTestRegs(ui_state_t *ui_state, point_t pos)
+{
+    const uint16_t rowH = 9;
+    const uint16_t pad = layout.horizontal_pad;
+    uint16_t rows = _ui_selfTestRows(rowH);
+    uint16_t total = 0;
+    uint8_t addr;
+    uint16_t value;
+
+    while (selftest_reg(total, &addr, NULL))
+        total++;
+    if (total == 0) {
+        gfx_print(layout.line2_pos, layout.line2_font, TEXT_ALIGN_CENTER,
+                  stMuted, "No registers");
+        return;
+    }
+
+    // Two registers a line
+    uint16_t lines = (total + 1) / 2;
+    if (ui_state->selftest_scroll + rows > lines)
+        ui_state->selftest_scroll = (lines > rows) ? lines - rows : 0;
+
+    pos.y -= layout.menu_h - rowH;
+    for (uint16_t l = ui_state->selftest_scroll; l < lines && rows > 0;
+         l++, rows--) {
+        for (uint16_t c = 0; c < 2; c++) {
+            uint16_t n = l * 2 + c;
+            if (!selftest_reg(n, &addr, &value))
+                break;
+            point_t at = { (uint16_t)(pad + c * CONFIG_SCREEN_WIDTH / 2),
+                           pos.y };
+            gfx_print(at, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, stMuted, "%02X",
+                      addr);
+            at.x += 18;
+            gfx_print(at, FONT_SIZE_6PT, TEXT_ALIGN_LEFT, color_white,
+                      "%04X", value);
+        }
+        pos.y += rowH;
+    }
+}
+
+void _ui_drawSelfTest(ui_state_t *ui_state)
+{
+    uint8_t page = ui_state->selftest_page % SELFTEST_PAGES;
+    point_t pos = { layout.horizontal_pad, layout.line1_pos.y };
+
+    gfx_clearScreen();
+    gfx_print(layout.top_pos, layout.top_font, TEXT_ALIGN_CENTER, color_white,
+              "%s %u/%u", stPageNames[page], page + 1, SELFTEST_PAGES);
+
+    switch (page) {
+        case SELFTEST_PAGE_PARTS:
+            _ui_drawSelfTestParts(ui_state, pos);
+            break;
+        case SELFTEST_PAGE_LIVE:
+            _ui_drawSelfTestLive(ui_state, pos);
+            break;
+        case SELFTEST_PAGE_KEYS:
+            _ui_drawSelfTestKeys(ui_state, pos);
+            break;
+        default:
+            _ui_drawSelfTestRegs(ui_state, pos);
+            break;
+    }
+}
+#endif
+
 int _ui_getFMEntryName(char* buf, uint8_t max_len, uint8_t index)
 {
     if (index >= settings_fm_num)

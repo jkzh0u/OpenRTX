@@ -89,6 +89,10 @@ Boot and basics:
 
 - [ ] Boots to the main screen, display and backlight fine
 - [ ] Keys respond; volume knob works
+- [ ] **Menu** > **Self test**: every part green on the first page (Ch
+      list may say `none`); on the keys page each key lights up, PTT and
+      the side key too; on the live page the mic level moves when you
+      talk. Note any red part and its value
 - [ ] The log shows `TETRA log, 256 kB kept, side key + 0 sends them`
       (if nothing at all appears, see "No log" below)
 - [ ] FM: a known FM signal is heard (side key + 5 changes mode)
@@ -277,6 +281,11 @@ Same firmware, no new build. FM, on a local repeater or simplex channel:
 
 ## If something goes wrong
 
+- **A red part in Self test:** note its value. `Radio chip no answer`:
+  the BK4819 bus; `FM chip ID` other than 1080: the BK1080 is missing or
+  on other pins (FM radio will not work, the rest does); `DSP error` or
+  `Audio stalled`: no sound anywhere; `PSRAM bad at`: replay, saved calls
+  and AI noise reduction will misbehave.
 - **`cskburn` fails before writing anything:** check the cable and burn
   mode first. Note the cable's make and its chip, and the exact error.
 - **`Channel list: none flashed`:** nothing valid at `0x2c0000`; flash

@@ -75,6 +75,17 @@ void csk6codec_setNoiseReduction(uint8_t rx, uint8_t tx);
  */
 uint8_t csk6codec_getNoiseReductionLoad(bool *overload);
 
+/**
+ * @return rounds of the codec worker so far, about one a millisecond while
+ * it runs (self test).
+ */
+uint32_t csk6codec_loops(void);
+
+/**
+ * @return the result of opening the DSP audio streams: 0, or an error.
+ */
+int csk6codec_initResult(void);
+
 #ifdef __cplusplus
 }
 #endif
